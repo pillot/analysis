@@ -1,0 +1,48 @@
+# Compiled Object files
+*.slo
+*.lo
+*.o
+
+# Compiled Dynamic libraries
+*.so
+*.so.[0-9]*
+*.dylib
+*.dll
+*.libs
+*.lib
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+
+# Dictionary source files
+G__*.c
+G__*.cxx
+G__*.h
+
+# Backup files from common editors
+*.swp
+*~
+.DS_Store
+
+# Other Stuff
+*.d
+*.pyc
+*.pyo
+*.pdb
+*.obj
+*.def
+*.exp
+*.manifest
+*.rootmap
+*.root
+*.log
+*.ps
+*.eps
+*.png
+*.pdf
+*.dat
+*.par
+*.txt
+*.tgz

@@ -1,0 +1,43 @@
+Packages =
+   {
+      "VO_ALICE@AliRoot::v5-01-Rev-08",
+      "VO_ALICE@GEANT3::v1-12-1",
+      "VO_ALICE@ROOT::v5-30-02",
+      "VO_ALICE@APISCONFIG::V1.1x"
+   };
+Jobtag =
+   {
+      "comment:LHC period LHC10h - MUON test reco"
+   };
+Split = "file";
+OutputDir = "/alice/cern.ch/user/p/ppillot/Data/LHC10h/MoreCandidates/$1/#alienfilename/.root//#";
+Price = 1;
+Executable = "/alice/cern.ch/user/p/ppillot/bin/runReco.sh";
+InputFile =
+   {
+      "LF:/alice/cern.ch/user/p/ppillot/Data/LHC10h/MoreCandidates/rec.C"
+   };
+User = "ppillot";
+SplitArguments =
+   {
+      "/alice/data/2010/LHC10h/$1/raw/#alienfilename#"
+   };
+OutputArchive =
+   {
+      "log_archive:*.log@disk=1",
+      "root_archive.zip:AliESDs.root,@disk=3"
+   };
+TTL = 86400;
+Workdirectorysize =
+   {
+      "6000MB"
+   };
+InputDataCollection = "LF:/alice/data/2010/LHC10h/$1/collection,nodownload";
+GUIDFILE = "guid.txt";
+JDLVariables =
+   {
+      "Packages",
+      "OutputDir"
+   };
+Validationcommand = "/alice/cern.ch/user/p/ppillot/Data/LHC10h/MoreCandidates/validation.sh"
+

@@ -1,0 +1,31 @@
+# Generated merging jdl (production mode)                     
+# $1 = run number
+# wn.xml made via: find <OutputDir> *Stage<n-1>/*root_archive.zip
+Packages = {
+    "VO_ALICE@AliRoot::v5-05-27-AN",
+    "VO_ALICE@GEANT3::v1-15a-1",
+    "VO_ALICE@ROOT::v5-34-08",
+    "VO_ALICE@APISCONFIG::V1.1x"
+};
+Jobtag = {
+    "comment:AOD merging final stage"
+};
+OutputDir = "/alice/cern.ch/user/p/ppillot/Data/LHC12h/muon_calo_pass2/QA/results/$1";
+InputFile = {
+    "LF:/alice/cern.ch/user/p/ppillot/Data/LHC12h/muon_calo_pass2/QA/AODtrain.C",
+    "LF:/alice/cern.ch/user/p/ppillot/Data/LHC12h/muon_calo_pass2/QA/results/$1/wn.xml"
+};
+Executable = "AOD_merge.sh"; 
+Arguments = "2";
+Price = 1;
+TTL = "7200";
+OutputArchive = 
+{
+    "log_archive:stderr,stdout@disk=1",
+    "root_archive.zip:Merged.QA.Data.root@disk=3"
+}; 
+Workdirectorysize = 
+{
+    "5000MB"
+}; 
+Validationcommand = "/alice/cern.ch/user/p/ppillot/Data/LHC12h/muon_calo_pass2/QA/validation_merge.sh"

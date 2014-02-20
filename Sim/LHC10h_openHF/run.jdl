@@ -1,0 +1,45 @@
+Packages = 
+   {
+    "VO_ALICE@AliRoot::v5-04-19-AN",
+    "VO_ALICE@GEANT3::v1-14-6",
+    "VO_ALICE@ROOT::v5-34-02-1",
+    "VO_ALICE@APISCONFIG::V1.1x"
+   }; 
+Jobtag = 
+   {
+      "comment: MUON J/Psi PbPb 2.76TeV realistic (LHC11h)"
+   }; 
+split = "production:1-$2"; 
+OutputDir = "/alice/cern.ch/user/p/ppillot/Sim/LHC11h/JPsiPb276pm2r/MUL/GeoRealVtx0/results/$1/#alien_counter_03i#"; 
+Price = 1; 
+Executable = "aliroot_new"; 
+InputFile = 
+   {
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/JPsiPb276pm2r/MUL/GeoRealVtx0/CheckESD.C",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/JPsiPb276pm2r/MUL/GeoRealVtx0/CheckAOD.C",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/JPsiPb276pm2r/MUL/GeoRealVtx0/Config.C",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/JPsiPb276pm2r/MUL/GeoRealVtx0/rec.C",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/JPsiPb276pm2r/MUL/GeoRealVtx0/sim.C",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/JPsiPb276pm2r/MUL/GeoRealVtx0/simrun.C",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/JPsiPb276pm2r/MUL/GeoRealVtx0/tag.C",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/JPsiPb276pm2r/MUL/GeoRealVtx0/AODtrain.C"
+   }; 
+User = "ppillot"; 
+OutputArchive = 
+   {
+      "log_archive:stderr,stdout,sim.log,rec.log,aod.log,check.log,tag.log@disk=1",
+      "root_archive.zip:galice.root,Kinematics*.root,TrackRefs*.root,AliESDs.root,AliAOD.root,AliAOD.Muons.root,Merged.QA.Data.root,Run*.root,AnalysisResults.root@disk=3"
+   }; 
+splitarguments = "simrun.C --run $1 --chunk #alien_counter# --event $3 --process kJPsi7TeV --energy 2600"; 
+TTL = 72000; 
+Workdirectorysize = 
+   {
+      "5000MB"
+   }; 
+GUIDFILE = "guid.txt"; 
+JDLVariables = 
+   {
+      "Packages",
+      "OutputDir"
+   }; 
+Validationcommand = "/alice/cern.ch/user/p/ppillot/Sim/LHC11h/JPsiPb276pm2r/MUL/GeoRealVtx0/validation.sh"

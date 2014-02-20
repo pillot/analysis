@@ -1,0 +1,28 @@
+#!/bin/bash
+
+free
+echo _____________________________________________
+echo "HOME IS $HOME"
+ls $HOME
+length=`echo $HOME |wc -c`
+if   (( $length >= 100 )) ;
+then
+     echo "WARNING: The home directory $HOME is longer than 100 char"
+     OLDHOME=$HOME
+     NEWHOME="/tmp/alien_home_dir.${ALIEN_PROC_ID}"
+     echo "CHANGING HOME TO $NEWHOME"
+     ln -s $HOME $NEWHOME
+     export HOME=$NEWHOME
+fi
+echo _____________________________________________
+echo "Executing aliroot with $*"
+root.exe -b -q $*
+free
+echo "The AliRoot command finished successfully"
+
+if [ "$NEWHOME" != "" ] ;
+then
+        echo "DELETING $NEWHOME"
+        export HOME=$OLDHOME
+        rm -rf $NEWHOME
+fi

@@ -1,0 +1,45 @@
+Packages = 
+   {
+    "VO_ALICE@AliRoot::v5-02-Rev-34",
+    "VO_ALICE@GEANT3::v1-14-5",
+    "VO_ALICE@ROOT::v5-34-02",
+    "VO_ALICE@APISCONFIG::V1.1x"
+   }; 
+Jobtag = 
+   {
+      "comment: MUON Low masses pp 7TeV realistic (LHC11d)"
+   }; 
+split = "production:1-$2"; 
+OutputDir = "/alice/cern.ch/user/p/ppillot/Sim/LHC11d/LowMass/results/$1/#alien_counter_03i#"; 
+Price = 1; 
+Executable = "aliroot_new"; 
+InputFile = 
+   {
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11d/LowMass/CheckESD.C",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11d/LowMass/CheckAOD.C",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11d/LowMass/Config.C",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11d/LowMass/rec.C",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11d/LowMass/sim.C",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11d/LowMass/simrun.C",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11d/LowMass/tag.C",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11d/LowMass/AODtrain.C"
+   }; 
+User = "ppillot"; 
+OutputArchive = 
+   {
+      "log_archive:stderr,stdout,sim.log,rec.log,aod.log,check.log,tag.log@disk=1",
+      "root_archive.zip:galice.root,Kinematics*.root,TrackRefs*.root,AliESDs.root,AliAOD.root,AliAOD.Muons.root,Merged.QA.Data.root,Run*.root@disk=3"
+   }; 
+splitarguments = "simrun.C --run $1 --chunk #alien_counter# --event $3 --energy 7000"; 
+TTL = 72000; 
+Workdirectorysize = 
+   {
+      "5000MB"
+   }; 
+GUIDFILE = "guid.txt"; 
+JDLVariables = 
+   {
+      "Packages",
+      "OutputDir"
+   }; 
+Validationcommand = "/alice/cern.ch/user/p/ppillot/Sim/LHC11d/LowMass/validation.sh"
