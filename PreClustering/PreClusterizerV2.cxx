@@ -62,7 +62,7 @@ deIndices()
 PreClusterizerV2::~PreClusterizerV2()
 {
   
-  for (Int_t iDE = 0; iDE < nDEs; iDE++) delete[] mpDEs[iDE].pads;
+  for (UChar_t iDE = 0; iDE < nDEs; ++iDE) delete[] mpDEs[iDE].pads;
   
   AliMpCDB::UnloadAll();
   
@@ -98,10 +98,10 @@ void PreClusterizerV2::PreClusterize(const char *digitFileName, const char *clus
   clusterStore->Connect(*treeR, kTRUE);
   
   // prepare storage of preclusters
-  Int_t nPreClusters[nDEs][2];
+  UShort_t nPreClusters[nDEs][2];
   std::vector<preCluster*> preClusters[nDEs][2];
-  for (Int_t iDE = 0; iDE < nDEs; iDE++) {
-    for (Int_t iPlane = 0; iPlane < 2; iPlane++) {
+  for (UChar_t iDE = 0; iDE < nDEs; ++iDE) {
+    for (UChar_t iPlane = 0; iPlane < 2; ++iPlane) {
       preClusters[iDE][iPlane].reserve(100);
     }
   }
@@ -161,9 +161,9 @@ void PreClusterizerV2::PreClusterize(const char *digitFileName, const char *clus
   clusterFile->Close();
   
   // clean memory
-  for (Int_t iDE = 0; iDE < nDEs; iDE++) {
-    for (Int_t iPlane = 0; iPlane < 2; iPlane++) {
-      for (Int_t iCluster = 0; iCluster < preClusters[iDE][iPlane].size(); iCluster++) {
+  for (UChar_t iDE = 0; iDE < nDEs; ++iDE) {
+    for (UChar_t iPlane = 0; iPlane < 2; ++iPlane) {
+      for (UShort_t iCluster = 0; iCluster < static_cast<UShort_t>(preClusters[iDE][iPlane].size()); ++iCluster) {
         delete preClusters[iDE][iPlane][iCluster];
       }
     }
@@ -189,10 +189,10 @@ void PreClusterizerV2::CreateMapping(AliMUONVStore* neighbours)
   gSystem->GetProcInfo(&procBefore);
   
   // loop over DEs
-  Int_t iDE = 0;
+  UChar_t iDE = 0;
   Int_t packValue2 = -1, manuId2 = -1, manuChannel2 = -1;
   UInt_t padId = 0;
-  for (Int_t iCh = 0; iCh < AliMUONConstants::NTrackingCh(); iCh++) {
+  for (Int_t iCh = 0; iCh < AliMUONConstants::NTrackingCh(); ++iCh) {
     AliMpDEIterator deIt;
     deIt.First(iCh);
     while (!deIt.IsDone()) {
@@ -217,15 +217,15 @@ void PreClusterizerV2::CreateMapping(AliMUONVStore* neighbours)
       de.orderedPads[1].reserve((de.nPads[0]/10+de.nPads[1]/10)); // 10% occupancy
       
       // loop over cathods
-      for (Int_t iCath = 0; iCath < 2; iCath++) {
+      for (Int_t iCath = 0; iCath < 2; ++iCath) {
         
-        Int_t iPlane = seg[iCath]->PlaneType();
+        UChar_t iPlane = seg[iCath]->PlaneType();
         de.iPlanes[iCath] = iPlane;
         de.nFiredPads[iPlane] = 0;
         de.firedPads[iPlane].reserve(de.nPads[iPlane]/10); // 10% occupancy
         
         // 1st loop over pads to associate an index to their Id
-        Int_t iPad = (iPlane == 0) ? 0 : de.nPads[0];
+        UShort_t iPad = (iPlane == 0) ? 0 : de.nPads[0];
         AliMpVPadIterator* padIt = seg[iCath]->CreateIterator();
         padIt->First();
         while (!padIt->IsDone()) {
@@ -243,7 +243,7 @@ void PreClusterizerV2::CreateMapping(AliMUONVStore* neighbours)
           padId = AliMUONVDigit::BuildUniqueID(deId, pad.GetManuId(), pad.GetManuChannel(), iCath);
           de.padIndices[iPlane].Add(padId, iPad);
           
-          iPad++;
+          ++iPad;
           padIt->Next();
           
         }
@@ -258,7 +258,7 @@ void PreClusterizerV2::CreateMapping(AliMUONVStore* neighbours)
             AliMpPad pad = padIt->CurrentItem();
             AliMUONVCalibParam* calibParam = static_cast<AliMUONVCalibParam*>(neighbours->FindObject(deId, pad.GetManuId()));
             
-            for (Int_t iNeighbour = 1; iNeighbour < calibParam->Dimension(); iNeighbour++) {
+            for (Int_t iNeighbour = 1; iNeighbour < calibParam->Dimension(); ++iNeighbour) {
               
               packValue2 = calibParam->ValueAsInt(pad.GetManuChannel(),iNeighbour);
               if (packValue2 <= 0) continue;
@@ -266,11 +266,12 @@ void PreClusterizerV2::CreateMapping(AliMUONVStore* neighbours)
               calibParam->UnpackValue(packValue2, manuId2, manuChannel2);
               padId = AliMUONVDigit::BuildUniqueID(deId, manuId2, manuChannel2, iCath);
               
-              de.pads[iPad].neighbours[de.pads[iPad].nNeighbours++] = de.padIndices[iPlane].GetValue(padId);
+              de.pads[iPad].neighbours[de.pads[iPad].nNeighbours] = de.padIndices[iPlane].GetValue(padId);
+              ++de.pads[iPad].nNeighbours;
               
             }
             
-            iPad++;
+            ++iPad;
             padIt->Next();
             
           }
@@ -281,7 +282,7 @@ void PreClusterizerV2::CreateMapping(AliMUONVStore* neighbours)
         
       }
       
-      iDE++;
+      ++iDE;
       deIt.Next();
       
     }
@@ -298,25 +299,27 @@ void PreClusterizerV2::CreateMapping(AliMUONVStore* neighbours)
 }
 
 //------------------------------------------------------------------
-void PreClusterizerV2::FindNeighbours(mpDE &de, Int_t iPlane)
+void PreClusterizerV2::FindNeighbours(mpDE &de, UChar_t iPlane)
 {
   /// fill the mpPad neighbours structures of given DE/plane
   
   AliCodeTimerAutoGeneral("",0);
   
-  Int_t firstPad = (iPlane == 0) ? 0 : de.nPads[0];
-  Int_t lastPad = firstPad + de.nPads[iPlane];
+  UShort_t firstPad = (iPlane == 0) ? 0 : de.nPads[0];
+  UShort_t lastPad = firstPad + de.nPads[iPlane];
   
   // loop over pads
-  for (Int_t iPad1 = firstPad; iPad1 < lastPad; ++iPad1) {
+  for (UShort_t iPad1 = firstPad; iPad1 < lastPad; ++iPad1) {
     
     // loop over next pads to find the neighbours
-    for (Int_t iPad2 = iPad1+1; iPad2 < lastPad; ++iPad2) {
+    for (UShort_t iPad2 = iPad1+1; iPad2 < lastPad; ++iPad2) {
       
       if (AreOverlapping(de.pads[iPad1].area, de.pads[iPad2].area, 1.e-4)) {
         
-        de.pads[iPad1].neighbours[de.pads[iPad1].nNeighbours++] = iPad2;
-        de.pads[iPad2].neighbours[de.pads[iPad2].nNeighbours++] = iPad1;
+        de.pads[iPad1].neighbours[de.pads[iPad1].nNeighbours] = iPad2;
+        ++de.pads[iPad1].nNeighbours;
+        de.pads[iPad2].neighbours[de.pads[iPad2].nNeighbours] = iPad1;
+        ++de.pads[iPad2].nNeighbours;
         
       }
       
@@ -333,7 +336,9 @@ Int_t PreClusterizerV2::LoadDigits(AliMUONVDigitStore* digitStore)
   
   AliCodeTimerAutoGeneral("",0);
   
-  Int_t nDigits = 0;
+  Int_t nDigits(0);
+  UChar_t iPlane(0);
+  UShort_t iPad(0);
   
   // loop over digits
   AliMUONVDigit* digit = 0x0;
@@ -342,16 +347,16 @@ Int_t PreClusterizerV2::LoadDigits(AliMUONVDigitStore* digitStore)
     
     if (digit->Charge() <= 0) continue;
     
-    mpDE &de = mpDEs[deIndices.GetValue(digit->DetElemId())];
-    Int_t iPlane = de.iPlanes[digit->Cathode()];
-    mpPad *pad = &de.pads[de.padIndices[iPlane].GetValue(digit->GetUniqueID())];
+    mpDE &de(mpDEs[deIndices.GetValue(digit->DetElemId())]);
+    iPlane = de.iPlanes[digit->Cathode()];
+    iPad = de.padIndices[iPlane].GetValue(digit->GetUniqueID());
     
     // attach the digit to this pad
-    pad->digit = digit;
-    pad->useMe = kTRUE;
-    if (de.nFiredPads[iPlane] >= static_cast<Int_t>(de.firedPads[iPlane].size()))
-      de.firedPads[iPlane].push_back(pad);
-    else de.firedPads[iPlane][de.nFiredPads[iPlane]] = pad;
+    de.pads[iPad].digit = digit;
+    de.pads[iPad].useMe = kTRUE;
+    if (de.nFiredPads[iPlane] < static_cast<UShort_t>(de.firedPads[iPlane].size()))
+      de.firedPads[iPlane][de.nFiredPads[iPlane]] = iPad;
+    else de.firedPads[iPlane].push_back(iPad);
     ++de.nFiredPads[iPlane];
     ++nDigits;
     
@@ -372,19 +377,22 @@ void PreClusterizerV2::ResetPads()
   
   AliCodeTimerAutoGeneral("",0);
   
+  mpPad *pad(0x0);
+  
   // loop over DEs
-  for (Int_t iDE = 0; iDE < nDEs; iDE++) {
+  for (UChar_t iDE = 0; iDE < nDEs; ++iDE) {
     
-    mpDE &de = mpDEs[iDE];
+    mpDE &de(mpDEs[iDE]);
     
     // loop over planes
-    for (Int_t iPlane = 0; iPlane < 2; iPlane++) {
+    for (UChar_t iPlane = 0; iPlane < 2; ++iPlane) {
       
       // loop over fired pads
-      for (Int_t iPad = 0; iPad < de.nFiredPads[iPlane]; ++iPad) {
+      for (UShort_t iFiredPad = 0; iFiredPad < de.nFiredPads[iPlane]; ++iFiredPad) {
         
-        de.firedPads[iPlane][iPad]->digit = 0x0;
-        de.firedPads[iPlane][iPad]->useMe = kFALSE;
+        pad = &de.pads[de.firedPads[iPlane][iFiredPad]];
+        pad->digit = 0x0;
+        pad->useMe = kFALSE;
         
       }
       
@@ -402,7 +410,7 @@ void PreClusterizerV2::ResetPads()
 }
 
 //------------------------------------------------------------------
-Int_t PreClusterizerV2::PreClusterizeFIFO(std::vector<preCluster*> preClusters[nDEs][2], Int_t nPreClusters[nDEs][2])
+Int_t PreClusterizerV2::PreClusterizeFIFO(std::vector<preCluster*> preClusters[nDEs][2], UShort_t nPreClusters[nDEs][2])
 {
   /// preclusterize both planes of every DE using FIFO algorithm
   
@@ -410,27 +418,27 @@ Int_t PreClusterizerV2::PreClusterizeFIFO(std::vector<preCluster*> preClusters[n
   
   Int_t nPreclustersTot(0);
   preCluster *cl(0x0);
-  mpPad *pad(0x0), *pad2(0x0);
+  UShort_t iPad(0);
   
   // loop over DEs
-  for (Int_t iDE = 0; iDE < nDEs; iDE++) {
+  for (UChar_t iDE = 0; iDE < nDEs; ++iDE) {
     
-    mpDE &de = mpDEs[iDE];
+    mpDE &de(mpDEs[iDE]);
     
     // loop over planes
-    for (Int_t iPlane = 0; iPlane < 2; iPlane++) {
+    for (UChar_t iPlane = 0; iPlane < 2; ++iPlane) {
       
       nPreClusters[iDE][iPlane] = 0;
       
       // loop over fired pads
-      for (Int_t iPad = 0; iPad < de.nFiredPads[iPlane]; ++iPad) {
+      for (UShort_t iFiredPad = 0; iFiredPad < de.nFiredPads[iPlane]; ++iFiredPad) {
         
-        pad = de.firedPads[iPlane][iPad];
+        iPad = de.firedPads[iPlane][iFiredPad];
         
-        if (pad->useMe) {
+        if (de.pads[iPad].useMe) {
           
           // create the precluster if needed
-          if (nPreClusters[iDE][iPlane] >= static_cast<Int_t>(preClusters[iDE][iPlane].size()))
+          if (nPreClusters[iDE][iPlane] >= static_cast<UShort_t>(preClusters[iDE][iPlane].size()))
             preClusters[iDE][iPlane].push_back(new preCluster);
           
           // get the precluster
@@ -439,45 +447,47 @@ Int_t PreClusterizerV2::PreClusterizeFIFO(std::vector<preCluster*> preClusters[n
           ++nPreclustersTot;
           
           // reset its content
-          if (de.nOrderedPads[0] >= static_cast<Int_t>(de.orderedPads[0].size()))
-            de.orderedPads[0].push_back(pad);
-          else de.orderedPads[0][de.nOrderedPads[0]] = pad;
+          if (de.nOrderedPads[0] < static_cast<UShort_t>(de.orderedPads[0].size()))
+            de.orderedPads[0][de.nOrderedPads[0]] = iPad;
+          else de.orderedPads[0].push_back(iPad);
           cl->firstPad = de.nOrderedPads[0];
           cl->lastPad = de.nOrderedPads[0];
           ++de.nOrderedPads[0];
-          cl->area[0][0] = pad->area[0][0];
-          cl->area[0][1] = pad->area[0][1];
-          cl->area[1][0] = pad->area[1][0];
-          cl->area[1][1] = pad->area[1][1];
+          mpPad &pad(de.pads[iPad]);
+          cl->area[0][0] = pad.area[0][0];
+          cl->area[0][1] = pad.area[0][1];
+          cl->area[1][0] = pad.area[1][0];
+          cl->area[1][1] = pad.area[1][1];
           cl->useMe = kTRUE;
           cl->storeMe = kFALSE;
           
-          pad->useMe = kFALSE;
+          pad.useMe = kFALSE;
           
           // loop over all pads of the precluster
-          for (Int_t iOrderPad = cl->firstPad; iOrderPad <= cl->lastPad; ++iOrderPad) {
+          for (UShort_t iOrderPad = cl->firstPad; iOrderPad <= cl->lastPad; ++iOrderPad) {
             
-            pad = de.orderedPads[0][iOrderPad];
+            mpPad &pad1(de.pads[de.orderedPads[0][iOrderPad]]);
             
             // loop over their neighbours
-            for (Int_t iNeighbour = 0; iNeighbour < pad->nNeighbours; iNeighbour++) {
+            for (UShort_t iNeighbour = 0; iNeighbour < pad1.nNeighbours; ++iNeighbour) {
               
-              pad2 = &de.pads[pad->neighbours[iNeighbour]];
+              iPad = pad1.neighbours[iNeighbour];
               
-              if (pad2->useMe) {
+              if (de.pads[iPad].useMe) {
                 
                 // add the pad to the precluster
-                if (de.nOrderedPads[0] >= static_cast<Int_t>(de.orderedPads[0].size()))
-                  de.orderedPads[0].push_back(pad2);
-                else de.orderedPads[0][de.nOrderedPads[0]] = pad2;
+                if (de.nOrderedPads[0] < static_cast<UShort_t>(de.orderedPads[0].size()))
+                  de.orderedPads[0][de.nOrderedPads[0]] = iPad;
+                else de.orderedPads[0].push_back(iPad);
                 cl->lastPad = de.nOrderedPads[0];
                 ++de.nOrderedPads[0];
-                if (pad2->area[0][0] < cl->area[0][0]) cl->area[0][0] = pad2->area[0][0];
-                if (pad2->area[0][1] > cl->area[0][1]) cl->area[0][1] = pad2->area[0][1];
-                if (pad2->area[1][0] < cl->area[1][0]) cl->area[1][0] = pad2->area[1][0];
-                if (pad2->area[1][1] > cl->area[1][1]) cl->area[1][1] = pad2->area[1][1];
+                mpPad &pad2(de.pads[iPad]);
+                if (pad2.area[0][0] < cl->area[0][0]) cl->area[0][0] = pad2.area[0][0];
+                if (pad2.area[0][1] > cl->area[0][1]) cl->area[0][1] = pad2.area[0][1];
+                if (pad2.area[1][0] < cl->area[1][0]) cl->area[1][0] = pad2.area[1][0];
+                if (pad2.area[1][1] > cl->area[1][1]) cl->area[1][1] = pad2.area[1][1];
                 
-                pad2->useMe = kFALSE;
+                pad2.useMe = kFALSE;
                 
               }
               
@@ -502,7 +512,7 @@ Int_t PreClusterizerV2::PreClusterizeFIFO(std::vector<preCluster*> preClusters[n
 }
 
 //------------------------------------------------------------------
-Int_t PreClusterizerV2::PreClusterizeRecursive(std::vector<preCluster*> preClusters[nDEs][2], Int_t nPreClusters[nDEs][2])
+Int_t PreClusterizerV2::PreClusterizeRecursive(std::vector<preCluster*> preClusters[nDEs][2], UShort_t nPreClusters[nDEs][2])
 {
   /// preclusterize both planes of every DE using recursive algorithm
   
@@ -510,24 +520,27 @@ Int_t PreClusterizerV2::PreClusterizeRecursive(std::vector<preCluster*> preClust
   
   Int_t nPreclustersTot = 0;
   preCluster *cl(0x0);
+  UShort_t iPad(0);
   
   // loop over DEs
-  for (Int_t iDE = 0; iDE < nDEs; iDE++) {
+  for (UChar_t iDE = 0; iDE < nDEs; ++iDE) {
     
-    mpDE &de = mpDEs[iDE];
+    mpDE &de(mpDEs[iDE]);
     
     // loop over planes
-    for (Int_t iPlane = 0; iPlane < 2; iPlane++) {
+    for (UChar_t iPlane = 0; iPlane < 2; ++iPlane) {
       
       nPreClusters[iDE][iPlane] = 0;
       
       // loop over fired pads
-      for (Int_t iPad = 0; iPad < de.nFiredPads[iPlane]; ++iPad) {
+      for (UShort_t iFiredPad = 0; iFiredPad < de.nFiredPads[iPlane]; ++iFiredPad) {
         
-        if (de.firedPads[iPlane][iPad]->useMe) {
+        iPad = de.firedPads[iPlane][iFiredPad];
+        
+        if (de.pads[iPad].useMe) {
           
           // create the precluster if needed
-          if (nPreClusters[iDE][iPlane] >= static_cast<Int_t>(preClusters[iDE][iPlane].size()))
+          if (nPreClusters[iDE][iPlane] >= static_cast<UShort_t>(preClusters[iDE][iPlane].size()))
             preClusters[iDE][iPlane].push_back(new preCluster);
           
           // get the precluster
@@ -545,7 +558,7 @@ Int_t PreClusterizerV2::PreClusterizeRecursive(std::vector<preCluster*> preClust
           
           // add the pad and its fired neighbours recusively
           cl->firstPad = de.nOrderedPads[0];
-          AddPad(de, de.firedPads[iPlane][iPad], *cl);
+          AddPad(de, iPad, *cl);
           
         }
         
@@ -564,29 +577,31 @@ Int_t PreClusterizerV2::PreClusterizeRecursive(std::vector<preCluster*> preClust
 }
 
 //------------------------------------------------------------------
-void PreClusterizerV2::AddPad(mpDE &de, mpPad *pad, preCluster &cl)
+void PreClusterizerV2::AddPad(mpDE &de, UShort_t iPad, preCluster &cl)
 {
   /// add the given mpPad and its fired neighbours (recursive method)
   
   // add the given pad
-  if (de.nOrderedPads[0] >= static_cast<Int_t>(de.orderedPads[0].size())) de.orderedPads[0].push_back(pad);
-  else de.orderedPads[0][de.nOrderedPads[0]] = pad;
+  mpPad &pad(de.pads[iPad]);
+  if (de.nOrderedPads[0] < static_cast<UShort_t>(de.orderedPads[0].size()))
+    de.orderedPads[0][de.nOrderedPads[0]] = iPad;
+  else de.orderedPads[0].push_back(iPad);
   cl.lastPad = de.nOrderedPads[0];
   ++de.nOrderedPads[0];
-  if (pad->area[0][0] < cl.area[0][0]) cl.area[0][0] = pad->area[0][0];
-  if (pad->area[0][1] > cl.area[0][1]) cl.area[0][1] = pad->area[0][1];
-  if (pad->area[1][0] < cl.area[1][0]) cl.area[1][0] = pad->area[1][0];
-  if (pad->area[1][1] > cl.area[1][1]) cl.area[1][1] = pad->area[1][1];
+  if (pad.area[0][0] < cl.area[0][0]) cl.area[0][0] = pad.area[0][0];
+  if (pad.area[0][1] > cl.area[0][1]) cl.area[0][1] = pad.area[0][1];
+  if (pad.area[1][0] < cl.area[1][0]) cl.area[1][0] = pad.area[1][0];
+  if (pad.area[1][1] > cl.area[1][1]) cl.area[1][1] = pad.area[1][1];
   
-  pad->useMe = kFALSE;
+  pad.useMe = kFALSE;
   
   // loop over its neighbours
-  for (Int_t iNeighbour = 0; iNeighbour < pad->nNeighbours; iNeighbour++) {
+  for (UShort_t iNeighbour = 0; iNeighbour < pad.nNeighbours; ++iNeighbour) {
     
-    if (de.pads[pad->neighbours[iNeighbour]].useMe) {
+    if (de.pads[pad.neighbours[iNeighbour]].useMe) {
       
       // add the pad to the precluster
-      AddPad(de, &de.pads[pad->neighbours[iNeighbour]], cl);
+      AddPad(de, pad.neighbours[iNeighbour], cl);
       
     }
     
@@ -595,25 +610,26 @@ void PreClusterizerV2::AddPad(mpDE &de, mpPad *pad, preCluster &cl)
 }
 
 //------------------------------------------------------------------
-Int_t PreClusterizerV2::MergePreClusters(std::vector<preCluster*> preClusters[nDEs][2], Int_t nPreClusters[nDEs][2])
+Int_t PreClusterizerV2::MergePreClusters(std::vector<preCluster*> preClusters[nDEs][2], UShort_t nPreClusters[nDEs][2])
 {
   /// merge overlapping preclusters on every DE
   
   AliCodeTimerAutoGeneral("",0);
   
   Int_t nPreClustersMergedTot = 0;
+  preCluster *cl(0x0);
   
   // loop over DEs
-  for (Int_t iDE = 0; iDE < nDEs; iDE++) {
+  for (UChar_t iDE = 0; iDE < nDEs; ++iDE) {
     
-    mpDE &de = mpDEs[iDE];
+    mpDE &de(mpDEs[iDE]);
     
     // loop over preclusters of one plane
-    for (Int_t iCluster = 0; iCluster < nPreClusters[iDE][0]; ++iCluster) {
+    for (UShort_t iCluster = 0; iCluster < nPreClusters[iDE][0]; ++iCluster) {
       
       if (!preClusters[iDE][0][iCluster]->useMe) continue;
       
-      preCluster *cl(preClusters[iDE][0][iCluster]);
+      cl = preClusters[iDE][0][iCluster];
       cl->useMe = kFALSE;
       
       // look for overlapping preclusters in the other plane
@@ -629,7 +645,7 @@ Int_t PreClusterizerV2::MergePreClusters(std::vector<preCluster*> preClusters[nD
     }
     
     // loop over preclusters of the other plane
-    for (Int_t iCluster = 0; iCluster < nPreClusters[iDE][1]; ++iCluster) {
+    for (UShort_t iCluster = 0; iCluster < nPreClusters[iDE][1]; ++iCluster) {
       
       if (!preClusters[iDE][1][iCluster]->useMe) continue;
       
@@ -651,17 +667,19 @@ Int_t PreClusterizerV2::MergePreClusters(std::vector<preCluster*> preClusters[nD
 }
 
 //------------------------------------------------------------------
-void PreClusterizerV2::MergePreClusters(preCluster &cl, std::vector<preCluster*> preClusters[2], Int_t nPreClusters[2],
-                                        mpDE &de, Int_t iPlane, preCluster *&mergedCl)
+void PreClusterizerV2::MergePreClusters(preCluster &cl, std::vector<preCluster*> preClusters[2], UShort_t nPreClusters[2],
+                                        mpDE &de, UChar_t iPlane, preCluster *&mergedCl)
 {
   /// merge preclusters on the given plane overlapping with the given one (recursive method)
   
+  preCluster *cl2(0x0);
+  
   // loop over preclusters in the given plane
-  for (Int_t iCluster = 0; iCluster < nPreClusters[iPlane]; ++iCluster) {
+  for (UShort_t iCluster = 0; iCluster < nPreClusters[iPlane]; ++iCluster) {
     
     if (!preClusters[iPlane][iCluster]->useMe) continue;
     
-    preCluster *cl2(preClusters[iPlane][iCluster]);
+    cl2 = preClusters[iPlane][iCluster];
     if (AreOverlapping(cl.area, cl2->area, -1.e-4) && AreOverlapping(cl, *cl2, de, -1.e-4)) {
       
       cl2->useMe = kFALSE;
@@ -684,13 +702,14 @@ preCluster* PreClusterizerV2::UsePreClusters(preCluster *cl, mpDE &de)
 {
   /// use this precluster as a new merged precluster
   
-  Int_t firstPad = de.nOrderedPads[1];
+  UShort_t firstPad = de.nOrderedPads[1];
   
   // move the fired pads
-  for (Int_t iOrderPad = cl->firstPad; iOrderPad <= cl->lastPad; ++iOrderPad) {
+  for (UShort_t iOrderPad = cl->firstPad; iOrderPad <= cl->lastPad; ++iOrderPad) {
     
-    if (de.nOrderedPads[1] >= static_cast<Int_t>(de.orderedPads[1].size())) de.orderedPads[1].push_back(de.orderedPads[0][iOrderPad]);
-    else de.orderedPads[1][de.nOrderedPads[1]] = de.orderedPads[0][iOrderPad];
+    if (de.nOrderedPads[1] < static_cast<UShort_t>(de.orderedPads[1].size()))
+      de.orderedPads[1][de.nOrderedPads[1]] = de.orderedPads[0][iOrderPad];
+    else de.orderedPads[1].push_back(de.orderedPads[0][iOrderPad]);
     
     ++de.nOrderedPads[1];
     
@@ -711,10 +730,11 @@ void PreClusterizerV2::MergePreClusters(preCluster &cl1, preCluster &cl2, mpDE &
   /// merge precluster2 into precluster1
   
   // move the fired pads
-  for (Int_t iOrderPad = cl2.firstPad; iOrderPad <= cl2.lastPad; ++iOrderPad) {
+  for (UShort_t iOrderPad = cl2.firstPad; iOrderPad <= cl2.lastPad; ++iOrderPad) {
     
-    if (de.nOrderedPads[1] >= static_cast<Int_t>(de.orderedPads[1].size())) de.orderedPads[1].push_back(de.orderedPads[0][iOrderPad]);
-    else de.orderedPads[1][de.nOrderedPads[1]] = de.orderedPads[0][iOrderPad];
+    if (de.nOrderedPads[1] < static_cast<UShort_t>(de.orderedPads[1].size()))
+      de.orderedPads[1][de.nOrderedPads[1]] = de.orderedPads[0][iOrderPad];
+    else de.orderedPads[1].push_back(de.orderedPads[0][iOrderPad]);
     
     ++de.nOrderedPads[1];
     
@@ -731,12 +751,13 @@ Bool_t PreClusterizerV2::AreOverlapping(preCluster &cl1, preCluster &cl2, mpDE &
   /// precision in cm: positive = increase pad size / negative = decrease pad size
   
   // loop over all pads of the precluster1
-  for (Int_t iOrderPad1 = cl1.firstPad; iOrderPad1 <= cl1.lastPad; ++iOrderPad1) {
+  for (UShort_t iOrderPad1 = cl1.firstPad; iOrderPad1 <= cl1.lastPad; ++iOrderPad1) {
     
     // loop over all pads of the precluster2
-    for (Int_t iOrderPad2 = cl2.firstPad; iOrderPad2 <= cl2.lastPad; ++iOrderPad2) {
+    for (UShort_t iOrderPad2 = cl2.firstPad; iOrderPad2 <= cl2.lastPad; ++iOrderPad2) {
       
-      if (AreOverlapping(de.orderedPads[0][iOrderPad1]->area, de.orderedPads[0][iOrderPad2]->area, precision)) return kTRUE;
+      if (AreOverlapping(de.pads[de.orderedPads[0][iOrderPad1]].area,
+                         de.pads[de.orderedPads[0][iOrderPad2]].area, precision)) return kTRUE;
       
     }
     
@@ -762,7 +783,7 @@ Bool_t PreClusterizerV2::AreOverlapping(Float_t area1[2][2], Float_t area2[2][2]
 }
 
 //------------------------------------------------------------------
-void PreClusterizerV2::StorePreClusters(std::vector<preCluster*> preClusters[nDEs][2], Int_t nPreClusters[nDEs][2],
+void PreClusterizerV2::StorePreClusters(std::vector<preCluster*> preClusters[nDEs][2], UShort_t nPreClusters[nDEs][2],
                                         AliMUONVClusterStore *clusterStore)
 {
   /// store the preclusters into standard cluster store
@@ -770,32 +791,36 @@ void PreClusterizerV2::StorePreClusters(std::vector<preCluster*> preClusters[nDE
   AliCodeTimerAutoGeneral("",0);
   
   clusterStore->Clear();
-  Int_t clusterIndex = 0;
+  Int_t clusterIndex(0);
+  preCluster *cl(0x0);
+  AliMUONVCluster *cluster(0x0);
   
   // loop over DEs
-  for (Int_t iDE = 0; iDE < nDEs; iDE++) {
+  for (UChar_t iDE = 0; iDE < nDEs; ++iDE) {
     
-    mpDE &de = mpDEs[iDE];
+    mpDE &de(mpDEs[iDE]);
     
     // temporary array of IDs
     UInt_t *digitsId = new UInt_t[de.nOrderedPads[1]];
     
     // loop over planes
-    for (Int_t iPlane = 0; iPlane < 2; iPlane++) {
+    for (UChar_t iPlane = 0; iPlane < 2; ++iPlane) {
       
       // loop over preclusters
-      for (Int_t iCluster = 0; iCluster < nPreClusters[iDE][iPlane]; ++iCluster) {
+      for (UShort_t iCluster = 0; iCluster < nPreClusters[iDE][iPlane]; ++iCluster) {
         
         if (!preClusters[iDE][iPlane][iCluster]->storeMe) continue;
         
-        preCluster *cl(preClusters[iDE][iPlane][iCluster]);
-        AliMUONVCluster *cluster = clusterStore->Add(de.id/100-1, de.id, clusterIndex++);
+        cl = preClusters[iDE][iPlane][iCluster];
+        cluster = clusterStore->Add(de.id/100-1, de.id, clusterIndex);
+        ++clusterIndex;
         
         // loop over pads
         Int_t nDigits(0);
-        for (Int_t iOrderPad = cl->firstPad; iOrderPad <= cl->lastPad; ++iOrderPad) {
+        for (UShort_t iOrderPad = cl->firstPad; iOrderPad <= cl->lastPad; ++iOrderPad) {
           
-          digitsId[nDigits++] = de.orderedPads[1][iOrderPad]->digit->GetUniqueID();
+          digitsId[nDigits] = de.pads[de.orderedPads[1][iOrderPad]].digit->GetUniqueID();
+          ++nDigits;
           
         }
         
