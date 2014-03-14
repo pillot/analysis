@@ -25,6 +25,7 @@
 #include "AliMUONClusterStoreV2.h"
 #include "AliMUON2DMap.h"
 
+#include "AliMpCDB.h"
 #include "AliMpDEIterator.h"
 #include "AliMpVSegmentation.h"
 #include "AliMpSegmentation.h"
@@ -45,7 +46,9 @@ deIndices()
   AliCDBManager* man = AliCDBManager::Instance();
   man->SetDefaultStorage(ocdbPath);
   man->SetRun(run);
+  
   if (!AliMUONCDB::LoadMapping()) return;
+  
   //AliMUONVStore* neighbours = AliMUONCalibrationData::CreateNeighbours(0);
   //CreateMapping(neighbours);
   CreateMapping(0x0);
@@ -58,6 +61,10 @@ deIndices()
 //------------------------------------------------------------------
 PreClusterizerV2::~PreClusterizerV2()
 {
+  
+  for (Int_t iDE = 0; iDE < nDEs; iDE++) delete[] mpDEs[iDE].pads;
+  
+  AliMpCDB::UnloadAll();
   
 }
 
@@ -152,16 +159,18 @@ void PreClusterizerV2::PreClusterize(const char *digitFileName, const char *clus
   clusterFile->cd();
   treeR->Write();
   clusterFile->Close();
-  delete clusterFile;
   
   // clean memory
   for (Int_t iDE = 0; iDE < nDEs; iDE++) {
     for (Int_t iPlane = 0; iPlane < 2; iPlane++) {
-      for (Int_t iCluster = 0; iCluster < nPreClusters[iDE][iPlane]; iCluster++) {
+      for (Int_t iCluster = 0; iCluster < preClusters[iDE][iPlane].size(); iCluster++) {
         delete preClusters[iDE][iPlane][iCluster];
       }
     }
   }
+  delete clusterStore;
+  delete clusterFile;
+  delete digitStore;
   
   AliCodeTimer::Instance()->Print();
   
@@ -267,6 +276,8 @@ void PreClusterizerV2::CreateMapping(AliMUONVStore* neighbours)
           }
           
         } else FindNeighbours(de, iPlane);
+        
+        delete padIt;
         
       }
       
