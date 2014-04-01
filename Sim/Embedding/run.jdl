@@ -1,0 +1,69 @@
+Executable = "/alice/bin/aliroot_new";
+ Jobtag = {
+        "comment:LHC period LHC11h - MUON embedding pass2 - J/psi, ID #316"        
+};
+ Packages = {
+        "VO_ALICE@AliRoot::v5-02-Rev-35",
+        "VO_ALICE@GEANT3::v1-14-5",
+        "VO_ALICE@ROOT::v5-34-02",
+        "VO_ALICE@APISCONFIG::V1.1x"        
+};
+ TTL = 72000;
+ Validationcommand = "/alice/cern.ch/user/a/aliprod/LHC12h2/validation.sh";
+ InputDataCollection = "LF:/alice/cern.ch/user/a/aliprod/LHC12h2/000169838p80.xml,nodownload";
+ InputFile = {
+        "LF:/alice/cern.ch/user/a/aliprod/LHC12h2/CheckESD.C",
+        "LF:/alice/cern.ch/user/a/aliprod/LHC12h2/Config.C",
+        "LF:/alice/cern.ch/user/a/aliprod/LHC12h2/rec.C",
+        "LF:/alice/cern.ch/user/a/aliprod/LHC12h2/sim.C",
+        "LF:/alice/cern.ch/user/a/aliprod/LHC12h2/simrun.C",
+        "LF:/alice/cern.ch/user/a/aliprod/LHC12h2/tag.C",
+        "LF:/alice/cern.ch/user/a/aliprod/LHC12h2/AODtrain.C",
+        "LF:/alice/cern.ch/user/a/aliprod/LHC12h2/runs/run169838_ok.txt"        
+};
+ Output = {
+        "log_archive:stderr,stdout,stderr.log,stdout.log,tag.log,sim.log,rec.log,check.log,simBackground.log,simSignal.log,recSignal.log,checkSignal.log,aod.log,*.stat@disk=1",
+        "root_archive.zip:galice.root,Kinematics.root,TrackRefs.root,Trigger.root,AliESDs.root,AliESDsSignal.root,AliESDfriends.root,Run*.root@disk=2",
+        "aod_archive.zip:AliAOD.root,AliAOD.Muons.root@disk=3"        
+};
+ OutputDir = "/alice/sim/2012/LHC12h2/169838/p80/#alienfilename/.root//#";
+ JDLVariables = {
+        "Packages",
+        "OutputDir"        
+};
+ GUIDFILE = "guid.txt";
+ splitarguments = "simrun.C --run 169838 --rawfile /alice/data/2011/LHC11h/000169838/raw/#alienfilename# --process kJPsiPbPb2760 --energy 2760 --trigger CPBI2_B1-B-NOPF-ALLNOTRD";
+ Split = "file";
+ Workdirectorysize = {
+        "5000MB"        
+};
+ JDLArguments = "169838 p80";
+ JDLPath = "/alice/cern.ch/user/a/aliprod/LHC12h2/JDL";
+ JDLProcessor = "alien.lpm.RunList";
+ LPMChainID = "549";
+ Price = 1.0;
+ Type = "Job";
+ OrigRequirements = member(other.GridPartitions,"PDC08_2");
+ MemorySize = "8GB";
+ User = "aliprod";
+ Requirements = ( other.Type == "machine" ) && ( member(other.Packages,"VO_ALICE@AliRoot::v5-02-Rev-35") ) && ( member(other.Packages,"VO_ALICE@GEANT3::v1-14-5") ) && ( member(other.Packages,"VO_ALICE@ROOT::v5-34-02") ) && ( member(other.Packages,"VO_ALICE@APISCONFIG::V1.1x") ) && ( member(other.GridPartitions,"PDC08_2") ) && ( other.TTL > 72000 ) && ( other.Price <= 1 );
+ InputBox = {
+        "/alice/cern.ch/user/a/aliprod/LHC12h2/CheckESD.C",
+        "/alice/cern.ch/user/a/aliprod/LHC12h2/Config.C",
+        "/alice/cern.ch/user/a/aliprod/LHC12h2/rec.C",
+        "/alice/cern.ch/user/a/aliprod/LHC12h2/sim.C",
+        "/alice/cern.ch/user/a/aliprod/LHC12h2/simrun.C",
+        "/alice/cern.ch/user/a/aliprod/LHC12h2/tag.C",
+        "/alice/cern.ch/user/a/aliprod/LHC12h2/AODtrain.C",
+        "/alice/cern.ch/user/a/aliprod/LHC12h2/runs/run169838_ok.txt"        
+};
+ InputDownload = {
+        "CheckESD.C->/alice/cern.ch/user/a/aliprod/LHC12h2/CheckESD.C",
+        "Config.C->/alice/cern.ch/user/a/aliprod/LHC12h2/Config.C",
+        "rec.C->/alice/cern.ch/user/a/aliprod/LHC12h2/rec.C",
+        "sim.C->/alice/cern.ch/user/a/aliprod/LHC12h2/sim.C",
+        "simrun.C->/alice/cern.ch/user/a/aliprod/LHC12h2/simrun.C",
+        "tag.C->/alice/cern.ch/user/a/aliprod/LHC12h2/tag.C",
+        "AODtrain.C->/alice/cern.ch/user/a/aliprod/LHC12h2/AODtrain.C",
+        "run169838_ok.txt->/alice/cern.ch/user/a/aliprod/LHC12h2/runs/run169838_ok.txt"        
+};
