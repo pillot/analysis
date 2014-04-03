@@ -63,6 +63,7 @@ fEventCounters(0x0),
 fTrigCounters(0x0),
 fMuonTrackCuts(0x0),
 fMuonTrackCuts2(0x0),
+fUseMCLabel(kFALSE),
 fSelectBadTracks(kFALSE),
 fCentMin(-FLT_MAX),
 fCentMax(FLT_MAX),
@@ -80,6 +81,7 @@ fEventCounters(0x0),
 fTrigCounters(0x0),
 fMuonTrackCuts(0x0),
 fMuonTrackCuts2(0x0),
+fUseMCLabel(kFALSE),
 fSelectBadTracks(kFALSE),
 fCentMin(-FLT_MAX),
 fCentMax(FLT_MAX),
@@ -641,6 +643,9 @@ Bool_t AliAnalysisTaskMuonPhysics::IsSelected(AliVParticle& track, Bool_t isESD,
   // skip ghosts
   if (!AliAnalysisMuonUtility::IsMuonTrack(&track)) return kFALSE;
   
+  // skip tracks without MC label
+  if (fUseMCLabel && track.GetLabel() < 0) return kFALSE;
+  
   // skip or keep only bad tracks
   if (isESD && !selectBadTracks && track.TestBit(BIT(20))) return kFALSE;
   if (isESD && selectBadTracks && !track.TestBit(BIT(20)) && !track.TestBit(BIT(21))) return kFALSE;
@@ -655,9 +660,6 @@ Bool_t AliAnalysisTaskMuonPhysics::IsSelected(AliVParticle& track, Bool_t isESD,
   for (Int_t iCh = 6; iCh < 10; iCh++) if (AliAnalysisMuonUtility::IsTrkChamberHit(iCh, &track)) nFiredChInSt45++;
   if (nFiredChInSt45 < 3) return kFALSE;
   */
-  // skip tracks without MC label
-  //if (track.GetLabel() < 0) return kFALSE;
-  
   // skip tracks with pT < 2 GeV/c
   //if (track.Pt() < 60.) return kFALSE;
   
