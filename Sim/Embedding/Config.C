@@ -233,9 +233,9 @@ void Config()
   else {
     // Set the trigger configuration: proton-proton
 
-    //    AliSimulation::Instance()->SetTriggerConfig("p-p");
+        AliSimulation::Instance()->SetTriggerConfig("p-p");
 
-    AliSimulation::Instance()->SetTriggerConfig("Pb-Pb");
+    //AliSimulation::Instance()->SetTriggerConfig("Pb-Pb");
     cout<<"Trigger configuration is set to  Pb-Pb"<<endl;
   }
 	
@@ -763,7 +763,7 @@ AliGenerator* JPsiPbPb()
 
 AliGenerator* JPsiPbPb2760()
 {
-	AliGenParam *jpsiPbPb2760 = new AliGenParam(1, AliGenMUONlib::kJpsi,"PbPb 2.76");
+	AliGenParam *jpsiPbPb2760 = new AliGenParam(1, AliGenMUONlib::kJpsi,"CDF pp 7");
 	jpsiPbPb2760->SetMomentumRange(0,999);
 	jpsiPbPb2760->SetPtRange(0.,999.);
 	jpsiPbPb2760->SetYRange(-4.2,-2.3);

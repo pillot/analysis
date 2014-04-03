@@ -66,7 +66,8 @@ void simrun() {
     sprintf(srun,"%d",nrun);
 
     if (!(strcmp(gApplication->Argv(i),"--rawfile")))
-      sprintf(srawfile,"alien://%s", gApplication->Argv(i+1));
+//      sprintf(srawfile,"alien://%s", gApplication->Argv(i+1));
+      sprintf(srawfile,"%s", gApplication->Argv(i+1));
 
     if (!(strcmp(gApplication->Argv(i),"--event")))
       nevent = atoi(gApplication->Argv(i+1));
@@ -90,7 +91,7 @@ void simrun() {
 
   }
 	// For pass2
-
+/*
 	Bool_t esdFound = kFALSE;
 	TString tsesdfile(srawfile);
 	TString tsrawfile(srawfile);
@@ -127,7 +128,14 @@ void simrun() {
 	tsesdfile.Prepend("alien://");
 	sprintf(sesdfile,tsesdfile.Data());
 	sprintf(seevent,"%d",neevent+1);
-	
+	*/
+  
+  TString tsesdfile(gSystem->DirName(srawfile));
+  tsesdfile.Append("/AliESDs.root");
+  sprintf(sesdfile,tsesdfile.Data());
+  sprintf(seevent,"%d",neevent+1);
+  
+  
   gSystem->Load("libVMC");
   gSystem->Load("libMinuit");
   gSystem->Load("libTree");
@@ -246,7 +254,7 @@ void simrun() {
   gSystem->ChangeDirectory("Background/");
   cout<<">>>>> CONVERTING RAW 2 SDIGITS <<<<<"<<endl;
   gSystem->Exec("aliroot -b -q sim.C > sim.log 2>&1");
-	gSystem->Exec("cp -a sim.log ../simBackground.log");
+//	gSystem->Exec("cp -a sim.log ../simBackground.log");
   cout<<">>>>> CHECKING ALL WENT WELL <<<<<"<<endl;
 	if (gSystem->GetPathInfo("MUON.SDigits.root",fileStat)||
 			gSystem->GetPathInfo("ITS.SDigits.root",fileStat)) {
@@ -292,8 +300,8 @@ void simrun() {
 		return;
 	}
   gSystem->Exec("mv syswatch.log recwatch.log");
-	cout<<">>>>> TAG <<<<<"<<endl;
-	gSystem->Exec("aliroot -b -q tag.C > tag.log 2>&1");
+//	cout<<">>>>> TAG <<<<<"<<endl;
+//	gSystem->Exec("aliroot -b -q tag.C > tag.log 2>&1");
   cout<<">>>>> COPY BRANCHES FROM ORIGINAL ESD <<<<<"<<endl;
   gSystem->Exec("mv AliESDs.root AliESDsTmp.root");
   gSystem->Exec("aliroot -b -q CheckESD.C > check.log 2>&1");	
@@ -310,6 +318,7 @@ void simrun() {
   gSystem->Exec("cp sim.C Signal/");
   gSystem->Exec("cp rec.C Signal/");
   gSystem->Exec("cp CheckESD.C Signal/");
+  gSystem->Exec("cp AODtrain.C Signal/");
   gSystem->Exec("cp *SDigits*.root Signal/");
   gSystem->Exec("cp Background/ITS.SDigits*.root Signal/"); //to reconstruct the vertex
 
@@ -319,7 +328,7 @@ void simrun() {
   gSystem->ChangeDirectory("Signal/");
   cout<<">>>>> SIMULATION <<<<<"<<endl;
   gSystem->Exec("aliroot -b -q sim.C > sim.log 2>&1");
-	gSystem->Exec("cp -a sim.log ../simSignal.log");
+//	gSystem->Exec("cp -a sim.log ../simSignal.log");
   gSystem->Exec("mv syswatch.log simwatch.log");
 	cout<<">>>>> CHECKING ALL WENT WELL <<<<<"<<endl;
 	if (gSystem->GetPathInfo("MUON.Digits.root",fileStat)||
@@ -329,7 +338,7 @@ void simrun() {
 	}
   cout<<">>>>> RECONSTRUCTION <<<<<"<<endl;
   gSystem->Exec("aliroot -b -q rec.C > rec.log 2>&1");
-	gSystem->Exec("cp -a rec.log ../recSignal.log");
+//	gSystem->Exec("cp -a rec.log ../recSignal.log");
 	cout<<">>>>> CHECKING ALL WENT WELL <<<<<"<<endl;
 	if (gSystem->GetPathInfo("AliESDs.root",fileStat)) {
 		cout << "reconstruction of embedding failed!" << endl;
@@ -339,9 +348,11 @@ void simrun() {
   cout<<">>>>> COPY BRANCHES FROM ORIGINAL ESD <<<<<"<<endl;
 	gSystem->Exec("mv AliESDs.root AliESDsTmp.root");
 	gSystem->Exec("aliroot -b -q CheckESD.C > check.log 2>&1");
-	gSystem->Exec("cp -a check.log ../checkSignal.log");
+//	gSystem->Exec("cp -a check.log ../checkSignal.log");
+  cout<<">>>>> AOD PRODUCTION <<<<<"<<endl;
+  gSystem->Exec("aliroot -b -q AODtrain.C > aod.log 2>&1");
   gSystem->ChangeDirectory("../");
-
+/*
   cout<<">>>>> RENAMING SOME OUTPUT FILES <<<<<"<<endl;
   gSystem->Setenv("EMBFOLDER","Merged");
   gSystem->Exec("cp -a AliESDsTmp.root AliESDs$EMBFOLDER.root");
@@ -375,5 +386,5 @@ void simrun() {
 
   gSystem->Exec("cp -a $EMBFOLDER/galice.root galice$EMBFOLDER.root");
   gSystem->Exec("cp -a $EMBFOLDER/MUON.SDigits.root MUON.SDigits$EMBFOLDER.root");
-
+*/
 }

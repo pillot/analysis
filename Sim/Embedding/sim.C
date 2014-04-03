@@ -100,7 +100,8 @@ void sim() {
   if (!(strcmp(embrun,"kBackground"))){
 		
     AliCDBManager *cdbm = AliCDBManager::Instance();
-    cdbm->SetDefaultStorage("alien://Folder=/alice/data/2011/OCDB");
+    //cdbm->SetDefaultStorage("alien://Folder=/alice/data/2011/OCDB");
+    cdbm->SetDefaultStorage("local:///Users/pillot/Work/Alice/Data/2012/LHC12h/raw/190147/saf/CDBMirror/alice/data/2012/OCDB");
     cdbm->SetRun(run);
 		
 		AliGRPManager grpM;
@@ -114,7 +115,7 @@ void sim() {
 		sfname += "?EventType=7";
 		
 		// select one trigger ...
-		if (trgname){
+		if (!TString(trgname).IsNull()){
 			AliCDBEntry *grp_ctp = cdbm->Get("GRP/CTP/Config",run);
 			AliTriggerConfiguration *trg_conf = (AliTriggerConfiguration *)grp_ctp->GetObject();
 			trg_conf->Print();
@@ -167,7 +168,8 @@ void sim() {
 		}
 		
 		AliCDBManager *cdbm = AliCDBManager::Instance();
-		cdbm->SetDefaultStorage("alien://Folder=/alice/data/2011/OCDB");
+		//cdbm->SetDefaultStorage("alien://Folder=/alice/data/2011/OCDB");
+                cdbm->SetDefaultStorage("local:///Users/pillot/Work/Alice/Data/2012/LHC12h/raw/190147/saf/CDBMirror/alice/data/2012/OCDB");
 		cdbm->SetRun(run);
 		
 		AliGRPManager grpM;
@@ -185,10 +187,12 @@ void sim() {
 		simulator.SetMakeSDigits("MUON ITS");
 		simulator.EmbedInto("Background/galice.root",1);
 		// THE OCDB PART
-		simulator.SetDefaultStorage("alien://Folder=/alice/data/2011/OCDB");
+		//simulator.SetDefaultStorage("alien://Folder=/alice/data/2011/OCDB");
+                simulator.SetDefaultStorage("local:///Users/pillot/Work/Alice/Data/2012/LHC12h/raw/190147/saf/CDBMirror/alice/data/2012/OCDB");
 		
 		// Read GRP Data from RAW
-		simulator.SetSpecificStorage("GRP/GRP/Data","alien://Folder=/alice/data/2011/OCDB");
+		//simulator.SetSpecificStorage("GRP/GRP/Data","alien://Folder=/alice/data/2011/OCDB");
+                simulator.SetSpecificStorage("GRP/GRP/Data","local:///Users/pillot/Work/Alice/Data/2012/LHC12h/raw/190147/saf/CDBMirror/alice/data/2012/OCDB");
 	}
 	
 	simulator.SetRunSimulation(kTRUE);
@@ -205,7 +209,7 @@ void sim() {
 	
 	// MUON
 	//	simulator.SetSpecificStorage("MUON/Calib/Gains","alien://Folder=/alice/simulation/2008/v4-15-Release/Ideal/");
-		simulator.SetSpecificStorage("MUON/Align/Data","alien://Folder=/alice/simulation/2008/v4-15-Release/Full/");
+	//	simulator.SetSpecificStorage("MUON/Align/Data","alien://Folder=/alice/simulation/2008/v4-15-Release/Full/");
 	//	simulator.SetSpecificStorage("MUON/Align/Data","alien://folder=/alice/cern.ch/user/j/jcastill/pbpb11wrk/LHC11hMisAlignCDB4");
 	
 	// MUON Trigger

@@ -1,11 +1,11 @@
 // ### Settings that make sense when using the Alien plugin
 //==============================================================================
 Int_t       runOnData          = 1;       // Set to 1 if processing real data
-Int_t       iCollision         = 1;       // 0=pp, 1=Pb-Pb
+Int_t       iCollision         = 0;       // 0=pp, 1=Pb-Pb
 //==============================================================================
 Bool_t      usePhysicsSelection = kTRUE; // use physics selection
 Bool_t      useTender           = kFALSE; // use tender wagon
-Bool_t      useCentrality       = kTRUE; // centrality
+Bool_t      useCentrality       = kFALSE; // centrality
 Bool_t      useV0tender         = kFALSE;  // use V0 correction in tender
 Bool_t      useDBG              = kTRUE;  // activate debugging
 Bool_t      useMC               = kTRUE;  // use MC info
@@ -18,7 +18,7 @@ Bool_t      useSysInfo          = kFALSE; // use sys info
 // ### Analysis modules to be included. Some may not be yet fully implemented.
 //==============================================================================
 Int_t       iAODhandler        = 1;      // Analysis produces an AOD or dAOD's
-Int_t       iESDMCLabelAddition= 0;
+Int_t       iESDMCLabelAddition= 1;
 Int_t       iESDfilter         = 1;      // ESD to AOD filter (barrel + muon tracks)
 Int_t       iMUONcopyAOD       = 1;      // Task that copies only muon events in a separate AOD (PWG3)
 Int_t       iJETAN             = 0;      // Jet analysis (PWG4)
@@ -48,7 +48,12 @@ TChain *CreateChain();
 void AODtrain(Int_t merge=0)
 {
 // Main analysis train macro.
-   AliLog::SetGlobalDebugLevel(3);
+  
+  if (gSystem->Getenv("CONFIG_EMBEDDING") &&
+      strcmp(gSystem->Getenv("CONFIG_EMBEDDING"), "kSignal")==0)
+    usePhysicsSelection = kFALSE;
+  
+  AliLog::SetGlobalDebugLevel(3);
   if (merge) {
     TGrid::Connect("alien://");
     if (!gGrid || !gGrid->IsConnected()) {
@@ -166,12 +171,12 @@ void AddAnalysisTasks(Int_t merge){
 
 	if(iESDMCLabelAddition) {
     		gROOT->LoadMacro("$ALICE_ROOT/PWG/muondep/AddTaskESDMCLabelAddition.C");
-    		AliAnalysisTaskESDMCLabelAddition *esdmclabel = AddTaskESDMCLabelAddition(kFALSE);
+    		AliAnalysisTaskESDMCLabelAddition *esdmclabel = AddTaskESDMCLabelAddition();
 	}
 	
    if (iESDfilter) {
       //  ESD filter task configuration.
-      gROOT->LoadMacro("$ALICE_ROOT/ANALYSIS/macros/AddTaskESDFilter.C");	
+     gROOT->LoadMacro("$ALICE_ROOT/ANALYSIS/ESDfilter/macros/AddTaskESDFilter.C");
       if (iMUONcopyAOD) {
          printf("Registering delta AOD file\n");
          mgr->RegisterExtraFile("AliAOD.Muons.root");
@@ -312,6 +317,9 @@ Bool_t LoadAnalysisLibraries()
       if (!LoadLibrary("TENDER") ||
           !LoadLibrary("TENDERSupplies")) return kFALSE;
    }       
+   if (iESDfilter){
+      if (!LoadLibrary("ESDfilter")) return kFALSE;
+   }
    if (iESDfilter || iPWGMuonTrain) {
       if (!LoadLibrary("PWGmuon")) return kFALSE;
    }   

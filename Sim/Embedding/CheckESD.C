@@ -20,7 +20,7 @@
 
 Bool_t CheckESD(const char* fileNameE="AliESDsTmp.root",const char* fileNameR="alien:///alice/data/2010/LHC10h/000137549/ESDs/pass1_4plus/10000137549001.100/AliESDs.root") {
 	
-	Int_t nev = 10;
+	Int_t nev = 123456789;
 	Int_t nskip = 0;
 	const char* fileNameM = "AliESDs.root";
 	const char *trgname;
@@ -38,7 +38,7 @@ Bool_t CheckESD(const char* fileNameE="AliESDsTmp.root",const char* fileNameR="a
 		nskip = atoi(gSystem->Getenv("DC_EEVENT"));
 	}
 	
-	if (!gGrid) TGrid::Connect("alien://");
+//	if (!gGrid) TGrid::Connect("alien://");
   TFile *_fileE = TFile::Open(fileNameE);
   TFile *_fileR = TFile::Open(fileNameR);
   AliESDEvent* esdE = new AliESDEvent();
@@ -75,24 +75,29 @@ Bool_t CheckESD(const char* fileNameE="AliESDsTmp.root",const char* fileNameR="a
 	}
   for (Int_t iEv=0; iEv<nEvents; iEv++) {
     printf("Event %i\n",iEv);
-		
+    
     treeESDE->GetEvent(iEv);
-		if (trgname) {
-			for (Int_t jEv=lastSelectedEvent+1; jEv<nEventsR; jEv++) {
-				treeESDR->GetEvent(jEv);
-				
-				TString firedTrigClasses = esdR->GetFiredTriggerClasses();
-				if (firedTrigClasses.Contains(trgname)) {
-					lastSelectedEvent = jEv;
-					break;
-				}
-			}
-		}	else {
-			treeESDR->GetEvent(iEv);
-			lastSelectedEvent = iEv;
-		}
-		printf("and Event %i\n",lastSelectedEvent);
-		
+    for (Int_t jEv=lastSelectedEvent+1; jEv<nEventsR; jEv++) {
+      
+      treeESDR->GetEvent(jEv);
+      
+      // only physics events
+      if (esdR->GetEventType() != 7) continue;
+      
+      if (!TString(trgname).IsNull()) {
+        
+        // only trigger selected events
+        TString firedTrigClasses = esdR->GetFiredTriggerClasses();
+        if (!firedTrigClasses.Contains(trgname)) continue;
+        
+      }
+      
+      lastSelectedEvent = jEv;
+      break;
+      
+    }
+    printf("and Event %i\n",lastSelectedEvent);
+    
     // Copy the esd event from the Merged (Signal) reconstrcution
 		*esdM = *esdE;
 		

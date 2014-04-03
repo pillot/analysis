@@ -38,8 +38,11 @@ void rec(const char *filename="raw.root")
 
   // Set the CDB storage location
   AliCDBManager * man = AliCDBManager::Instance();
-  man->SetDefaultStorage("alien://folder=/alice/data/2011/OCDB");
+  //man->SetDefaultStorage("alien://folder=/alice/data/2011/OCDB");
+  man->SetDefaultStorage("local:///Users/pillot/Work/Alice/Data/2012/LHC12h/raw/190147/saf/CDBMirror/alice/data/2012/OCDB");
 //  man->SetSpecificStorage("MUON/Align/Data","local://copy2011pass1CDB");
+  man->SetSpecificStorage("ITS/Calib/RecoParam","local:///Users/pillot/Work/Alice/Data/2012/LHC12h/raw/190147/OCDB_RecoParams");
+  man->SetSpecificStorage("MUON/Calib/RecoParam","local:///Users/pillot/Work/Alice/Data/2012/LHC12h/raw/190147/OCDB_newParams");
 
   AliReconstruction rec;
 
@@ -52,17 +55,20 @@ void rec(const char *filename="raw.root")
 
   // QA options
 //  rec.SetRunQA("Global MUON:ALL") ;
-	rec.SetRunQA(":") ;
+  rec.SetRunQA("MUON:ALL");
+  rec.SetQAWriteExpert(AliQAv1::kMUON);
+//	rec.SetRunQA(":") ;
+  rec.SetRunGlobalQA(kFALSE);
   rec.SetQARefDefaultStorage("local://$ALICE_ROOT/QAref") ;
 
   // MUON only reco - recoparameters
-  rec.SetRecoParam("ITS",GetSpecialITSRecoParam());
+  //rec.SetRecoParam("ITS",GetSpecialITSRecoParam());
 
   // AliReconstruction settings
-  rec.SetWriteESDfriend(kTRUE);
-  rec.SetWriteAlignmentData();
+  rec.SetWriteESDfriend(kFALSE);
+  //rec.SetWriteAlignmentData();
 //  rec.SetInput(filename);
-  rec.SetUseTrackingErrorsForAlignment("ITS");
+  //rec.SetUseTrackingErrorsForAlignment("ITS");
 
   // switch off cleanESD
   rec.SetCleanESD(kFALSE);
