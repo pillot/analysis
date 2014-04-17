@@ -277,6 +277,9 @@ void ErrorPropagation()
 	
       }
       
+      sigmaStCalc[iSt][iMode][0] = TMath::Min(effSt[iSt], sigmaStCalc[iSt][iMode][0]);
+      sigmaStCalc[iSt][iMode][1] = TMath::Min(1.-effSt[iSt], sigmaStCalc[iSt][iMode][1]);
+      
     }
     
   }
@@ -341,7 +344,13 @@ void ErrorPropagation()
       
     }
     
-  }
+    sigmaSpectroCalc[iMode][0] = TMath::Min(effSpectro, sigmaSpectroCalc[iMode][0]);
+    sigmaSpectroCalc[iMode][1] = TMath::Min(1.-effSpectro, sigmaSpectroCalc[iMode][1]);
+    
+    sigmaSpectro45Calc[iMode][0] = TMath::Min(effSpectro45, sigmaSpectro45Calc[iMode][0]);
+    sigmaSpectro45Calc[iMode][1] = TMath::Min(1.-effSpectro45, sigmaSpectro45Calc[iMode][1]);
+    
+ }
   
   // print spectrometer results
   printf("\nspectrometer efficiency:\n");
