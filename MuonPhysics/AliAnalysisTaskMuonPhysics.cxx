@@ -141,7 +141,7 @@ void AliAnalysisTaskMuonPhysics::UserCreateOutputObjects()
   TH1F* hNChamberHitPerTrack = new TH1F("hNChamberHitPerTrack", "number of chambers hit per track;n_{chamber hit}", 15, 0., 15.);
   fList->AddAtAndExpand(hNChamberHitPerTrack, kNChamberHitPerTrack);
   
-  TH1F* hMass = new TH1F("hMass", "#mu^{+}#mu^{-} invariant mass distribution;mass (GeV/c^{2})", 2000, 0., 20.);
+  TH1F* hMass = new TH1F("hMass", "#mu^{+}#mu^{-} invariant mass distribution;mass (GeV/c^{2})", 1600, 0., 20.);
   fList->AddAtAndExpand(hMass, kMass);
   
   TH1F* hPUncorrected = new TH1F("hPUncorrected", "uncorrected momentum distribution;p_{uncorr} (GeV/c)", 300, 0., 300.);
@@ -238,6 +238,7 @@ void AliAnalysisTaskMuonPhysics::UserCreateOutputObjects()
   
   // initialize event counters
   fEventCounters = new AliCounterCollection(GetOutputSlot(3)->GetContainer()->GetName());
+  fEventCounters->AddRubric("run", 100000);
   fEventCounters->AddRubric("event", "all/trigger/selected");
   fEventCounters->AddRubric("cent", centbins.Data());
   fEventCounters->AddRubric("spdvtx", "yes/no");
@@ -373,8 +374,9 @@ void AliAnalysisTaskMuonPhysics::UserExec(Option_t *)
   if (TMath::Abs(zVtxT0) > 98.) vtxT0 = "t0vtx:no";
   
   // total number of events
-  fEventCounters->Count(Form("event:all/cent:any/%s/%s",vtxSPD.Data(),vtxT0.Data()));
-  if (!centKey.IsNull()) fEventCounters->Count(Form("event:all/cent:%s/%s/%s",centKey.Data(),vtxSPD.Data(),vtxT0.Data()));
+  TString runKey = fVsRun ? Form("run:%d", fCurrentRunNumber) : "run:any";
+  fEventCounters->Count(Form("%s/event:all/cent:any/%s/%s",runKey.Data(),vtxSPD.Data(),vtxT0.Data()));
+  if (!centKey.IsNull()) fEventCounters->Count(Form("%s/event:all/cent:%s/%s/%s",runKey.Data(),centKey.Data(),vtxSPD.Data(),vtxT0.Data()));
   
   // first loop over tracks
   Int_t nTracks = AliAnalysisMuonUtility::GetNTracks(evt);
@@ -526,6 +528,8 @@ void AliAnalysisTaskMuonPhysics::UserExec(Option_t *)
 	TLorentzVector muV2(track2->Px(), track2->Py(), track2->Pz(), track2->E());
 	TLorentzVector dimuV = muV1 + muV2;
 	
+        //if (dimuV.Pt() <= 5. || dimuV.Pt() > 8.) continue;
+        
 	// fill dimuon histograms
 	((TH1F*)fList->UncheckedAt(kMass))->Fill(dimuV.M());
 	((TH1F*)fList->UncheckedAt(kPtDimu))->Fill(dimuV.Pt());
@@ -537,7 +541,6 @@ void AliAnalysisTaskMuonPhysics::UserExec(Option_t *)
   }
   
   // fill trigger track counters
-  TString runKey = fVsRun ? Form("run:%d", fCurrentRunNumber) : "run:any";
   for (Int_t i = 0; i < nTrgTracks; i++) {
     fTrigCounters->Count(Form("%s/board:%d/match:%d/ntrig:%d/cent:any",runKey.Data(),loCircuit[i][0],loCircuit[i][1],nTrgTracks));
     if (!centKey.IsNull())
@@ -568,14 +571,14 @@ void AliAnalysisTaskMuonPhysics::UserExec(Option_t *)
   
   // number of events with at least one trigger track
   if (containTriggerTrack) {
-    fEventCounters->Count(Form("event:trigger/cent:any/%s/%s",vtxSPD.Data(),vtxT0.Data()));
-    if (!centKey.IsNull()) fEventCounters->Count(Form("event:trigger/cent:%s/%s/%s",centKey.Data(),vtxSPD.Data(),vtxT0.Data()));
+    fEventCounters->Count(Form("%s/event:trigger/cent:any/%s/%s",runKey.Data(),vtxSPD.Data(),vtxT0.Data()));
+    if (!centKey.IsNull()) fEventCounters->Count(Form("%s/event:trigger/cent:%s/%s/%s",runKey.Data(),centKey.Data(),vtxSPD.Data(),vtxT0.Data()));
   }
   
   // number of events with at least one selected track
   if (containSelectedTrack) {
-    fEventCounters->Count(Form("event:selected/cent:any/%s/%s",vtxSPD.Data(),vtxT0.Data()));
-    if (!centKey.IsNull()) fEventCounters->Count(Form("event:selected/cent:%s/%s/%s",centKey.Data(),vtxSPD.Data(),vtxT0.Data()));
+    fEventCounters->Count(Form("%s/event:selected/cent:any/%s/%s",runKey.Data(),vtxSPD.Data(),vtxT0.Data()));
+    if (!centKey.IsNull()) fEventCounters->Count(Form("%s/event:selected/cent:%s/%s/%s",runKey.Data(),centKey.Data(),vtxSPD.Data(),vtxT0.Data()));
   }
   
   // Post final data. It will be written to a file with option "RECREATE"
