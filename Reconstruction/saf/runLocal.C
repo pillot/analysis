@@ -109,6 +109,13 @@ TString CreateEntryList(TFileCollection *fc)
 void runLocal(TString input, TString cdbSnapshot = "CDBMirror", Int_t run = -1)
 {
   
+  TString exec(gROOT->GetPath());
+  if (!exec.BeginsWith("aliroot")) {
+    Error("runLocal", "can only run with aliroot");
+    return;
+  }
+  gROOT->ProcessLine(".include $ALICE_ROOT/include");
+  
   gROOT->LoadMacro("$WORK/Macros/Facilities/runTaskFacilities.C");
   
   // copy files needed for the reconstruction
