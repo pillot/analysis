@@ -23,6 +23,20 @@ Int_t GetMode(TString smode, TString input)
 }
 
 //______________________________________________________________________________
+TString GetDataType(TString input)
+{
+  // Get the data type (ESD or AOD)
+  if (input.EndsWith(".root")) {
+    if (input.Contains("AOD")) return "AOD";
+    else if (input.Contains("ESD")) return "ESD";
+  } else if (input.EndsWith(".txt")) {
+    if (gSystem->Exec(Form("grep -q AOD %s", input.Data())) == 0) return "AOD";
+    else if (gSystem->Exec(Form("grep -q ESD %s", input.Data())) == 0) return "ESD";
+  }
+  return "unknown";
+}
+
+//______________________________________________________________________________
 void CopyFileLocally(TList &pathList, TList &fileList, char overwrite = '\0')
 {
   /// Copy files needed for this analysis
@@ -122,7 +136,7 @@ void LoadAlirootOnProof(TString& aaf, TString rootVersion, TString alirootVersio
   //  if (aaf == "prooflite") TProof::Open("workers=2");
   else {
     TString location = (aaf == "caf") ? "alice-caf.cern.ch" : "nansafmaster.in2p3.fr"; //"localhost:1093"
-    TString nWorkers = (aaf == "caf") ? "workers=40" : "workers=8x";
+    TString nWorkers = (aaf == "caf") ? /*"workers=40"*/"" : /*"workers=8x"*/"";
     TString user = (gSystem->Getenv("alien_API_USER") == NULL) ? "" : Form("%s@",gSystem->Getenv("alien_API_USER"));
     TProof::Mgr(Form("%s%s",user.Data(), location.Data()))->SetROOTVersion(Form("VO_ALICE@ROOT::%s",rootVersion.Data()));
     TProof::Open(Form("%s%s/?N",user.Data(), location.Data()), nWorkers.Data());
