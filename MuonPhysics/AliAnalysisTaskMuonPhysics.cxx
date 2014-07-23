@@ -25,6 +25,7 @@
 #include "TObjArray.h"
 #include "TObjString.h"
 #include "TMath.h"
+#include "TROOT.h"
 
 // STEER includes
 #include "AliVEvent.h"
@@ -594,8 +595,12 @@ void AliAnalysisTaskMuonPhysics::Terminate(Option_t *)
   fList = dynamic_cast<TObjArray*>(GetOutputData(1));
   if (!fList) return;
   
+  TString suffix = GetOutputSlot(1)->GetContainer()->GetName();
+  suffix.ReplaceAll("Histograms","");
+  
   // reset track cuts
-  fMuonTrackCuts->SetCustomParamFromRun(169859, "pass2_muon");
+//  fMuonTrackCuts->SetCustomParamFromRun(169859, "pass2_muon");
+  fMuonTrackCuts->SetCustomParamFromRun(189576, "muon_calo_pass2");
   fMuonTrackCuts->Print();
   
   // pDCA cut functions
@@ -610,9 +615,9 @@ void AliAnalysisTaskMuonPhysics::Terminate(Option_t *)
   cutFunction310->SetParameters(sigmaMeasCut[1], nSigmaCut, relPResolution, angleResolution);
   
   // draw DCA vs p with cut functions
-  TCanvas *c = new TCanvas("cDCAvsP","cDCAvsP",800,400);
+  TCanvas *c = new TCanvas(Form("cDCAvsP%s",suffix.Data()),Form("cDCAvsP%s",suffix.Data()),800,400);
   c->Divide(2,1);
-  c->cd(1);
+  gROOT->SetSelectedPad(c->cd(1));
   gPad->SetLogz();
   ((TH2F*)fList->UncheckedAt(kDCA23VsP))->Draw("COLZ");
   cutFunction23->SetLineWidth(2);
@@ -623,7 +628,7 @@ void AliAnalysisTaskMuonPhysics::Terminate(Option_t *)
   cutFunction23->DrawClone("same");
   cutFunction23->SetParameters(80., nSigmaCut, 0.0005, 535.*0.0005);
   cutFunction23->DrawClone("same");
-  c->cd(2);
+  gROOT->SetSelectedPad(c->cd(2));
   gPad->SetLogz();
   ((TH2F*)fList->UncheckedAt(kDCA310VsP))->Draw("COLZ");
   cutFunction310->SetLineWidth(2);
