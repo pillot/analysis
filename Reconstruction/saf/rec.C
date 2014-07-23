@@ -4,28 +4,28 @@ void rec(TString input, TString output, TString cdbSnapshot = "CDBMirror", Int_t
   // Set the CDB storage location
   AliCDBManager * man = AliCDBManager::Instance();
   //man->SetDefaultStorage("raw://");
-  man->SetDefaultStorage("local:///Users/pillot/Work/Alice/Work/Data/2012/LHC12h/raw/190147/saf/CDBMirror/alice/data/2012/OCDB");
-  //man->SetDefaultStorage("local:///Users/pillot/Work/Alice/Work/Data/2012/LHC12h/raw/190206/saf/CDBMirror/alice/data/2012/OCDB");
+  man->SetDefaultStorage("local:///Users/pillot/Work/Alice/Data/2012/LHC12h/raw/190147/saf/CDBMirror/alice/data/2012/OCDB");
+  //man->SetDefaultStorage("local:///Users/pillot/Work/Alice/Data/2012/LHC12h/raw/190206/saf/CDBMirror/alice/data/2012/OCDB");
   //man->SetDefaultStorage("alien://folder=/alice/data/2012/OCDB");
   
   // only SPD reconstruction
-  man->SetSpecificStorage("ITS/Calib/RecoParam","local:///Users/pillot/Work/Alice/Work/Data/2012/LHC12h/raw/190147/OCDB_RecoParams");
-  //man->SetSpecificStorage("ITS/Calib/RecoParam","local:///Users/pillot/Work/Alice/Work/Data/2012/LHC12h/raw/190206/OCDB_RecoParams");
+  man->SetSpecificStorage("ITS/Calib/RecoParam","local:///Users/pillot/Work/Alice/Data/2012/LHC12h/raw/190147/OCDB_RecoParams");
+  //man->SetSpecificStorage("ITS/Calib/RecoParam","local:///Users/pillot/Work/Alice/Data/2012/LHC12h/raw/190206/OCDB_RecoParams");
   
   // new MUON parameters
-  //man->SetSpecificStorage("MUON/Calib/RecoParam","local:///Users/pillot/Work/Alice/Work/Data/2012/LHC12h/raw/190147/OCDB_RecoParams");
-  //man->SetSpecificStorage("MUON/Calib/RecoParam","local:///Users/pillot/Work/Alice/Work/Data/2012/LHC12h/raw/190147/OCDB_ManuOcc1");
-  //man->SetSpecificStorage("MUON/Calib/RecoParam","local:///Users/pillot/Work/Alice/Work/Data/2012/LHC12h/raw/190147/OCDB_ManuOcc1.5");
-  //man->SetSpecificStorage("MUON/Calib/RecoParam","local:///Users/pillot/Work/Alice/Work/Data/2012/LHC12h/raw/190147/OCDB_MoreTrkCand_ManuOcc1");
-  //man->SetSpecificStorage("MUON/Calib/RecoParam","local:///Users/pillot/Work/Alice/Work/Data/2012/LHC12h/raw/190147/OCDB_MoreTrkCand_ManuOcc1.5");
-  //man->SetSpecificStorage("MUON/Calib/RecoParam","local:///Users/pillot/Work/Alice/Work/Data/2012/LHC12h/raw/190147/OCDB_NoLimit");
-  //man->SetSpecificStorage("MUON/Calib/RecoParam","local:///Users/pillot/Work/Alice/Work/Data/2012/LHC12h/raw/190147/OCDB_NoLimit_ManuOcc1.5");
-  man->SetSpecificStorage("MUON/Calib/RecoParam","local:///Users/pillot/Work/Alice/Work/Data/2012/LHC12h/raw/190147/OCDB_MoreTrkCand_NoLimit");
-  //man->SetSpecificStorage("MUON/Calib/RecoParam","local:///Users/pillot/Work/Alice/Work/Data/2012/LHC12h/raw/190147/OCDB_MoreTrkCand_NoLimit_ManuOcc1");
-  //man->SetSpecificStorage("MUON/Calib/RecoParam","local:///Users/pillot/Work/Alice/Work/Data/2012/LHC12h/raw/190147/OCDB_MoreTrkCand_NoLimit_ManuOcc1.5");
-  //man->SetSpecificStorage("MUON/Calib/RecoParam","local:///Users/pillot/Work/Alice/Work/Data/2012/LHC12h/raw/190147/OCDB_MoreTrkCand_Limit50000");
-  //man->SetSpecificStorage("MUON/Calib/RecoParam","local:///Users/pillot/Work/Alice/Work/Data/2012/LHC12h/raw/190147/OCDB_MoreTrkCand_Limit50000_ManuOcc1.5");
-  //man->SetSpecificStorage("MUON/Calib/RecoParam","local:///Users/pillot/Work/Alice/Work/Data/2012/LHC12h/raw/190206/OCDB_noHVcut");
+  //man->SetSpecificStorage("MUON/Calib/RecoParam","local:///Users/pillot/Work/Alice/Data/2012/LHC12h/raw/190147/OCDB_RecoParams");
+  //man->SetSpecificStorage("MUON/Calib/RecoParam","local:///Users/pillot/Work/Alice/Data/2012/LHC12h/raw/190147/OCDB_ManuOcc1");
+  //man->SetSpecificStorage("MUON/Calib/RecoParam","local:///Users/pillot/Work/Alice/Data/2012/LHC12h/raw/190147/OCDB_ManuOcc1.5");
+  //man->SetSpecificStorage("MUON/Calib/RecoParam","local:///Users/pillot/Work/Alice/Data/2012/LHC12h/raw/190147/OCDB_MoreTrkCand_ManuOcc1");
+  //man->SetSpecificStorage("MUON/Calib/RecoParam","local:///Users/pillot/Work/Alice/Data/2012/LHC12h/raw/190147/OCDB_MoreTrkCand_ManuOcc1.5");
+  //man->SetSpecificStorage("MUON/Calib/RecoParam","local:///Users/pillot/Work/Alice/Data/2012/LHC12h/raw/190147/OCDB_NoLimit");
+  //man->SetSpecificStorage("MUON/Calib/RecoParam","local:///Users/pillot/Work/Alice/Data/2012/LHC12h/raw/190147/OCDB_NoLimit_ManuOcc1.5");
+  man->SetSpecificStorage("MUON/Calib/RecoParam","local:///Users/pillot/Work/Alice/Data/2012/LHC12h/raw/190147/OCDB_MoreTrkCand_NoLimit");
+  //man->SetSpecificStorage("MUON/Calib/RecoParam","local:///Users/pillot/Work/Alice/Data/2012/LHC12h/raw/190147/OCDB_MoreTrkCand_NoLimit_ManuOcc1");
+  //man->SetSpecificStorage("MUON/Calib/RecoParam","local:///Users/pillot/Work/Alice/Data/2012/LHC12h/raw/190147/OCDB_MoreTrkCand_NoLimit_ManuOcc1.5");
+  //man->SetSpecificStorage("MUON/Calib/RecoParam","local:///Users/pillot/Work/Alice/Data/2012/LHC12h/raw/190147/OCDB_MoreTrkCand_Limit50000");
+  //man->SetSpecificStorage("MUON/Calib/RecoParam","local:///Users/pillot/Work/Alice/Data/2012/LHC12h/raw/190147/OCDB_MoreTrkCand_Limit50000_ManuOcc1.5");
+  //man->SetSpecificStorage("MUON/Calib/RecoParam","local:///Users/pillot/Work/Alice/Data/2012/LHC12h/raw/190206/OCDB_noHVcut");
   
   // here we check if local CDB snapshot is requested
   if (!cdbSnapshot.IsNull() && run >= 0) {
