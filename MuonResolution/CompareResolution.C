@@ -10,6 +10,7 @@
 #if !defined(__CINT__) || defined(__MAKECINT__)
 
 #include <Riostream.h>
+#include "TROOT.h"
 #include "TStyle.h"
 #include "TFile.h"
 #include "TList.h"
@@ -153,7 +154,7 @@ void CompareResolution(const char* fileName1, const char* fileName2,
     TCanvas* c = new TCanvas(cName[i].Data(), cName[i].Data(), size[0][i], size[1][i]);
     c->Divide(divide[0][i], divide[1][i]);
     for (Int_t j=0; j<nObjs; j++) {
-      c->cd(j+1);
+      gROOT->SetSelectedPad(c->cd(j+1));
       for (Int_t iFile=0; iFile<nFiles; iFile++) {
 	if (!gObj[i][j][iFile]) continue;
 	gObj[i][j][iFile]->SetMarkerColor(color[iFile]);
@@ -187,7 +188,7 @@ void CompareResolution(const char* fileName1, const char* fileName2,
     c->Divide(divide2[0][i], divide2[1][i]);
     for (Int_t j=0; j<2; j++) {
       for (Int_t k=0; k<10; k++) {
-	c->cd(10*j+k+1);
+        gROOT->SetSelectedPad(c->cd(10*j+k+1));
 	for (Int_t iFile=0; iFile<nFiles; iFile++) {
 	  if (!mgObj[2*i+j][iFile]) continue;
 	  TGraphErrors *g = static_cast<TGraphErrors*>(mgObj[2*i+j][iFile]->GetListOfGraphs()->FindObject(Form("%s%d",gName[2*i+j].Data(),k+1)));
@@ -223,7 +224,7 @@ void CompareResolution(const char* fileName1, const char* fileName2,
     c->Divide(divide3[0][i], divide3[1][i]);
     for (Int_t j=0; j<10; j++) {
       for (Int_t k=0; k<2; k++) {
-	c->cd(2*j+k+1);
+        gROOT->SetSelectedPad(c->cd(2*j+k+1));
 	for (Int_t iFile=0; iFile<nFiles; iFile++) {
 	  if (!mgObj[4+i][iFile]) continue;
 	  TGraphErrors *g = static_cast<TGraphErrors*>(mgObj[4+i][iFile]->GetListOfGraphs()->FindObject(Form("%s%d%s",gName3[i].Data(),j+1,side[k].Data())));
