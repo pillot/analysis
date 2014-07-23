@@ -29,7 +29,7 @@
 
 // pt/y bining
 const Int_t nPtBins = 2;
-Double_t pTBinLowEdge[nPtBins+1] = {0., 3., 1000000.};
+Double_t pTBinLowEdge[nPtBins+1] = {0., 3., 8.};
 const Int_t nYBins = 2;
 Double_t yBinLowEdge[nYBins+1] = {-4., -3.25, -2.5};
 
@@ -173,7 +173,7 @@ void JPsiAODAnalysis(TString runList, Bool_t useCB2 = kTRUE, Bool_t fixTails = k
     for (Int_t iy = 0; iy <= nYBins; iy++) {
       cMass->cd(ipt*(nYBins+1) + iy + 1);
       gPad->SetLogy();
-      TH1D* p = hMass->ProjectionX(Form("hgen_pt%d_y%d",ipt,iy), ipt+1, ipt+1, iy+1, iy+1, "ed");
+      TH1D* p = hMass->ProjectionX(Form("hgen_pt%d_y%d",ipt,iy), ipt+1, ipt+1, iy+1, iy+1, "e");
       p->SetTitle(Form("%s / %s", hMass->GetYaxis()->GetBinLabel(ipt+1), hMass->GetZaxis()->GetBinLabel(iy+1)));
       Double_t nEntries = p->GetEntries();
       if (useCB2) fCB->SetParameters(nEntries, 3., 0.08, 1., 5., 1., 5.);
