@@ -135,8 +135,14 @@ void LoadAlirootOnProof(TString& aaf, TString rootVersion, TString alirootVersio
   if (aaf == "prooflite") TProof::Open("");
   //  if (aaf == "prooflite") TProof::Open("workers=2");
   else {
-    TString location = (aaf == "caf") ? "alice-caf.cern.ch" : "nansafmaster.in2p3.fr"; //"localhost:1093"
-    TString nWorkers = (aaf == "caf") ? /*"workers=40"*/"" : /*"workers=8x"*/"";
+    TString location, nWorkers;
+    if (aaf == "caf") {
+      location = "alice-caf.cern.ch";
+      nWorkers = ""; // "workers=40";
+    } else if (aaf == "saf") {
+      location = "nansafmaster2.in2p3.fr"; // "localhost:1093"
+      nWorkers = ""; // "workers=8x";
+    } else return;
     TString user = (gSystem->Getenv("alien_API_USER") == NULL) ? "" : Form("%s@",gSystem->Getenv("alien_API_USER"));
     TProof::Mgr(Form("%s%s",user.Data(), location.Data()))->SetROOTVersion(Form("VO_ALICE@ROOT::%s",rootVersion.Data()));
     TProof::Open(Form("%s%s/?N",user.Data(), location.Data()), nWorkers.Data());
