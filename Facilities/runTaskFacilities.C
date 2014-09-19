@@ -191,7 +191,7 @@ TObject* CreateAlienHandler(TString runMode, TString& rootVersion, TString& alir
   
   // Set versions of used packages
   plugin->SetAPIVersion("V1.1x");
-  plugin->SetROOTVersion(rootVersion.Data());
+  //plugin->SetROOTVersion(rootVersion.Data());
   plugin->SetAliROOTVersion(alirootVersion.Data());
   
   // Declare input data to be processed
