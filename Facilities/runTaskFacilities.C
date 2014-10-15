@@ -26,7 +26,7 @@ Int_t GetMode(TString smode, TString input)
 TString GetDataType(TString input)
 {
   // Get the data type (ESD or AOD)
-  if (input.EndsWith(".root")) {
+  if (input.Contains(".root")) {
     if (input.Contains("AOD")) return "AOD";
     else if (input.Contains("ESD")) return "ESD";
   } else if (input.EndsWith(".txt")) {
