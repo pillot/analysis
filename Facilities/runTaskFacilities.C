@@ -293,9 +293,7 @@ TChain* CreateChainFromFile(const char *rootfile)
 {
   // Create a chain using the root file
   TChain* chain = (strstr(rootfile,"AOD")) ? new TChain("aodTree") : new TChain("esdTree");
-  chain->Add(rootfile);
-  if (!chain->GetNtrees()) return NULL;
-  chain->ls();
+  if(!chain->Add(rootfile, -1)) return NULL;
   return chain;
 }
 
