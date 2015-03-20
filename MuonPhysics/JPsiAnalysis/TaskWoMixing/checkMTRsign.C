@@ -15,18 +15,23 @@
 
 #endif
 
-void checkMTRsign ( Int_t trackSign, Int_t trigSign,
-                   TString identifier = "/PhysSelPass/CPBI1MUL-B-NOPF-MUON,CPBI1MUL-B-NOPF-MUON&CPBI1MLL-B-NOPF-MUON,CPBI1MLL-B-NOPF-MUON/0_10,10_20,20_30,30_40,40_50,50_60,60_70,70_80,80_90",
+void checkMTRsign (Int_t trackSign, Int_t trigSign, Int_t loDev = -1,
+//                   TString identifier = "/PhysSelPass/CMUU7-B-NOPF-MUON|CMUU7-B-NOPF-ALLNOTRD,CMUL7-B-NOPF-MUON,(CMUU7-B-NOPF-MUON|CMUU7-B-NOPF-ALLNOTRD)&CMUL7-B-NOPF-MUON/-999_999",
+//                   TString identifier = "/PhysSelPass/CPBI1MUL-B-NOPF-MUON,CPBI1MUL-B-NOPF-MUON&CPBI1MLL-B-NOPF-MUON,CPBI1MLL-B-NOPF-MUON/0_10,10_20,20_30,30_40,40_50,50_60,60_70,70_80,80_90",
 //                   TString identifier = "/PhysSelPass/CPBI1MUL-B-NOPF-MUON,CPBI1MUL-B-NOPF-MUON&CPBI1MLL-B-NOPF-MUON,CPBI1MLL-B-NOPF-MUON/0_10,10_20",
 //                   TString identifier = "/PhysSelPass/CPBI1MUL-B-NOPF-MUON,CPBI1MUL-B-NOPF-MUON&CPBI1MLL-B-NOPF-MUON,CPBI1MLL-B-NOPF-MUON/40_50,50_60,60_70,70_80,80_90",
 //                   TString identifier = "/PhysSelPass/CPBI2_B1-B-NOPF-ALLNOTRD/0_10,10_20",
-//                   TString identifier = "/PhysSelPass/CPBI2_B1-B-NOPF-ALLNOTRD/40_50,50_60,60_70,70_80,80_90",
-                   TString filename="all" )
+                   TString identifier = "/PhysSelPass/CPBI2_B1-B-NOPF-ALLNOTRD/40_50,50_60,60_70,70_80,80_90",
+//                   TString identifier = "/PhysSelPass/CPBI2_B1-B-NOPF-ALLNOTRD/0_10,10_20,20_30,30_40,40_50,50_60,60_70,70_80,80_90",
+//                   TString filename="Output.root"
+                   TString filename="all"
+                   )
 {
   Int_t varCharge = 2;
   Int_t varTrigSign = 4;
   Int_t varLoCircuit = 5;
-  Int_t nVars = 6;
+  Int_t varLoDev = 6;
+  Int_t nVars = 7;
   
   TFile* outfile = TFile::Open("mismatch.root","RECREATE");
   
@@ -79,6 +84,8 @@ void checkMTRsign ( Int_t trackSign, Int_t trigSign,
     return;
   }
   
+  AliAnalysisMuonUtility::SetSparseRange(gridSparse[0],0,"",2.,29.99); // REMEMBER TO CUT
+  if (gridSparse[1]) AliAnalysisMuonUtility::SetSparseRange(gridSparse[1],0,"",2.,29.99); // REMEMBER TO CUT
 //  AliAnalysisMuonUtility::SetSparseRange(gridSparse[0],0,"",2.,14.99); // REMEMBER TO CUT
 //  if (gridSparse[1]) AliAnalysisMuonUtility::SetSparseRange(gridSparse[1],0,"",2.,14.99); // REMEMBER TO CUT
   //      AliAnalysisMuonUtility::SetSparseRange(gridSparse,1,"",20.,100.); // REMEMBER TO CUT
@@ -102,8 +109,8 @@ void checkMTRsign ( Int_t trackSign, Int_t trigSign,
   
   Int_t trackSignBin = ( trackSign < 0 ) ? 1 : 2;
   Int_t optrackSignBin = ( trackSign < 0 ) ? 2 : 1;
-  Int_t trigSignBinMin = ( trigSign < 0 ) ? 1 : 3;
-  Int_t trigSignBinMax = ( trigSign < 0 ) ? 1 : 3;
+  Int_t trigSignBin = ( trigSign < 0 ) ? 1 : 3;
+  Int_t optrigSignBin = ( trigSign < 0 ) ? 3 : 1;
   
   TObjArray* histoList[2] = {0x0,0x0};
   TString baseName = "";
@@ -114,19 +121,40 @@ void checkMTRsign ( Int_t trackSign, Int_t trigSign,
       // Apply cuts
       AliAnalysisMuonUtility::SetSparseRange(gridSparse[0],varCharge,"",trackSignBin,trackSignBin,"USEBIN");
       if (gridSparse[1]) AliAnalysisMuonUtility::SetSparseRange(gridSparse[1],varCharge,"",optrackSignBin,optrackSignBin,"USEBIN");
-    }
-    else {
+    } else {
       baseName = "BadSign";
       // Apply cuts
       AliAnalysisMuonUtility::SetSparseRange(gridSparse[0],varCharge,"",trackSignBin,trackSignBin,"USEBIN");
-      AliAnalysisMuonUtility::SetSparseRange(gridSparse[0],varTrigSign,"",trigSignBinMin,trigSignBinMax,"USEBIN");
+      AliAnalysisMuonUtility::SetSparseRange(gridSparse[0],varTrigSign,"",trigSignBin,trigSignBin,"USEBIN");
+      if (nVars > 6) {
+        if (loDev > 0 && loDev < 15) AliAnalysisMuonUtility::SetSparseRange(gridSparse[0],varLoDev,"",1,loDev+1,"USEBIN");
+        else if (loDev > 15) AliAnalysisMuonUtility::SetSparseRange(gridSparse[0],varLoDev,"",loDev+1,32,"USEBIN");
+      }
       if (gridSparse[1]) {
         AliAnalysisMuonUtility::SetSparseRange(gridSparse[1],varCharge,"",optrackSignBin,optrackSignBin,"USEBIN");
-        AliAnalysisMuonUtility::SetSparseRange(gridSparse[1],varTrigSign,"",trigSignBinMin,trigSignBinMax,"USEBIN");
+        AliAnalysisMuonUtility::SetSparseRange(gridSparse[1],varTrigSign,"",optrigSignBin,optrigSignBin,"USEBIN");
+        if (nVars > 6) {
+          if (loDev > 0 && loDev < 15) AliAnalysisMuonUtility::SetSparseRange(gridSparse[1],varLoDev,"",1,loDev+1,"USEBIN");
+          else if (loDev > 15) AliAnalysisMuonUtility::SetSparseRange(gridSparse[1],varLoDev,"",loDev+1,32,"USEBIN");
+        }
       }
     }
     for ( Int_t ivar = 0; ivar<nVars; ivar++ ) {
       if ( ivar == varCharge || ivar == varTrigSign ) continue;
+      if (ivar == 6) {
+        // change reference for histo vs LoDev
+        if (itype == 0) {
+          AliAnalysisMuonUtility::SetSparseRange(gridSparse[0],varCharge,"",1,2,"USEBIN");
+          if (gridSparse[1]) AliAnalysisMuonUtility::SetSparseRange(gridSparse[1],varCharge,"",1,2,"USEBIN");
+        } else {
+          AliAnalysisMuonUtility::SetSparseRange(gridSparse[0],varTrigSign,"",1,3,"USEBIN");
+          AliAnalysisMuonUtility::SetSparseRange(gridSparse[0],varLoDev,"",1,32,"USEBIN");
+          if (gridSparse[1]) {
+            AliAnalysisMuonUtility::SetSparseRange(gridSparse[1],varTrigSign,"",1,3,"USEBIN");
+            AliAnalysisMuonUtility::SetSparseRange(gridSparse[1],varLoDev,"",1,32,"USEBIN");
+          }
+        }
+      }
       histo = gridSparse[0]->Project(ivar);
       histo->Sumw2();
       if (gridSparse[1]) histo->Add(gridSparse[1]->Project(ivar));
@@ -141,7 +169,9 @@ void checkMTRsign ( Int_t trackSign, Int_t trigSign,
   for ( Int_t ivar = 0; ivar<nVars; ivar++ ) {
     histo = static_cast<TH1*>(histoList[1]->At(ivar));
     if ( ! histo ) continue;
+    if (ivar < 2) histo->Rebin(5);
     TH1* auxHisto = static_cast<TH1*>(histoList[0]->At(ivar));
+    if (ivar < 2) auxHisto->Rebin(5);
     histo->Divide(auxHisto);
     histo->Scale(100.);
     canName = Form("can_proj_%i",ivar);
@@ -158,6 +188,16 @@ void checkMTRsign ( Int_t trackSign, Int_t trigSign,
       displayHisto->Write();
     }
     else {
+      if (ivar < 2) {
+        histo->GetXaxis()->SetLabelSize(0.05);
+        histo->GetXaxis()->SetTitleSize(0.05);
+        histo->GetXaxis()->SetTitleOffset(0.9);
+        histo->GetYaxis()->SetLabelSize(0.05);
+        histo->GetYaxis()->SetTitle("%");
+        histo->GetYaxis()->SetTitleSize(0.05);
+        histo->GetYaxis()->SetTitleOffset(0.6);
+        histo->GetYaxis()->SetRangeUser(0.,15.);
+      }
       histo->Draw("e");
       outfile->cd();
       histo->Write();

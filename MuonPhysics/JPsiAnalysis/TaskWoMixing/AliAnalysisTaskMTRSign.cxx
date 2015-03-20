@@ -38,6 +38,8 @@
 #include "AliVParticle.h"
 #include "AliLog.h"
 #include "AliInputEventHandler.h"
+#include "AliESDEvent.h"
+#include "AliAODEvent.h"
 
 // ANALYSIS includes
 #include "AliAnalysisManager.h"
@@ -119,12 +121,16 @@ AliCFGridSparse* AliAnalysisTaskMTRSign::GetCFGridSparse ( TString identifier )
   TString sparseName = "MTRSign";
   AliCFGridSparse* gridSparse = static_cast<AliCFGridSparse*>(fMergeableCollection->GetObject(identifier.Data(),sparseName.Data()));
   if ( ! gridSparse ) {
-    Int_t nPtBins = 150;
-    Double_t ptMin = 0., ptMax = 15.;
+//    Int_t nPtBins = 150;
+//    Double_t ptMin = 0., ptMax = 15.;
+    Int_t nPtBins = 300;
+    Double_t ptMin = 0., ptMax = 30.;
     TString ptTitle("p_{T}"), ptUnits("GeV/c");
     
-    Int_t nPBins = 150.;
-    Double_t pMin = 0., pMax = 150.;
+//    Int_t nPBins = 150.;
+//    Double_t pMin = 0., pMax = 150.;
+    Int_t nPBins = 300;
+    Double_t pMin = 0., pMax = 300.;
     TString pTitle("p"), pUnits("GeV/c");
     
     Int_t nChargeBins = 2;
@@ -143,11 +149,15 @@ AliCFGridSparse* AliAnalysisTaskMTRSign::GetCFGridSparse ( TString identifier )
     Double_t loCircuitMin = 0.5, loCircuitMax = 234.5;
     TString loCircuitTitle("LoCircuit"), loCircuitUnits("");
     
-    Int_t nbins[kNvars] = {nPtBins, nPBins, nChargeBins, nMatchTrigBins, nTrigSignBins, nLoCircuitBins};
-    Double_t xmin[kNvars] = {ptMin, pMin, chargeMin, matchTrigMin, trigSignMin, loCircuitMin};
-    Double_t xmax[kNvars] = {ptMax, pMax, chargeMax, matchTrigMax, trigSignMax, loCircuitMax};
-    TString axisTitle[kNvars] = {ptTitle, pTitle, chargeTitle, matchTrigTitle, trigSignTitle, loCircuitTitle};
-    TString axisUnits[kNvars] = {ptUnits, pUnits, chargeUnits, matchTrigUnits, trigSignUnits, loCircuitUnits};
+    Int_t nTrigDevBins = 32;
+    Double_t trigDevMin = -0.5, trigDevMax = 31.5;
+    TString trigDevTitle("LoDev"), trigDevUnits("bit");
+    
+    Int_t nbins[kNvars] = {nPtBins, nPBins, nChargeBins, nMatchTrigBins, nTrigSignBins, nLoCircuitBins, nTrigDevBins};
+    Double_t xmin[kNvars] = {ptMin, pMin, chargeMin, matchTrigMin, trigSignMin, loCircuitMin, trigDevMin};
+    Double_t xmax[kNvars] = {ptMax, pMax, chargeMax, matchTrigMax, trigSignMax, loCircuitMax, trigDevMax};
+    TString axisTitle[kNvars] = {ptTitle, pTitle, chargeTitle, matchTrigTitle, trigSignTitle, loCircuitTitle, trigDevTitle};
+    TString axisUnits[kNvars] = {ptUnits, pUnits, chargeUnits, matchTrigUnits, trigSignUnits, loCircuitUnits, trigDevUnits};
     
     gridSparse = new AliCFGridSparse(sparseName.Data(),"MTR sign",kNvars,nbins);
     
@@ -200,6 +210,10 @@ void AliAnalysisTaskMTRSign::UserExec(Option_t * /*option*/)
   
   if ( ! fMuonEventCuts->IsSelected(fInputHandler) ) return;
   
+  Double_t currentDip = ( InputEvent()->IsA() == AliESDEvent::Class() ) ? static_cast<AliESDEvent*>(InputEvent())->GetCurrentDip() : 6000.*static_cast<AliAODEvent*>(InputEvent())->GetMuonMagFieldScale();
+//  printf("Current %g\n",currentDip);
+  Int_t magFieldSign = ( currentDip > 0 ) ? 1 : -1;
+  
   TString physSel = ( fInputHandler->IsEventSelected() & AliVEvent::kAny ) ? "PhysSelPass" : "PhysSelReject";
   Double_t centrality = fMuonEventCuts->GetCentrality(InputEvent());
   Int_t centralityBin = fMuonEventCuts->GetCentralityClasses()->FindBin(centrality);
@@ -221,12 +235,13 @@ void AliAnalysisTaskMTRSign::UserExec(Option_t * /*option*/)
     containerInput[kHvarP]         = track->P();
     containerInput[kHvarCharge]    = track->Charge();
     containerInput[kHvarMatchTrig] = AliAnalysisMuonUtility::GetMatchTrigger(track);
-    containerInput[kHvarTrigSign]  = TriggerDevSign(track);
-//    containerInput[kHvarTrigSign]  = AliAnalysisMuonUtility::GetTrigDevSign(track); // REMEMBER TO CHANGE when commit done
+    containerInput[kHvarTrigSign]  = magFieldSign*TriggerDevSign(track);
+//    containerInput[kHvarTrigSign]  = magFieldSign * AliAnalysisMuonUtility::GetMuonTrigDevSign(track); // REMEMBER TO CHANGE when commit done
     containerInput[kHvarLoCircuit] = AliAnalysisMuonUtility::GetLoCircuit(track);
+    containerInput[kHvarTrigDev] = ( InputEvent()->IsA() == AliESDEvent::Class() ) ? static_cast<AliESDMuonTrack*>(track)->LoDev() : 15;
     
 //    if ( containerInput[kHvarCharge] == containerInput[kHvarTrigSign] ) printf("BADSIGN: %s  %lli\n",CurrentFileName(),Entry()); // REMEMBER TO CUT
-//    Int_t devSignRef = TriggerDevSign(track), devSignNew = AliAnalysisMuonUtility::GetTrigDevSign(track); // REMEMBER TO CUT
+//    Int_t devSignRef = TriggerDevSign(track), devSignNew = AliAnalysisMuonUtility::GetMuonTrigDevSign(track); // REMEMBER TO CUT
 //    if ( devSignRef != devSignNew ) printf("\n     AAAARGHHH!!!!! %i  %i\n\n",devSignRef,devSignNew); // REMEMBER TO CUT
 //    printf("Entry %lli DevSign %i\n",Entry(),(Int_t)containerInput[kHvarTrigSign]); // REMEMBER TO CUT
 
@@ -234,9 +249,9 @@ void AliAnalysisTaskMTRSign::UserExec(Option_t * /*option*/)
     TObjString* trigClassName = 0x0;
     while ( ( trigClassName = static_cast<TObjString*>(next()) ) ) {
       if ( selectTrigClasses->GetEntries() == 3 && ! trigClassName->GetString().Contains("&") ) continue; // REMEMBER TO CUT
-      if ( fMuonTrackCuts->TrackPtCutMatchTrigClass(track, fMuonEventCuts->GetTrigClassPtCutLevel(trigClassName->GetString())) ) {
+      //if ( fMuonTrackCuts->TrackPtCutMatchTrigClass(track, fMuonEventCuts->GetTrigClassPtCutLevel(trigClassName->GetString())) ) {
         GetCFGridSparse(Form("/%s/%s/%s/",physSel.Data(),trigClassName->GetString().Data(),centralityBinLabel.Data()))->Fill(containerInput);
-      }
+      //}
     } // loop on triggers
   } // loop on tracks
   

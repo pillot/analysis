@@ -46,6 +46,7 @@ class AliAnalysisTaskMTRSign : public AliAnalysisTaskSE {
     kHvarMatchTrig,  ///< Tracking trigger matching
     kHvarTrigSign,   ///< Deviation sign from trigger
     kHvarLoCircuit,  ///< Local board id
+    kHvarTrigDev,    ///< Trigger deviation
     kNvars           ///< THnSparse dimensions
   };
 
