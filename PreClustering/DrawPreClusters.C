@@ -39,7 +39,7 @@ void DrawPreClusters(const char *clusterFileName, Int_t iEvent, const char *outF
   /// Draw the preclusters in given event
   /*
    .x $ALICE_ROOT/MUON/rootlogon.C
-   .x $WORK/Macros/PreClustering/ComparePreClusters.C+
+   .x $WORK/Macros/PreClustering/DrawPreClusters.C+(...)
    */
   
   AliCodeTimerAutoGeneral("",0);
@@ -59,8 +59,8 @@ void DrawPreClusters(const char *clusterFileName, Int_t iEvent, const char *outF
   clusterStore->Connect(*treeR);
   
   Long64_t nEvents = treeR->GetEntries();
-  if (iEvent < 0 || iEvent >= treeR->GetEntries()) {
-    printf("choose an event in the range 0-%lld", nEvents);
+  if (iEvent < 0 || iEvent >= nEvents) {
+    printf("choose an event in the range 0-%lld\n", nEvents-1);
     return;
   }
   
