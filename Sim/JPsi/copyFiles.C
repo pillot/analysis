@@ -1,6 +1,6 @@
 /*
  *  copyFiles.C
- *  aliroot_dev
+ *  aliphysics/dev/src_dev
  *
  *  Created by philippe pillot on 18/08/11.
  *  Copyright 2011 SUBATECH. All rights reserved.
@@ -17,7 +17,7 @@ void copyFiles(TString targetDir)
     return;
   }
   
-  TString localDir = "/Users/pillot/Work/Alice/Work/Macros/Sim";
+  TString localDir = "/Users/pillot/Work/Alice/Macros/Sim";
   
   if (targetDir.BeginsWith("alien://")) { // grid copy
     
@@ -43,18 +43,18 @@ void copyFiles(TString targetDir)
     gSystem->Exec(Form("alien_cp file:%s/JPsi/simrun.C %s/simrun.C", localDir.Data(), targetDir.Data()));
     //  gSystem->Exec(Form("alien_cp file:%s/AODtrain.C %s/AODtrain.C", localDir.Data(), targetDir.Data()));
     gSystem->Exec(Form("alien_cp file:%s/AODtrainCustom.C %s/AODtrainCustom.C", localDir.Data(), targetDir.Data()));
-    gSystem->Exec(Form("alien_cp file:$WORK/aliroot/PWG/muondep/AddTaskMuonRefit.C %s/AddTaskMuonRefit.C", targetDir.Data()));
-    gSystem->Exec(Form("alien_cp file:$WORK/aliroot/PWG/muondep/AliAnalysisTaskMuonRefit.cxx %s/AliAnalysisTaskMuonRefit.cxx", targetDir.Data()));
-    gSystem->Exec(Form("alien_cp file:$WORK/aliroot/PWG/muondep/AliAnalysisTaskMuonRefit.h %s/AliAnalysisTaskMuonRefit.h", targetDir.Data()));
-    gSystem->Exec(Form("alien_cp file:$WORK/aliroot/PWG/muondep/AddTaskESDMCLabelAddition.C %s/AddTaskESDMCLabelAddition.C", targetDir.Data()));
-    gSystem->Exec(Form("alien_cp file:$WORK/aliroot/PWG/muondep/AliAnalysisTaskESDMCLabelAddition.cxx %s/AliAnalysisTaskESDMCLabelAddition.cxx", targetDir.Data()));
-    gSystem->Exec(Form("alien_cp file:$WORK/aliroot/PWG/muondep/AliAnalysisTaskESDMCLabelAddition.h %s/AliAnalysisTaskESDMCLabelAddition.h", targetDir.Data()));
-    gSystem->Exec(Form("alien_cp file:$WORK/aliroot/PWGPP/MUON/dep/AddTaskMuonPerformance.C %s/AddTaskMuonPerformance.C", targetDir.Data()));
-    gSystem->Exec(Form("alien_cp file:$WORK/aliroot/PWGPP/MUON/dep/AliAnalysisTaskMuonPerformance.cxx %s/AliAnalysisTaskMuonPerformance.cxx", targetDir.Data()));
-    gSystem->Exec(Form("alien_cp file:$WORK/aliroot/PWGPP/MUON/dep/AliAnalysisTaskMuonPerformance.h %s/AliAnalysisTaskMuonPerformance.h", targetDir.Data()));
-    gSystem->Exec(Form("alien_cp file:$WORK/aliroot/PWGPP/MUON/dep/AddTaskMUONTrackingEfficiency.C %s/AddTaskMUONTrackingEfficiency.C", targetDir.Data()));
-    gSystem->Exec(Form("alien_cp file:$WORK/aliroot/PWGPP/MUON/dep/AliAnalysisTaskMuonTrackingEff.cxx %s/AliAnalysisTaskMuonTrackingEff.cxx", targetDir.Data()));
-    gSystem->Exec(Form("alien_cp file:$WORK/aliroot/PWGPP/MUON/dep/AliAnalysisTaskMuonTrackingEff.h %s/AliAnalysisTaskMuonTrackingEff.h", targetDir.Data()));
+    gSystem->Exec(Form("alien_cp file:$WORK/aliphysics/dev/src/PWG/muondep/AddTaskMuonRefit.C %s/AddTaskMuonRefit.C", targetDir.Data()));
+    gSystem->Exec(Form("alien_cp file:$WORK/aliphysics/dev/src/PWG/muondep/AliAnalysisTaskMuonRefit.cxx %s/AliAnalysisTaskMuonRefit.cxx", targetDir.Data()));
+    gSystem->Exec(Form("alien_cp file:$WORK/aliphysics/dev/src/PWG/muondep/AliAnalysisTaskMuonRefit.h %s/AliAnalysisTaskMuonRefit.h", targetDir.Data()));
+    gSystem->Exec(Form("alien_cp file:$WORK/aliphysics/dev/src/PWG/muondep/AddTaskESDMCLabelAddition.C %s/AddTaskESDMCLabelAddition.C", targetDir.Data()));
+    gSystem->Exec(Form("alien_cp file:$WORK/aliphysics/dev/src/PWG/muondep/AliAnalysisTaskESDMCLabelAddition.cxx %s/AliAnalysisTaskESDMCLabelAddition.cxx", targetDir.Data()));
+    gSystem->Exec(Form("alien_cp file:$WORK/aliphysics/dev/src/PWG/muondep/AliAnalysisTaskESDMCLabelAddition.h %s/AliAnalysisTaskESDMCLabelAddition.h", targetDir.Data()));
+    gSystem->Exec(Form("alien_cp file:$WORK/aliphysics/dev/src/PWGPP/MUON/dep/AddTaskMuonPerformance.C %s/AddTaskMuonPerformance.C", targetDir.Data()));
+    gSystem->Exec(Form("alien_cp file:$WORK/aliphysics/dev/src/PWGPP/MUON/dep/AliAnalysisTaskMuonPerformance.cxx %s/AliAnalysisTaskMuonPerformance.cxx", targetDir.Data()));
+    gSystem->Exec(Form("alien_cp file:$WORK/aliphysics/dev/src/PWGPP/MUON/dep/AliAnalysisTaskMuonPerformance.h %s/AliAnalysisTaskMuonPerformance.h", targetDir.Data()));
+    gSystem->Exec(Form("alien_cp file:$WORK/aliphysics/dev/src/PWGPP/MUON/dep/AddTaskMUONTrackingEfficiency.C %s/AddTaskMUONTrackingEfficiency.C", targetDir.Data()));
+    gSystem->Exec(Form("alien_cp file:$WORK/aliphysics/dev/src/PWGPP/MUON/dep/AliAnalysisTaskMuonTrackingEff.cxx %s/AliAnalysisTaskMuonTrackingEff.cxx", targetDir.Data()));
+    gSystem->Exec(Form("alien_cp file:$WORK/aliphysics/dev/src/PWGPP/MUON/dep/AliAnalysisTaskMuonTrackingEff.h %s/AliAnalysisTaskMuonTrackingEff.h", targetDir.Data()));
     
   } else { // local copy
     
@@ -74,18 +74,18 @@ void copyFiles(TString targetDir)
     gSystem->Exec(Form("cp %s/JPsi/simrun.C %s/simrun.C", localDir.Data(), targetDir.Data()));
     //  gSystem->Exec(Form("cp %s/AODtrain.C %s/AODtrain.C", localDir.Data(), targetDir.Data()));
     gSystem->Exec(Form("cp %s/AODtrainCustom.C %s/AODtrainCustom.C", localDir.Data(), targetDir.Data()));
-    gSystem->Exec(Form("cp $WORK/aliroot/PWG/muondep/AddTaskMuonRefit.C %s/AddTaskMuonRefit.C", targetDir.Data()));
-    gSystem->Exec(Form("cp $WORK/aliroot/PWG/muondep/AliAnalysisTaskMuonRefit.cxx %s/AliAnalysisTaskMuonRefit.cxx", targetDir.Data()));
-    gSystem->Exec(Form("cp $WORK/aliroot/PWG/muondep/AliAnalysisTaskMuonRefit.h %s/AliAnalysisTaskMuonRefit.h", targetDir.Data()));
-    gSystem->Exec(Form("cp $WORK/aliroot/PWG/muondep/AddTaskESDMCLabelAddition.C %s/AddTaskESDMCLabelAddition.C", targetDir.Data()));
-    gSystem->Exec(Form("cp $WORK/aliroot/PWG/muondep/AliAnalysisTaskESDMCLabelAddition.cxx %s/AliAnalysisTaskESDMCLabelAddition.cxx", targetDir.Data()));
-    gSystem->Exec(Form("cp $WORK/aliroot/PWG/muondep/AliAnalysisTaskESDMCLabelAddition.h %s/AliAnalysisTaskESDMCLabelAddition.h", targetDir.Data()));
-    gSystem->Exec(Form("cp $WORK/aliroot/PWGPP/MUON/dep/AddTaskMuonPerformance.C %s/AddTaskMuonPerformance.C", targetDir.Data()));
-    gSystem->Exec(Form("cp $WORK/aliroot/PWGPP/MUON/dep/AliAnalysisTaskMuonPerformance.cxx %s/AliAnalysisTaskMuonPerformance.cxx", targetDir.Data()));
-    gSystem->Exec(Form("cp $WORK/aliroot/PWGPP/MUON/dep/AliAnalysisTaskMuonPerformance.h %s/AliAnalysisTaskMuonPerformance.h", targetDir.Data()));
-    gSystem->Exec(Form("cp $WORK/aliroot/PWGPP/MUON/dep/AddTaskMUONTrackingEfficiency.C %s/AddTaskMUONTrackingEfficiency.C", targetDir.Data()));
-    gSystem->Exec(Form("cp $WORK/aliroot/PWGPP/MUON/dep/AliAnalysisTaskMuonTrackingEff.cxx %s/AliAnalysisTaskMuonTrackingEff.cxx", targetDir.Data()));
-    gSystem->Exec(Form("cp $WORK/aliroot/PWGPP/MUON/dep/AliAnalysisTaskMuonTrackingEff.h %s/AliAnalysisTaskMuonTrackingEff.h", targetDir.Data()));
+    gSystem->Exec(Form("cp $WORK/aliphysics/dev/src/PWG/muondep/AddTaskMuonRefit.C %s/AddTaskMuonRefit.C", targetDir.Data()));
+    gSystem->Exec(Form("cp $WORK/aliphysics/dev/src/PWG/muondep/AliAnalysisTaskMuonRefit.cxx %s/AliAnalysisTaskMuonRefit.cxx", targetDir.Data()));
+    gSystem->Exec(Form("cp $WORK/aliphysics/dev/src/PWG/muondep/AliAnalysisTaskMuonRefit.h %s/AliAnalysisTaskMuonRefit.h", targetDir.Data()));
+    gSystem->Exec(Form("cp $WORK/aliphysics/dev/src/PWG/muondep/AddTaskESDMCLabelAddition.C %s/AddTaskESDMCLabelAddition.C", targetDir.Data()));
+    gSystem->Exec(Form("cp $WORK/aliphysics/dev/src/PWG/muondep/AliAnalysisTaskESDMCLabelAddition.cxx %s/AliAnalysisTaskESDMCLabelAddition.cxx", targetDir.Data()));
+    gSystem->Exec(Form("cp $WORK/aliphysics/dev/src/PWG/muondep/AliAnalysisTaskESDMCLabelAddition.h %s/AliAnalysisTaskESDMCLabelAddition.h", targetDir.Data()));
+    gSystem->Exec(Form("cp $WORK/aliphysics/dev/src/PWGPP/MUON/dep/AddTaskMuonPerformance.C %s/AddTaskMuonPerformance.C", targetDir.Data()));
+    gSystem->Exec(Form("cp $WORK/aliphysics/dev/src/PWGPP/MUON/dep/AliAnalysisTaskMuonPerformance.cxx %s/AliAnalysisTaskMuonPerformance.cxx", targetDir.Data()));
+    gSystem->Exec(Form("cp $WORK/aliphysics/dev/src/PWGPP/MUON/dep/AliAnalysisTaskMuonPerformance.h %s/AliAnalysisTaskMuonPerformance.h", targetDir.Data()));
+    gSystem->Exec(Form("cp $WORK/aliphysics/dev/src/PWGPP/MUON/dep/AddTaskMUONTrackingEfficiency.C %s/AddTaskMUONTrackingEfficiency.C", targetDir.Data()));
+    gSystem->Exec(Form("cp $WORK/aliphysics/dev/src/PWGPP/MUON/dep/AliAnalysisTaskMuonTrackingEff.cxx %s/AliAnalysisTaskMuonTrackingEff.cxx", targetDir.Data()));
+    gSystem->Exec(Form("cp $WORK/aliphysics/dev/src/PWGPP/MUON/dep/AliAnalysisTaskMuonTrackingEff.h %s/AliAnalysisTaskMuonTrackingEff.h", targetDir.Data()));
     
   }
   
