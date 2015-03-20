@@ -16,7 +16,7 @@
 //
 
 //Input file should have the format :
-//
+//range  dsigmadpT   stat  sys uncor
 //0-1      117.697  2.759   9.044
 //1-2      242.073  3.866  18.778
 //2-3      207.527  3.313  15.971
@@ -165,6 +165,7 @@ TH1* FitPt(const char* input="pt.pA.igor.txt", Bool_t norm = kFALSE, Int_t error
   f->SetParameter(2,10);
   
   TFitResultPtr r = h->Fit(f,"MIES","",h->GetXaxis()->GetXmin(),h->GetXaxis()->GetXmax());
+  f->Draw("same");
   
   r->Print("V");
   
@@ -280,10 +281,13 @@ TH1* FitPt(const char* input="pt.pA.igor.txt", Bool_t norm = kFALSE, Int_t error
     /*
      std::cout << Form("Mean Pt %5.6f +- %5.6f   (with contour (RMS))",
      meanptval,hmeanpterror->GetRMS()) << std::endl;
-     
-     std::cout << Form("Mean Pt %5.6f +- %5.6f   (with contour (extreme values))",
-     meanptval,0.5*(meanPtmax-meanPtmin)) << std::endl;
-     */
+    
+    std::cout << Form("<pT> = %5.6f +- %5.6f   (with contour (extreme values))",
+                      meanptval,0.5*(meanPtmax-meanPtmin)) << std::endl;
+    
+    std::cout << Form("<pT2> = %5.6f +- %5.6f   (with contour (extreme values))",
+                      meanpt2val,0.5*(meanPt2max-meanPt2min)) << std::endl;
+    */
     
     for ( Int_t i = 1; i <= hmeanpterror->GetNbinsX(); ++i ) {
       if (hmeanpterror->GetBinContent(i) > 20.) {
