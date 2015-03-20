@@ -112,7 +112,9 @@ fMuonTrackCuts(0),
 fTrackCutsSet(kFALSE),
 fSelectTrgSign(kFALSE),
 fSelectSameTrgSignFake(kFALSE),
+fDeltaDev(0),
 fUseMCLabel(kFALSE),
+fnCent(0),
 fRecordEvWithTrgIssues(kFALSE),
 fTrgClassMissTrgL0Ev(0x0),
 fTrgL0MissTrgClassEv(0x0),
@@ -140,7 +142,10 @@ fMuonTrackCuts(0),
 fTrackCutsSet(kFALSE),
 fSelectTrgSign(kFALSE),
 fSelectSameTrgSignFake(kFALSE),
+fDeltaDev(0),
 fUseMCLabel(kFALSE),
+//fnCent(10),
+fnCent(1),
 fRecordEvWithTrgIssues(kFALSE),
 fTrgClassMissTrgL0Ev(0x0),
 fTrgL0MissTrgClassEv(0x0),
@@ -159,11 +164,20 @@ fOSTrkLSTrgFakeMULEv(0x0)
   Float_t ptUpEdge[8] = {1., 2., 3., 4., 5., 6., 7., 8.};
   fPtBin[0].Set(8,ptLowEdge);
   fPtBin[1].Set(8,ptUpEdge);
-  
+
   Float_t yLowEdge[3] = {-2.5, -3., -3.5};
   Float_t yUpEdge[3] = {-3., -3.5, -4.};
   fYBin[0].Set(3,yLowEdge);
   fYBin[1].Set(3,yUpEdge);
+  
+  fCentBinRange[0][0] = -999.;
+  fCentBinRange[0][1] = 999.;
+  fCentBinName[0] = "any";
+  for (Int_t iCent = 1; iCent < 10; ++iCent) {
+    fCentBinRange[iCent][0] = 10.*(iCent-1);
+    fCentBinRange[iCent][1] = 10.*iCent;
+    fCentBinName[iCent] = Form("%d%d", 10*(iCent-1), 10*iCent);
+  }
   
   DefineOutput(1, TList::Class());
 }
@@ -194,8 +208,6 @@ void AliAnalysisTaskJPsi::UserCreateOutputObjects()
   
   Int_t nbins = 560;  // -> 25 Mev/c2
   TString hName;
-  const Int_t nCent=9;
-  TString centBinName[nCent] = {"010", "1020", "2030", "3040", "4050", "5060", "6070", "7080", "8090"};
   const Int_t npt = fPtBin[0].GetSize();
   const Int_t ny = fYBin[0].GetSize();
   
@@ -210,41 +222,41 @@ void AliAnalysisTaskJPsi::UserCreateOutputObjects()
   //########################################
   
   // classic dimuon histo
-  TH1F *hDimuPM_pt_cent[npt][nCent];
-  TH1F *hDimuPP_pt_cent[npt][nCent];
-  TH1F *hDimuMM_pt_cent[npt][nCent];
+  TH1F *hDimuPM_pt_cent[npt][fnCent];
+  TH1F *hDimuPP_pt_cent[npt][fnCent];
+  TH1F *hDimuMM_pt_cent[npt][fnCent];
 /*  // Mix dimuon histo
-  TH1F *hDimuPM_Mix_pt_cent[npt][nCent];
-  TH1F *hDimuPP_Mix_pt_cent[npt][nCent];
-  TH1F *hDimuMM_Mix_pt_cent[npt][nCent];
+  TH1F *hDimuPM_Mix_pt_cent[npt][fnCent];
+  TH1F *hDimuPP_Mix_pt_cent[npt][fnCent];
+  TH1F *hDimuMM_Mix_pt_cent[npt][fnCent];
 */
   //########################################
   // histo vs Centrality & y bins,  0<pt<8
   //########################################
   
   // classic dimuon histo
-  TH1F *hDimuPM_y_cent[ny][nCent];
-  TH1F *hDimuPP_y_cent[ny][nCent];
-  TH1F *hDimuMM_y_cent[ny][nCent];
+  TH1F *hDimuPM_y_cent[ny][fnCent];
+  TH1F *hDimuPP_y_cent[ny][fnCent];
+  TH1F *hDimuMM_y_cent[ny][fnCent];
 /*  // Mix dimuon histo
-  TH1F *hDimuPM_Mix_y_cent[ny][nCent];
-  TH1F *hDimuPP_Mix_y_cent[ny][nCent];
-  TH1F *hDimuMM_Mix_y_cent[ny][nCent];
+  TH1F *hDimuPM_Mix_y_cent[ny][fnCent];
+  TH1F *hDimuPP_Mix_y_cent[ny][fnCent];
+  TH1F *hDimuMM_Mix_y_cent[ny][fnCent];
 */
   //########################################
   // histo vs Centrality & y bins,  0.3<pt<8
   //########################################
   
   // classic dimuon histo
-  TH1F *hDimuPM_y_ptphoto_cent[ny][nCent];
-  TH1F *hDimuPP_y_ptphoto_cent[ny][nCent];
-  TH1F *hDimuMM_y_ptphoto_cent[ny][nCent];
+  TH1F *hDimuPM_y_ptphoto_cent[ny][fnCent];
+  TH1F *hDimuPP_y_ptphoto_cent[ny][fnCent];
+  TH1F *hDimuMM_y_ptphoto_cent[ny][fnCent];
 /*  // Mix dimuon histo
-  TH1F *hDimuPM_Mix_y_ptphoto_cent[ny][nCent];
-  TH1F *hDimuPP_Mix_y_ptphoto_cent[ny][nCent];
-  TH1F *hDimuMM_Mix_y_ptphoto_cent[ny][nCent];
+  TH1F *hDimuPM_Mix_y_ptphoto_cent[ny][fnCent];
+  TH1F *hDimuPP_Mix_y_ptphoto_cent[ny][fnCent];
+  TH1F *hDimuMM_Mix_y_ptphoto_cent[ny][fnCent];
 */
-  for (Int_t i = 0; i < nCent; i++)
+  for (Int_t i = 0; i < fnCent; i++)
   {
     //########################################
     // histo vs Centrality  & pt bins,  2.5<y<4
@@ -253,23 +265,23 @@ void AliAnalysisTaskJPsi::UserCreateOutputObjects()
     for (Int_t j = 0; j < npt; j++)
     {
       // Classic dimuon analysis (ref)
-      hName = Form("hDimuPM_pt_%i_%s", j, centBinName[i].Data());
+      hName = Form("hDimuPM_pt_%i_%s", j, fCentBinName[i].Data());
       hDimuPM_pt_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
       fOutput->Add(hDimuPM_pt_cent[j][i]);
-      hName = Form("hDimuPP_pt_%i_%s", j, centBinName[i].Data());
+      hName = Form("hDimuPP_pt_%i_%s", j, fCentBinName[i].Data());
       hDimuPP_pt_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
       fOutput->Add(hDimuPP_pt_cent[j][i]);
-      hName = Form("hDimuMM_pt_%i_%s", j, centBinName[i].Data());
+      hName = Form("hDimuMM_pt_%i_%s", j, fCentBinName[i].Data());
       hDimuMM_pt_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
       fOutput->Add(hDimuMM_pt_cent[j][i]);
 /*      // Mix dimuon analysis
-      hName = Form("hDimuPM_pt_%i_%s_Mix", j,centBinName[i].Data());
+      hName = Form("hDimuPM_pt_%i_%s_Mix", j,fCentBinName[i].Data());
       hDimuPM_Mix_pt_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
       fOutput->Add(hDimuPM_Mix_pt_cent[j][i]);
-      hName = Form("hDimuPP_pt_%i_%s_Mix", j,centBinName[i].Data());
+      hName = Form("hDimuPP_pt_%i_%s_Mix", j,fCentBinName[i].Data());
       hDimuPP_Mix_pt_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
       fOutput->Add(hDimuPP_Mix_pt_cent[j][i]);
-      hName = Form("hDimuMM_pt_%i_%s_Mix", j,centBinName[i].Data());
+      hName = Form("hDimuMM_pt_%i_%s_Mix", j,fCentBinName[i].Data());
       hDimuMM_Mix_pt_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
       fOutput->Add(hDimuMM_Mix_pt_cent[j][i]);
 */
@@ -279,23 +291,23 @@ void AliAnalysisTaskJPsi::UserCreateOutputObjects()
         //########################################
         
         // Classic dimuon analysis (ref)
-        hName = Form("hDimuPM_y_%i_%s", j, centBinName[i].Data());
+        hName = Form("hDimuPM_y_%i_%s", j, fCentBinName[i].Data());
         hDimuPM_y_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
         fOutput->Add(hDimuPM_y_cent[j][i]);
-        hName = Form("hDimuPP_y_%i_%s", j, centBinName[i].Data());
+        hName = Form("hDimuPP_y_%i_%s", j, fCentBinName[i].Data());
         hDimuPP_y_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
         fOutput->Add(hDimuPP_y_cent[j][i]);
-        hName = Form("hDimuMM_y_%i_%s", j, centBinName[i].Data());
+        hName = Form("hDimuMM_y_%i_%s", j, fCentBinName[i].Data());
         hDimuMM_y_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
         fOutput->Add(hDimuMM_y_cent[j][i]);
 /*        // Mix dimuon analysis
-        hName = Form("hDimuPM_y_%i_%s_Mix", j,centBinName[i].Data());
+        hName = Form("hDimuPM_y_%i_%s_Mix", j,fCentBinName[i].Data());
         hDimuPM_Mix_y_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
         fOutput->Add(hDimuPM_Mix_y_cent[j][i]);
-        hName = Form("hDimuPP_y_%i_%s_Mix", j,centBinName[i].Data());
+        hName = Form("hDimuPP_y_%i_%s_Mix", j,fCentBinName[i].Data());
         hDimuPP_Mix_y_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
         fOutput->Add(hDimuPP_Mix_y_cent[j][i]);
-        hName = Form("hDimuMM_y_%i_%s_Mix", j,centBinName[i].Data());
+        hName = Form("hDimuMM_y_%i_%s_Mix", j,fCentBinName[i].Data());
         hDimuMM_Mix_y_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
         fOutput->Add(hDimuMM_Mix_y_cent[j][i]);
 */
@@ -304,23 +316,23 @@ void AliAnalysisTaskJPsi::UserCreateOutputObjects()
         //########################################
         
         // Classic dimuon analysis (ref)
-        hName = Form("hDimuPM_ypt_%i_%s", j, centBinName[i].Data());
+        hName = Form("hDimuPM_ypt_%i_%s", j, fCentBinName[i].Data());
         hDimuPM_y_ptphoto_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
         fOutput->Add(hDimuPM_y_ptphoto_cent[j][i]);
-        hName = Form("hDimuPP_ypt_%i_%s", j, centBinName[i].Data());
+        hName = Form("hDimuPP_ypt_%i_%s", j, fCentBinName[i].Data());
         hDimuPP_y_ptphoto_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
         fOutput->Add(hDimuPP_y_ptphoto_cent[j][i]);
-        hName = Form("hDimuMM_ypt_%i_%s", j, centBinName[i].Data());
+        hName = Form("hDimuMM_ypt_%i_%s", j, fCentBinName[i].Data());
         hDimuMM_y_ptphoto_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
         fOutput->Add(hDimuMM_y_ptphoto_cent[j][i]);
 /*        // Mix dimuon analysis
-        hName = Form("hDimuPM_ypt_%i_%s_Mix", j,centBinName[i].Data());
+        hName = Form("hDimuPM_ypt_%i_%s_Mix", j,fCentBinName[i].Data());
         hDimuPM_Mix_y_ptphoto_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
         fOutput->Add(hDimuPM_Mix_y_ptphoto_cent[j][i]);
-        hName = Form("hDimuPP_ypt_%i_%s_Mix", j,centBinName[i].Data());
+        hName = Form("hDimuPP_ypt_%i_%s_Mix", j,fCentBinName[i].Data());
         hDimuPP_Mix_y_ptphoto_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
         fOutput->Add(hDimuPP_Mix_y_ptphoto_cent[j][i]);
-        hName = Form("hDimuMM_ypt_%i_%s_Mix", j,centBinName[i].Data());
+        hName = Form("hDimuMM_ypt_%i_%s_Mix", j,fCentBinName[i].Data());
         hDimuMM_Mix_y_ptphoto_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
         fOutput->Add(hDimuMM_Mix_y_ptphoto_cent[j][i]);
 */
@@ -341,41 +353,41 @@ void AliAnalysisTaskJPsi::UserCreateOutputObjects()
   //########################################
   
   // classic dimuon histo
-  TH1F *hDimuPM_ptMuonCut_cent[npt][nCent];
-  TH1F *hDimuPP_ptMuonCut_cent[npt][nCent];
-  TH1F *hDimuMM_ptMuonCut_cent[npt][nCent];
+  TH1F *hDimuPM_ptMuonCut_cent[npt][fnCent];
+  TH1F *hDimuPP_ptMuonCut_cent[npt][fnCent];
+  TH1F *hDimuMM_ptMuonCut_cent[npt][fnCent];
 /*  // Mix dimuon histo
-  TH1F *hDimuPM_Mix_ptMuonCut_cent[npt][nCent];
-  TH1F *hDimuPP_Mix_ptMuonCut_cent[npt][nCent];
-  TH1F *hDimuMM_Mix_ptMuonCut_cent[npt][nCent];
+  TH1F *hDimuPM_Mix_ptMuonCut_cent[npt][fnCent];
+  TH1F *hDimuPP_Mix_ptMuonCut_cent[npt][fnCent];
+  TH1F *hDimuMM_Mix_ptMuonCut_cent[npt][fnCent];
 */
   //########################################
   // histo vs Centrality & y bins,  0<pt<8
   //########################################
   
   // classic dimuon histo
-  TH1F *hDimuPM_yMuonCut_cent[ny][nCent];
-  TH1F *hDimuPP_yMuonCut_cent[ny][nCent];
-  TH1F *hDimuMM_yMuonCut_cent[ny][nCent];
+  TH1F *hDimuPM_yMuonCut_cent[ny][fnCent];
+  TH1F *hDimuPP_yMuonCut_cent[ny][fnCent];
+  TH1F *hDimuMM_yMuonCut_cent[ny][fnCent];
 /*  // Mix dimuon histo
-  TH1F *hDimuPM_Mix_yMuonCut_cent[ny][nCent];
-  TH1F *hDimuPP_Mix_yMuonCut_cent[ny][nCent];
-  TH1F *hDimuMM_Mix_yMuonCut_cent[ny][nCent];
+  TH1F *hDimuPM_Mix_yMuonCut_cent[ny][fnCent];
+  TH1F *hDimuPP_Mix_yMuonCut_cent[ny][fnCent];
+  TH1F *hDimuMM_Mix_yMuonCut_cent[ny][fnCent];
 */
   //########################################
   // histo vs Centrality & y bins,  0.3<pt<8
   //########################################
   
   // classic dimuon histo
-  TH1F *hDimuPM_yMuonCut_ptphoto_cent[ny][nCent];
-  TH1F *hDimuPP_yMuonCut_ptphoto_cent[ny][nCent];
-  TH1F *hDimuMM_yMuonCut_ptphoto_cent[ny][nCent];
+  TH1F *hDimuPM_yMuonCut_ptphoto_cent[ny][fnCent];
+  TH1F *hDimuPP_yMuonCut_ptphoto_cent[ny][fnCent];
+  TH1F *hDimuMM_yMuonCut_ptphoto_cent[ny][fnCent];
 /*  // Mix dimuon histo
-  TH1F *hDimuPM_Mix_yMuonCut_ptphoto_cent[ny][nCent];
-  TH1F *hDimuPP_Mix_yMuonCut_ptphoto_cent[ny][nCent];
-  TH1F *hDimuMM_Mix_yMuonCut_ptphoto_cent[ny][nCent];
+  TH1F *hDimuPM_Mix_yMuonCut_ptphoto_cent[ny][fnCent];
+  TH1F *hDimuPP_Mix_yMuonCut_ptphoto_cent[ny][fnCent];
+  TH1F *hDimuMM_Mix_yMuonCut_ptphoto_cent[ny][fnCent];
 */
-  for (Int_t i = 0; i < nCent; i++)
+  for (Int_t i = 0; i < fnCent; i++)
   {
     //########################################
     // histo vs Centrality  & pt bins,  2.5<y<4
@@ -384,23 +396,23 @@ void AliAnalysisTaskJPsi::UserCreateOutputObjects()
     for (Int_t j = 0; j < npt; j++)
     {
       // Classic dimuon analysis (ref)
-      hName = Form("hDimuPM_ptMuonCut_%i_%s", j, centBinName[i].Data());
+      hName = Form("hDimuPM_ptMuonCut_%i_%s", j, fCentBinName[i].Data());
       hDimuPM_ptMuonCut_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
       fOutput->Add(hDimuPM_ptMuonCut_cent[j][i]);
-      hName = Form("hDimuPP_ptMuonCut_%i_%s", j, centBinName[i].Data());
+      hName = Form("hDimuPP_ptMuonCut_%i_%s", j, fCentBinName[i].Data());
       hDimuPP_ptMuonCut_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
       fOutput->Add(hDimuPP_ptMuonCut_cent[j][i]);
-      hName = Form("hDimuMM_ptMuonCut_%i_%s", j, centBinName[i].Data());
+      hName = Form("hDimuMM_ptMuonCut_%i_%s", j, fCentBinName[i].Data());
       hDimuMM_ptMuonCut_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
       fOutput->Add(hDimuMM_ptMuonCut_cent[j][i]);
 /*      // Mix dimuon analysis
-      hName = Form("hDimuPM_ptMuonCut_%i_%s_Mix", j,centBinName[i].Data());
+      hName = Form("hDimuPM_ptMuonCut_%i_%s_Mix", j,fCentBinName[i].Data());
       hDimuPM_Mix_ptMuonCut_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
       fOutput->Add(hDimuPM_Mix_ptMuonCut_cent[j][i]);
-      hName = Form("hDimuPP_ptMuonCut_%i_%s_Mix", j,centBinName[i].Data());
+      hName = Form("hDimuPP_ptMuonCut_%i_%s_Mix", j,fCentBinName[i].Data());
       hDimuPP_Mix_ptMuonCut_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
       fOutput->Add(hDimuPP_Mix_ptMuonCut_cent[j][i]);
-      hName = Form("hDimuMM_ptMuonCut_%i_%s_Mix", j,centBinName[i].Data());
+      hName = Form("hDimuMM_ptMuonCut_%i_%s_Mix", j,fCentBinName[i].Data());
       hDimuMM_Mix_ptMuonCut_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
       fOutput->Add(hDimuMM_Mix_ptMuonCut_cent[j][i]);
 */
@@ -410,23 +422,23 @@ void AliAnalysisTaskJPsi::UserCreateOutputObjects()
         //########################################
         
         // Classic dimuon analysis (ref)
-        hName = Form("hDimuPM_yMuonCut_%i_%s", j, centBinName[i].Data());
+        hName = Form("hDimuPM_yMuonCut_%i_%s", j, fCentBinName[i].Data());
         hDimuPM_yMuonCut_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
         fOutput->Add(hDimuPM_yMuonCut_cent[j][i]);
-        hName = Form("hDimuPP_yMuonCut_%i_%s", j, centBinName[i].Data());
+        hName = Form("hDimuPP_yMuonCut_%i_%s", j, fCentBinName[i].Data());
         hDimuPP_yMuonCut_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
         fOutput->Add(hDimuPP_yMuonCut_cent[j][i]);
-        hName = Form("hDimuMM_yMuonCut_%i_%s", j, centBinName[i].Data());
+        hName = Form("hDimuMM_yMuonCut_%i_%s", j, fCentBinName[i].Data());
         hDimuMM_yMuonCut_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
         fOutput->Add(hDimuMM_yMuonCut_cent[j][i]);
 /*        // Mix dimuon analysis
-        hName = Form("hDimuPM_yMuonCut_%i_%s_Mix", j,centBinName[i].Data());
+        hName = Form("hDimuPM_yMuonCut_%i_%s_Mix", j,fCentBinName[i].Data());
         hDimuPM_Mix_yMuonCut_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
         fOutput->Add(hDimuPM_Mix_yMuonCut_cent[j][i]);
-        hName = Form("hDimuPP_yMuonCut_%i_%s_Mix", j,centBinName[i].Data());
+        hName = Form("hDimuPP_yMuonCut_%i_%s_Mix", j,fCentBinName[i].Data());
         hDimuPP_Mix_yMuonCut_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
         fOutput->Add(hDimuPP_Mix_yMuonCut_cent[j][i]);
-        hName = Form("hDimuMM_yMuonCut_%i_%s_Mix", j,centBinName[i].Data());
+        hName = Form("hDimuMM_yMuonCut_%i_%s_Mix", j,fCentBinName[i].Data());
         hDimuMM_Mix_yMuonCut_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
         fOutput->Add(hDimuMM_Mix_yMuonCut_cent[j][i]);
 */
@@ -435,23 +447,23 @@ void AliAnalysisTaskJPsi::UserCreateOutputObjects()
         //########################################
         
         // Classic dimuon analysis (ref)
-        hName = Form("hDimuPM_yptMuonCut_%i_%s", j, centBinName[i].Data());
+        hName = Form("hDimuPM_yptMuonCut_%i_%s", j, fCentBinName[i].Data());
         hDimuPM_yMuonCut_ptphoto_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
         fOutput->Add(hDimuPM_yMuonCut_ptphoto_cent[j][i]);
-        hName = Form("hDimuPP_yptMuonCut_%i_%s", j, centBinName[i].Data());
+        hName = Form("hDimuPP_yptMuonCut_%i_%s", j, fCentBinName[i].Data());
         hDimuPP_yMuonCut_ptphoto_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
         fOutput->Add(hDimuPP_yMuonCut_ptphoto_cent[j][i]);
-        hName = Form("hDimuMM_yptMuonCut_%i_%s", j, centBinName[i].Data());
+        hName = Form("hDimuMM_yptMuonCut_%i_%s", j, fCentBinName[i].Data());
         hDimuMM_yMuonCut_ptphoto_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
         fOutput->Add(hDimuMM_yMuonCut_ptphoto_cent[j][i]);
 /*        // Mix dimuon analysis
-        hName = Form("hDimuPM_yptMuonCut_%i_%s_Mix", j,centBinName[i].Data());
+        hName = Form("hDimuPM_yptMuonCut_%i_%s_Mix", j,fCentBinName[i].Data());
         hDimuPM_Mix_yMuonCut_ptphoto_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
         fOutput->Add(hDimuPM_Mix_yMuonCut_ptphoto_cent[j][i]);
-        hName = Form("hDimuPP_yptMuonCut_%i_%s_Mix", j,centBinName[i].Data());
+        hName = Form("hDimuPP_yptMuonCut_%i_%s_Mix", j,fCentBinName[i].Data());
         hDimuPP_Mix_yMuonCut_ptphoto_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
         fOutput->Add(hDimuPP_Mix_yMuonCut_ptphoto_cent[j][i]);
-        hName = Form("hDimuMM_yptMuonCut_%i_%s_Mix", j,centBinName[i].Data());
+        hName = Form("hDimuMM_yptMuonCut_%i_%s_Mix", j,fCentBinName[i].Data());
         hDimuMM_Mix_yMuonCut_ptphoto_cent[j][i] = new TH1F(hName.Data(),hName.Data(),nbins,0.,14.);
         fOutput->Add(hDimuMM_Mix_yMuonCut_ptphoto_cent[j][i]);
 */
@@ -467,7 +479,10 @@ void AliAnalysisTaskJPsi::UserCreateOutputObjects()
   fEventCounters->AddRubric("trigger", "MUL/MLL/MUL&MLL/other");
   fEventCounters->AddRubric("input", "0MUL/0MLL/0MUL&0MLL/other");
   fEventCounters->AddRubric("offline", "OS/LS/OS&LS/other");
-  fEventCounters->AddRubric("centrality", "any/010/1020/2030/3040/4050/5060/6070/7080/8090");
+  fEventCounters->AddRubric("offline2", "OS/LS/OS&LS/other");
+  TString centKeys = "any";
+  for (Int_t iCent = 1; iCent < fnCent; ++iCent) centKeys += Form("/%s", fCentBinName[iCent].Data());
+  fEventCounters->AddRubric("centrality", centKeys.Data());
   fEventCounters->Init();
   fOutput->Add(fEventCounters);
   
@@ -548,16 +563,12 @@ void AliAnalysisTaskJPsi::UserExec(Option_t *)
   }
   */
   // Init
-  const Int_t nCent=9;
-  Double_t centBinRange[nCent][2] = {{0., 10.}, {10., 20.}, {20., 30.}, {30., 40.}, {40., 50.}, {50., 60.}, {60., 70.}, {70., 80.}, {80.,90.}};
-  TString centBinName[nCent] = {"010", "1020", "2030", "3040", "4050", "5060", "6070", "7080", "8090"};
-  
   Bool_t ptMuonCutBoth = kFALSE;
   const Int_t npt = fPtBin[0].GetSize();
   const Int_t ny = fYBin[0].GetSize();
   
-  TString esdFile = isESD ? CurrentFileName() : static_cast<AliAODEvent*>(evt)->GetHeader()->GetESDFileName().Data();
-  Int_t esdEvent = isESD ? static_cast<AliESDEvent*>(evt)->GetEventNumberInFile() : static_cast<AliAODEvent*>(evt)->GetHeader()->GetEventNumberESDFile();
+  TString esdFile = isESD ? CurrentFileName() : static_cast<AliAODHeader*>(static_cast<AliAODEvent*>(evt)->GetHeader())->GetESDFileName().Data();
+  Int_t esdEvent = isESD ? static_cast<AliESDEvent*>(evt)->GetEventNumberInFile() : static_cast<AliAODHeader*>(static_cast<AliAODEvent*>(evt)->GetHeader())->GetEventNumberESDFile();
   
   // Get Centrality
   Float_t cent = evt->GetCentrality()->GetCentralityPercentile("V0M");
@@ -565,8 +576,10 @@ void AliAnalysisTaskJPsi::UserExec(Option_t *)
   
   // Get trigger class
   TString trigger = evt->GetFiredTriggerClasses();
-  Bool_t trigMUL = trigger.Contains("CPBI1MUL-B-NOPF-MUON");
-  Bool_t trigMLL = trigger.Contains("CPBI1MLL-B-NOPF-MUON");
+//  Bool_t trigMUL = trigger.Contains("CPBI1MUL-B-NOPF-MUON");
+//  Bool_t trigMLL = trigger.Contains("CPBI1MLL-B-NOPF-MUON");
+  Bool_t trigMUL = trigger.Contains("CMUU7-B-NOPF-");
+  Bool_t trigMLL = trigger.Contains("CMUL7-B-NOPF-");
   TString trigKey = "trigger:";
   if (trigMUL && trigMLL) trigKey += "MUL&MLL";
   else if (trigMUL) trigKey += "MUL";
@@ -586,6 +599,8 @@ void AliAnalysisTaskJPsi::UserExec(Option_t *)
   // trigger class from trigger tracks
   Bool_t offlineMUL = kFALSE;
   Bool_t offlineMLL = kFALSE;
+  Bool_t offlineMUL2 = kFALSE;
+  Bool_t offlineMLL2 = kFALSE;
   Int_t ntracks = AliAnalysisMuonUtility::GetNTracks(evt);
   Int_t *loCircuit = new Int_t[ntracks];
   Int_t nTrgTracks = 0;
@@ -607,6 +622,7 @@ void AliAnalysisTaskJPsi::UserExec(Option_t *)
     loCircuit[nTrgTracks++] = loCircuiti;
     
     Int_t trgDevSigni = TriggerDevSign(tracki);
+    Int_t trgDevSigni2 = TriggerDevSign(tracki, fDeltaDev);
     
     for (Int_t j = i+1; j < ntracks; ++j) {
       
@@ -625,10 +641,15 @@ void AliAnalysisTaskJPsi::UserExec(Option_t *)
       if (trackExist) continue;
       
       Int_t trgDevSignj = TriggerDevSign(trackj);
+      Int_t trgDevSignj2 = TriggerDevSign(trackj, fDeltaDev);
       
       Int_t trgSign = trgDevSigni * trgDevSignj;
       if (trgSign <= 0) offlineMUL = kTRUE;
       if (trgSign >= 0) offlineMLL = kTRUE;
+      
+      Int_t trgSign2 = trgDevSigni2 * trgDevSignj2;
+      if (trgSign2 <= 0) offlineMUL2 = kTRUE;
+      if (trgSign2 >= 0) offlineMLL2 = kTRUE;
       
     }
   }
@@ -638,13 +659,17 @@ void AliAnalysisTaskJPsi::UserExec(Option_t *)
   else if (offlineMUL) offlineKey += "OS";
   else if (offlineMLL) offlineKey += "LS";
   else offlineKey += "other";
+  TString offlineKey2 = "offline2:";
+  if (offlineMUL2 && offlineMLL2) offlineKey2 += "OS&LS";
+  else if (offlineMUL2) offlineKey2 += "OS";
+  else if (offlineMLL2) offlineKey2 += "LS";
+  else offlineKey2 += "other";
   
   // Count
-  fEventCounters->Count(Form("run:%d/%s/%s/%s/centrality:any", fCurrentRunNumber, trigKey.Data(), inputKey.Data(), offlineKey.Data()));
-  for (Int_t iCent = 0; iCent < nCent; iCent++) {
-    if (cent > centBinRange[iCent][0] && cent <= centBinRange[iCent][1]) {
-      fEventCounters->Count(Form("run:%d/%s/%s/%s/centrality:%s", fCurrentRunNumber, trigKey.Data(), inputKey.Data(), offlineKey.Data(), centBinName[iCent].Data()));
-      break;
+  for (Int_t iCent = 0; iCent < fnCent; iCent++) {
+    if (cent > fCentBinRange[iCent][0] && cent <= fCentBinRange[iCent][1]) {
+      fEventCounters->Count(Form("run:%d/%s/%s/%s/%s/centrality:%s", fCurrentRunNumber, trigKey.Data(), inputKey.Data(), offlineKey.Data(), offlineKey2.Data(), fCentBinName[iCent].Data()));
+      if (iCent > 0) break;
     }
   }
   
@@ -729,7 +754,7 @@ void AliAnalysisTaskJPsi::UserExec(Option_t *)
     
     TLorentzVector p(tracki->Px(),tracki->Py(),tracki->Pz(),TMath::Sqrt(MuonMass2()+tracki->P()*tracki->P()));
     Int_t loCircuiti = AliAnalysisMuonUtility::GetLoCircuit(tracki);
-    Int_t trgDevSigni = TriggerDevSign(tracki);
+    Int_t trgDevSigni = TriggerDevSign(tracki, fDeltaDev);
     
     // Track j loop
     for (Int_t j = i+1; j < ntracks; ++j)
@@ -740,7 +765,7 @@ void AliAnalysisTaskJPsi::UserExec(Option_t *)
       
       TLorentzVector pj(trackj->Px(),trackj->Py(),trackj->Pz(),TMath::Sqrt(MuonMass2()+trackj->P()*trackj->P()));
       Int_t loCircuitj = AliAnalysisMuonUtility::GetLoCircuit(trackj);
-      Int_t trgDevSignj = TriggerDevSign(trackj);
+      Int_t trgDevSignj = TriggerDevSign(trackj, fDeltaDev);
       
       // Tracker sharp pt muon cut both
       if (p.Pt() > 1. && pj.Pt() > 1.) ptMuonCutBoth = kTRUE;
@@ -751,7 +776,7 @@ void AliAnalysisTaskJPsi::UserExec(Option_t *)
       if (!PairRapidityCut(pj)) continue;
       
       // pt max due to pp reference
-      if (pj.Pt()>8.) continue;
+      //if (pj.Pt()>8.) continue;
       
       Float_t massDimuon = pj.M();
       Float_t ptDimuon = pj.Pt();
@@ -766,7 +791,8 @@ void AliAnalysisTaskJPsi::UserExec(Option_t *)
       else if ( tracki->Charge() < 0. && trackj->Charge() < 0. ) sign = "MM";
       else sign = "PM";
       
-      if (fRecordEvWithTrgIssues && cent > 0. && cent <= 90. && sign == "PM" && massDimuon > 2.8 && massDimuon < 3.3) {
+//      if (fDeltaDev == 0 && fRecordEvWithTrgIssues && cent > 0. && cent <= 90. && sign == "PM" && massDimuon > 2.8 && massDimuon < 3.3) {
+      if (fDeltaDev == 0 && fRecordEvWithTrgIssues && sign == "PM" && massDimuon > 2.8 && massDimuon < 3.3) {
         
         if (loCircuiti != loCircuitj) {
           
@@ -825,31 +851,31 @@ void AliAnalysisTaskJPsi::UserExec(Option_t *)
       if (fSelectSameTrgSignFake && (loCircuiti != loCircuitj || trgSign <= 0)) continue;
       
       // Loop on centrality bins
-      for (Int_t iCent = 0; iCent < nCent; iCent++) {
-        if (cent > centBinRange[iCent][0] && cent <= centBinRange[iCent][1]) {
+      for (Int_t iCent = 0; iCent < fnCent; iCent++) {
+        if (cent > fCentBinRange[iCent][0] && cent <= fCentBinRange[iCent][1]) {
           
           // Loop on pt bins
           for (Int_t ipt = 0; ipt < npt; ipt++) {
             if (ptDimuon > fPtBin[0].At(ipt) && ptDimuon <= fPtBin[1].At(ipt)) {
-              ( (TH1F*) fOutput->FindObject( Form("hDimu%s_pt_%i_%s", sign.Data(), ipt, centBinName[iCent].Data()) ) )->Fill(massDimuon);
-              if (ptMuonCutBoth) ( (TH1F*) fOutput->FindObject( Form("hDimu%s_ptMuonCut_%i_%s", sign.Data(), ipt, centBinName[iCent].Data()) ) )->Fill(massDimuon);
+              ( (TH1F*) fOutput->FindObject( Form("hDimu%s_pt_%i_%s", sign.Data(), ipt, fCentBinName[iCent].Data()) ) )->Fill(massDimuon);
+              if (ptMuonCutBoth) ( (TH1F*) fOutput->FindObject( Form("hDimu%s_ptMuonCut_%i_%s", sign.Data(), ipt, fCentBinName[iCent].Data()) ) )->Fill(massDimuon);
             }
           }
           
           // Loop on y bins
           for (Int_t iy = 0; iy < ny; iy++) {
             if (yDimuon < fYBin[0].At(iy) && yDimuon >= fYBin[1].At(iy)) {
-              ( (TH1F*) fOutput->FindObject( Form("hDimu%s_y_%i_%s", sign.Data(), iy, centBinName[iCent].Data()) ) )->Fill(massDimuon);
-              if (ptMuonCutBoth) ( (TH1F*) fOutput->FindObject( Form("hDimu%s_yMuonCut_%i_%s", sign.Data(), iy, centBinName[iCent].Data()) ) )->Fill(massDimuon);
+              ( (TH1F*) fOutput->FindObject( Form("hDimu%s_y_%i_%s", sign.Data(), iy, fCentBinName[iCent].Data()) ) )->Fill(massDimuon);
+              if (ptMuonCutBoth) ( (TH1F*) fOutput->FindObject( Form("hDimu%s_yMuonCut_%i_%s", sign.Data(), iy, fCentBinName[iCent].Data()) ) )->Fill(massDimuon);
               if (ptDimuon > 0.3 && ptDimuon <= 8.) {
-                ( (TH1F*) fOutput->FindObject( Form("hDimu%s_ypt_%i_%s", sign.Data(), iy, centBinName[iCent].Data()) ) )->Fill(massDimuon);
-                if (ptMuonCutBoth) ( (TH1F*) fOutput->FindObject( Form("hDimu%s_yptMuonCut_%i_%s", sign.Data(), iy, centBinName[iCent].Data()) ) )->Fill(massDimuon);
+                ( (TH1F*) fOutput->FindObject( Form("hDimu%s_ypt_%i_%s", sign.Data(), iy, fCentBinName[iCent].Data()) ) )->Fill(massDimuon);
+                if (ptMuonCutBoth) ( (TH1F*) fOutput->FindObject( Form("hDimu%s_yptMuonCut_%i_%s", sign.Data(), iy, fCentBinName[iCent].Data()) ) )->Fill(massDimuon);
                 
               }
             }
           }
           
-          break;
+          if (iCent > 0) break;
           
         }
       } // end loop centrality bins
@@ -874,15 +900,12 @@ void AliAnalysisTaskJPsi::Terminate(Option_t *)
   TH1F *hDimu = new TH1F(Form("hDimuPM_cent0-90%s",extension.Data()),"hDimuPM_cent0-90",560,0.,14.);
   TH1F *hDimu58 = new TH1F(Form("hDimuPM_pT5-8_cent50-90%s",extension.Data()),"hDimuPM_pT5-8_cent50-90",560,0.,14.);
   
-  const Int_t nCent=9;
-  TString centBinName[nCent] = {"010", "1020", "2030", "3040", "4050", "5060", "6070", "7080", "8090"};
-  
   // Loop on centrality bins
-  for (Int_t iCent = 0; iCent < nCent; iCent++) {
+  for (Int_t iCent = 1; iCent < fnCent; iCent++) {
     
-    hDimu->Add((TH1F*)fOutput->FindObject(Form("hDimuPM_y_0_%s", centBinName[iCent].Data())));
+    hDimu->Add((TH1F*)fOutput->FindObject(Form("hDimuPM_y_0_%s", fCentBinName[iCent].Data())));
     
-    if (iCent > 4) hDimu58->Add((TH1F*)fOutput->FindObject(Form("hDimuPM_pt_3_%s", centBinName[iCent].Data())));
+    if (iCent > 5) hDimu58->Add((TH1F*)fOutput->FindObject(Form("hDimuPM_pt_3_%s", fCentBinName[iCent].Data())));
     
   }
   
@@ -912,7 +935,7 @@ Bool_t AliAnalysisTaskJPsi::PairRapidityCut(const TLorentzVector& pair) const
 }
 
 //_____________________________________________________________________________
-Int_t AliAnalysisTaskJPsi::TriggerDevSign(AliVParticle *track) const
+Int_t AliAnalysisTaskJPsi::TriggerDevSign(AliVParticle *track, UInt_t deltaDev) const
 {
   /// get the sign (±1) of track deviation in the trigger (0 = unknown)
   
@@ -920,8 +943,8 @@ Int_t AliAnalysisTaskJPsi::TriggerDevSign(AliVParticle *track) const
   if (!esdTrack) return 0;
   
   Int_t deviation = esdTrack->LoDev();
-  if (deviation > 15) return 1;
-  else if (deviation < 15) return -1;
+  if (deviation > 15+((Int_t)deltaDev)) return 1;
+  else if (deviation < 15-((Int_t)deltaDev)) return -1;
   else return 0;
   
 }

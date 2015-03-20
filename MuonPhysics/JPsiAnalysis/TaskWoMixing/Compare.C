@@ -11,12 +11,12 @@ Int_t size0, size1, size2;
 
 Double_t massRange[2] = {2.81, 3.29};
 //Double_t massRange[2] = {9.01, 9.99};
-//Double_t massRange[2] = {0., 13.99};
+//Double_t massRange[2] = {0.01, 13.99};
 //Double_t massRange[2] = {2.01, 3.99};
 
 Bool_t printRatio = kFALSE;
 
-Bool_t weight = kFALSE;
+Bool_t weight = kTRUE;
 Double_t weightVsCent[9] = {
   16280.4,
   10391.7,
@@ -40,7 +40,7 @@ void PrintStat(Double_t n[2], Double_t differr[2], TString label);
 void PrintStat(Double_t n[2], Double_t differr[2], Double_t differrw[2], TString label);
 void DrawStat(Double_t differr[2], TH1F *d, Int_t bin, TString label);
 
-void Compare(TString containerName1 = "cOut_MULorMLL", TString containerName2 = "cOut_MUL")
+void Compare(TString containerName1 = "cOut_MB", TString containerName2 = "cOut_MB_TrgSign3")
 {
   /// compare histos between the 2 containers
   
@@ -59,7 +59,7 @@ void Compare(TString containerName1 = "cOut_MULorMLL", TString containerName2 = 
   label2.ReplaceAll("cOut_","");
   size2 = TMath::Max(9,label2.Length());
   
-  TFile* outfile = TFile::Open(Form("Diff_%s_%s.root",label1.Data(),label2.Data()),"RECREATE");
+  TFile* outfile = TFile::Open(Form("Diff_%s_%s_%4.2f-%4.2f.root",label1.Data(),label2.Data(),massRange[0],massRange[1]),"RECREATE");
   
   TFile* file = TFile::Open("Output.root","READ");
   TList* container1 = static_cast<TList*>(file->FindObjectAny(containerName1.Data()));
@@ -70,10 +70,17 @@ void Compare(TString containerName1 = "cOut_MULorMLL", TString containerName2 = 
   const Int_t nCent=9;
   TString centBinName[nCent] = {"010", "1020", "2030", "3040", "4050", "5060", "6070", "7080", "8090"};
   
-  // pT bins
+/*  // pT bins
   const Int_t nPtBins = 19;
   Float_t dPtLowEdge[nPtBins] = {0., 0., 2., 5., 0., 1., 2., 3., 4., 5., 6., 8., 2., 0., 3., 0.3, 0.3, 0.3, 0.3};
   Float_t dPtUpEdge[nPtBins] = {8., 2., 5., 8., 1., 2., 3., 4., 5., 6., 8., 20., 8., 3., 8., 1., 8., 2., 3.};
+  Int_t ipTmin = 4;
+  Int_t ipTmax = 10;
+*/  const Int_t nPtBins = 21;
+  Float_t dPtLowEdge[nPtBins] = {0., 0., 2., 5., 0., 1., 2., 3., 4., 5., 6., 8., 10., 14., 2., 0., 3., 0.3, 0.3, 0.3, 0.3};
+  Float_t dPtUpEdge[nPtBins] = {8., 2., 5., 8., 1., 2., 3., 4., 5., 6., 8., 10., 14., 20., 8., 3., 8., 1., 8., 2., 3.};
+  Int_t ipTmin = 4;
+  Int_t ipTmax = 13;
   
   // y bins
   const Int_t nYBins = 10;
@@ -116,9 +123,9 @@ void Compare(TString containerName1 = "cOut_MULorMLL", TString containerName2 = 
   if (weight) printf(Form("%%%ds %%%ds %%%ds        diff            w-diff\n",size0,size1,size2),label0.Data(),label1.Data(),label2.Data());
   else printf(Form("%%%ds %%%ds %%%ds        diff\n",size0,size1,size2),label0.Data(),label1.Data(),label2.Data());
   for (Int_t i=0; i<nCent; i++) {
-    TH1F* h1 = static_cast<TH1F*>(container1->FindObject(Form("hDimuPM_pt_0_%s", centBinName[i].Data())));
+    TH1F* h1 = static_cast<TH1F*>(container1->FindObject(Form("hDimuPM_y_0_%s", centBinName[i].Data())));
     if (!h1) continue;
-    TH1F* h2 = static_cast<TH1F*>(container2->FindObject(Form("hDimuPM_pt_0_%s", centBinName[i].Data())));
+    TH1F* h2 = static_cast<TH1F*>(container2->FindObject(Form("hDimuPM_y_0_%s", centBinName[i].Data())));
     if (!h2) continue;
     n[i][0] = Getn(h1);
     n[i][1] = Getn(h2);
@@ -316,25 +323,25 @@ void Compare(TString containerName1 = "cOut_MULorMLL", TString containerName2 = 
     {9,  0,  1,  2,  3,  4,  5,  6,  7,  8}};
   TString centBinLabel[5] = {"020", "2040", "4090", "040", "090"};
   for (Int_t iBin = 0; iBin < 5; ++iBin) {
-    TH1F *hDiffVspTCent = new TH1F(Form("hDiffVspTCent%d",iBin),Form("diff vs pT in cent %s%%",centBinLabel[iBin].Data()),7,0.,7.);
+    TH1F *hDiffVspTCent = new TH1F(Form("hDiffVspTCent%d",iBin),Form("diff vs pT in cent %s%%",centBinLabel[iBin].Data()),ipTmax-ipTmin+1,0.,ipTmax-ipTmin+1);
     if (drawHist) {
-      cHist = new TCanvas(Form("cpTCent%dHist",iBin), Form("histo vs pT in cent %s%%",centBinLabel[iBin].Data()), 1200, 600);
-      cHist->Divide(4,2);
+      cHist = new TCanvas(Form("cpTCent%dHist",iBin), Form("histo vs pT in cent %s%%",centBinLabel[iBin].Data()), 1200, 900);
+      cHist->Divide(4,3);
     }
     if (drawDiff) {
-      cDiff = new TCanvas(Form("cpTCent%dDiff",iBin), Form("diff vs pT in cent %s%%",centBinLabel[iBin].Data()), 1200, 600);
-      cDiff->Divide(4,2);
+      cDiff = new TCanvas(Form("cpTCent%dDiff",iBin), Form("diff vs pT in cent %s%%",centBinLabel[iBin].Data()), 1200, 900);
+      cDiff->Divide(4,3);
     }
     if (drawRatio) {
-      cRatio = new TCanvas(Form("cpTCent%dRatio",iBin), Form("ratio vs pT in cent %s%%",centBinLabel[iBin].Data()), 1200, 600);
-      cRatio->Divide(4,2);
+      cRatio = new TCanvas(Form("cpTCent%dRatio",iBin), Form("ratio vs pT in cent %s%%",centBinLabel[iBin].Data()), 1200, 900);
+      cRatio->Divide(4,3);
     }
     label0 = "pT";
     size0 = TMath::Max(9,label0.Length());
     printf("\nstat versus pT in cent %s%%\n",centBinLabel[iBin].Data());
     if (weight) printf(Form("%%%ds %%%ds %%%ds        diff            w-diff\n",size0,size1,size2),label0.Data(),label1.Data(),label2.Data());
     else printf(Form("%%%ds %%%ds %%%ds        diff\n",size0,size1,size2),label0.Data(),label1.Data(),label2.Data());
-    for (Int_t ipT = 4; ipT < 11; ++ipT) {
+    for (Int_t ipT = ipTmin; ipT <= ipTmax; ++ipT) {
       TH1F* h1 = static_cast<TH1F*>(container1->FindObject(Form("hDimuPM_pt_%d_%s", ipT, centBinName[centBins[iBin][1]].Data())));
       if (!h1) continue;
       h1 = static_cast<TH1F*>(h1->Clone());
@@ -363,29 +370,29 @@ void Compare(TString containerName1 = "cOut_MULorMLL", TString containerName2 = 
       h1->Rebin(rebin);
       h2->Rebin(rebin);
       if (drawHist) {
-        gROOT->SetSelectedPad(cHist->cd(ipT-3));
+        gROOT->SetSelectedPad(cHist->cd(ipT-ipTmin+1));
         gPad->SetLogy();
         h1->Draw();
         h2->Draw("sames");
         h2->SetLineColor(2);
-        if (ipT == 4) lHist->DrawClone("same");
+        if (ipT == ipTmin) lHist->DrawClone("same");
       }
       if (drawDiff) {
-        gROOT->SetSelectedPad(cDiff->cd(ipT-3));
+        gROOT->SetSelectedPad(cDiff->cd(ipT-ipTmin+1));
         gPad->SetLogy();
         TH1F* h_diff = static_cast<TH1F*>(h1->Clone());
         h_diff->Add(h2, -1.);
         h_diff->Draw();
         h_diff->SetLineColor(4);
-        if (ipT == 4) lDiff->DrawClone("same");
+        if (ipT == ipTmin) lDiff->DrawClone("same");
       }
       if (drawRatio) {
-        gROOT->SetSelectedPad(cRatio->cd(ipT-3));
+        gROOT->SetSelectedPad(cRatio->cd(ipT-ipTmin+1));
         TH1F* h_ratio = static_cast<TH1F*>(h2->Clone());
         h_ratio->Divide(h1);
         h_ratio->Draw();
         h_ratio->SetLineColor(4);
-        if (ipT == 4) lRatio->DrawClone("same");
+        if (ipT == ipTmin) lRatio->DrawClone("same");
       }
       if (weight) {
         ComputeDiffErrW(n, differr, centBins[iBin], differrtotw);

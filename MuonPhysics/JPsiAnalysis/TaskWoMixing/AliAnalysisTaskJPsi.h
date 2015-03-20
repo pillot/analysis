@@ -52,8 +52,8 @@ public:
   virtual void Terminate(Option_t *);
   
   void SetMuonTrackCuts(AliMuonTrackCuts &trackCuts) { delete fMuonTrackCuts; fMuonTrackCuts = new AliMuonTrackCuts(trackCuts); }
-  void SelectTrgSign(Bool_t flag = kTRUE) { fSelectTrgSign = flag; }
-  void SelectSameTrgSignFake(Bool_t flag = kTRUE) { fSelectSameTrgSignFake = flag; }
+  void SelectTrgSign(Bool_t flag = kTRUE, UInt_t deltaDev = 0) { fSelectTrgSign = flag; fDeltaDev = deltaDev; }
+  void SelectSameTrgSignFake(Bool_t flag = kTRUE, UInt_t deltaDev = 0) { fSelectSameTrgSignFake = flag; fDeltaDev = deltaDev; }
   void UseMCLabel(Bool_t flag = kTRUE) { fUseMCLabel = flag; }
   void SetPtLowEdge(Int_t nPtBins, Float_t *ptLowEdge) { fPtBin[0].Set(nPtBins, ptLowEdge); }
   void SetPtUpEdge(Int_t nPtBins, Float_t *ptUpEdge) { fPtBin[1].Set(nPtBins, ptUpEdge); }
@@ -66,7 +66,7 @@ protected:
   
 private:
   Bool_t PairRapidityCut(const TLorentzVector& pair) const;
-  Int_t  TriggerDevSign(AliVParticle *track) const;
+  Int_t  TriggerDevSign(AliVParticle *track, UInt_t deltaDev = 0) const;
   TObjString* FindFile(TString &file, MyList *badFiles) const;
   
   TList                *fOutput;        //! Output list
@@ -77,9 +77,13 @@ private:
   Bool_t               fTrackCutsSet;          //! set track cuts only once
   Bool_t               fSelectTrgSign;         // Select pairs according to the trigger sign (OS or LS)
   Bool_t               fSelectSameTrgSignFake; // Select pairs matching the same trigger track and producing LS & !OS
+  UInt_t               fDeltaDev;              // Set trgSign = 0 for trigger track with dev = 15 ± fDeltaDev
   Bool_t               fUseMCLabel;            // Select tracks using MC label
   TArrayF              fPtBin[2];              // pT bins
   TArrayF              fYBin[2];               // y bins
+  Int_t                fnCent;                 // number of centrality bin used (< 10)
+  Double_t             fCentBinRange[10][2];   // centrality bin intervals
+  TString              fCentBinName[10];       // centrality bin names
   
   Bool_t               fRecordEvWithTrgIssues;    // record events with trigger issues in the list below
   MyList               *fTrgClassMissTrgL0Ev;     //! events with l0 trigger input missing according to trigger class

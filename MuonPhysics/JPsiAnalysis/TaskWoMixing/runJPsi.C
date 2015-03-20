@@ -6,14 +6,12 @@
 //  Copyright (c) 2014 Philippe Pillot. All rights reserved.
 //
 
-//TString rootVersion = "v5-34-05";
-//TString alirootVersion = "v5-04-65-AN";
 TString rootVersion = "v5-34-08";
-TString alirootVersion = "vAN-20140630";
-TString dataDir = "/alice/data/2011/LHC11h";
+TString alirootVersion = "vAN-20150111";
+TString dataDir = "/alice/data/2011/LHC11c";
 TString dataPattern = "ESDs/pass2_muon/*AliESDs.root";
 TString runFormat = "%09d";
-TString outDir = "Data/LHC11h/pass2_muon/JPsipDCA";
+TString outDir = "Data/LHC11c/pass2_muon/JPsipDCAv3";
 Int_t ttl = 30000;
 Int_t maxFilesPerJob = 100;
 Int_t maxMergeFiles = 10;
@@ -50,7 +48,8 @@ void runJPsi(TString smode = "local", TString inputFileName = "AliESDs.root",
   // --- copy files needed for this analysis ---
   TList pathList; pathList.SetOwner();
   pathList.Add(new TObjString("$WORK/Macros/MuonPhysics/JPsiAnalysis/TaskWoMixing"));
-  pathList.Add(new TObjString("$DEV/aliroot/PWG/muondep"));
+  pathList.Add(new TObjString("$WORK/Macros/MuonPhysics"));
+  pathList.Add(new TObjString("$DEVPHYS/PWG/muondep"));
   TList fileList; fileList.SetOwner();
   fileList.Add(new TObjString("runJPsi.C"));
   fileList.Add(new TObjString("AddTaskJPsi.C"));
@@ -60,31 +59,25 @@ void runJPsi(TString smode = "local", TString inputFileName = "AliESDs.root",
     fileList.Add(new TObjString("AddTaskMTRSign.C"));
     fileList.Add(new TObjString("AliAnalysisTaskMTRSign.cxx"));
     fileList.Add(new TObjString("AliAnalysisTaskMTRSign.h"));
+    fileList.Add(new TObjString("AddTaskTriggerRates.C"));
+    fileList.Add(new TObjString("AliAnalysisTaskTriggerRates.cxx"));
+    fileList.Add(new TObjString("AliAnalysisTaskTriggerRates.h"));
     fileList.Add(new TObjString("AddTaskMuonCDBConnect.C"));
     fileList.Add(new TObjString("AliAnalysisTaskMuonCDBConnect.cxx"));
     fileList.Add(new TObjString("AliAnalysisTaskMuonCDBConnect.h"));
-    fileList.Add(new TObjString("AddTaskMuonRefit.C"));
-    fileList.Add(new TObjString("AliAnalysisTaskMuonRefit.cxx"));
-    fileList.Add(new TObjString("AliAnalysisTaskMuonRefit.h"));
-    if (mc) {
-      fileList.Add(new TObjString("AddTaskESDMCLabelAddition.C"));
-      fileList.Add(new TObjString("AliAnalysisTaskESDMCLabelAddition.cxx"));
-      fileList.Add(new TObjString("AliAnalysisTaskESDMCLabelAddition.h"));
-    }
   }
   CopyFileLocally(pathList, fileList);
   
   // --- prepare environment ---
   TString extraLibs, extraIncs, extraTasks;
   if (dataType == "AOD") {
-    extraLibs = "CORRFW:PWGmuon";
-    extraIncs = "include:PWG/muon";
+    extraLibs = "";
+    extraIncs = "include";
     extraTasks = "AliAnalysisTaskJPsi";
   } else {
-    extraLibs = "RAWDatabase:RAWDatarec:CDB:STEER:MUONcore:MUONmapping:MUONcalib:MUONgeometry:MUONtrigger:MUONraw:MUONbase:MUONshuttle:MUONrec:RAWDatasim:MUONsim:MUONevaluation:CORRFW:PWGmuon";
-    extraIncs = "include:MUON:MUON/mapping:PWG/muon";
-    if (mc) extraTasks = "AliAnalysisTaskMuonCDBConnect:AliAnalysisTaskMuonRefit:AliAnalysisTaskESDMCLabelAddition:AliAnalysisTaskJPsi:AliAnalysisTaskMTRSign";
-    else extraTasks = "AliAnalysisTaskMuonCDBConnect:AliAnalysisTaskMuonRefit:AliAnalysisTaskJPsi:AliAnalysisTaskMTRSign";
+    extraLibs = "";
+    extraIncs = "include";
+    extraTasks = "AliAnalysisTaskMuonCDBConnect:AliAnalysisTaskJPsi:AliAnalysisTaskMTRSign:AliAnalysisTaskTriggerRates";
   }
   LoadAlirootLocally(extraLibs, extraIncs, extraTasks);
   AliAnalysisGrid *alienHandler = 0x0;
@@ -156,7 +149,7 @@ void CreateAnalysisTrain(TString dataType, Bool_t applyPhysSel, Bool_t mc, Bool_
   
   // event selection
   if (applyPhysSel && dataType == "ESD") {
-    gROOT->LoadMacro("$ALICE_ROOT/ANALYSIS/macros/AddTaskPhysicsSelection.C");
+    gROOT->LoadMacro("$ALICE_PHYSICS/OADB/macros/AddTaskPhysicsSelection.C");
     AliPhysicsSelectionTask* physicsSelection = AddTaskPhysicsSelection(mc && !embedding);
     if(!physicsSelection) {
       Error("CreateAnalysisTrain","AliPhysicsSelectionTask not created!");
@@ -169,7 +162,7 @@ void CreateAnalysisTrain(TString dataType, Bool_t applyPhysSel, Bool_t mc, Bool_
   
   // centrality selection
   if (dataType == "ESD") {
-    gROOT->LoadMacro("$ALICE_ROOT/ANALYSIS/macros/AddTaskCentrality.C");
+    gROOT->LoadMacro("$ALICE_PHYSICS/OADB/macros/AddTaskCentrality.C");
     AliCentralitySelectionTask *taskCentrality = AddTaskCentrality();
     if(!taskCentrality) {
       Error("CreateAnalysisTrain","AliCentralitySelectionTask not created!");
@@ -177,7 +170,7 @@ void CreateAnalysisTrain(TString dataType, Bool_t applyPhysSel, Bool_t mc, Bool_
     }
     AliInputEventHandler* hdl = static_cast<AliInputEventHandler*>(mgr->GetInputEventHandler());
     hdl->SetNeedField(kFALSE);
-    if (applyPhysSel) taskCentrality->SelectCollisionCandidates(offlineTriggerMask);
+    //if (applyPhysSel) taskCentrality->SelectCollisionCandidates(offlineTriggerMask);
     if (mc && !embedding) taskCentrality->SetMCInput();
   }
   
@@ -191,7 +184,7 @@ void CreateAnalysisTrain(TString dataType, Bool_t applyPhysSel, Bool_t mc, Bool_
   
   // track refitting
   if (dataType == "ESD") {
-    gROOT->LoadMacro("AddTaskMuonRefit.C");
+    gROOT->LoadMacro("$ALICE_PHYSICS/../src/PWG/muondep/AddTaskMuonRefit.C");
     AliAnalysisTaskMuonRefit *refit = AddTaskMuonRefit(-1., -1., kTRUE, -1., -1.);
     if(!refit) {
       Error("CreateAnalysisTrain","AliAnalysisTaskMuonRefit not created!");
@@ -205,6 +198,97 @@ void CreateAnalysisTrain(TString dataType, Bool_t applyPhysSel, Bool_t mc, Bool_
   // setup the train to run on MC or on data
   if (mc) {
     
+    if (dataType == "ESD") {
+      
+      // recompute MC labels
+      gROOT->LoadMacro("$ALICE_PHYSICS/../src/PWG/muondep/AddTaskESDMCLabelAddition.C");
+      AliAnalysisTaskESDMCLabelAddition *esdmclabel = AddTaskESDMCLabelAddition();
+      if(!esdmclabel) {
+        Error("CreateAnalysisTrain","AliAnalysisTaskESDMCLabelAddition not created!");
+        return;
+      }
+      if (applyPhysSel) esdmclabel->SelectCollisionCandidates(offlineTriggerMask);
+      esdmclabel->DecayAsFake();
+      
+    }
+    
+    // JPsi task 1
+    gROOT->LoadMacro("AddTaskJPsi.C");
+    AliAnalysisTaskJPsi* jpsi1 = AddTaskJPsi("MB");
+    if(!jpsi1) {
+      Error("CreateAnalysisTrain","AliAnalysisTaskJPsi not created!");
+      return;
+    }
+    if (applyPhysSel) jpsi1->SelectCollisionCandidates(offlineTriggerMask);
+    jpsi1->SetMuonTrackCuts(trackCuts);
+    jpsi1->UseMCLabel();
+    SetKinematicsRange(jpsi1);
+    
+    // JPsi task 2
+    AliAnalysisTaskJPsi* jpsi2 = AddTaskJPsi("MB_TrgSign");
+    if (applyPhysSel) jpsi2->SelectCollisionCandidates(offlineTriggerMask);
+    jpsi2->SetMuonTrackCuts(trackCuts);
+    jpsi2->SelectTrgSign();
+    jpsi2->UseMCLabel();
+    SetKinematicsRange(jpsi2);
+    
+    // JPsi task 2 v2
+    AliAnalysisTaskJPsi* jpsi22 = AddTaskJPsi("MB_TrgSign2");
+    if (applyPhysSel) jpsi22->SelectCollisionCandidates(offlineTriggerMask);
+    jpsi22->SetMuonTrackCuts(trackCuts);
+    jpsi22->SelectTrgSign(kTRUE, 1);
+    jpsi22->UseMCLabel();
+    SetKinematicsRange(jpsi22);
+    
+    // JPsi task 2 v3
+    AliAnalysisTaskJPsi* jpsi23 = AddTaskJPsi("MB_TrgSign3");
+    if (applyPhysSel) jpsi23->SelectCollisionCandidates(offlineTriggerMask);
+    jpsi23->SetMuonTrackCuts(trackCuts);
+    jpsi23->SelectTrgSign(kTRUE, 2);
+    jpsi23->UseMCLabel();
+    SetKinematicsRange(jpsi23);
+    
+    // JPsi task 3
+    AliAnalysisTaskJPsi* jpsi3 = AddTaskJPsi("MB_TrgFake");
+    if (applyPhysSel) jpsi3->SelectCollisionCandidates(offlineTriggerMask);
+    jpsi3->SetMuonTrackCuts(trackCuts);
+    jpsi3->SelectSameTrgSignFake();
+    jpsi3->UseMCLabel();
+    SetKinematicsRange(jpsi3);
+    
+    // JPsi task 3 v2
+    AliAnalysisTaskJPsi* jpsi32 = AddTaskJPsi("MB_TrgFake2");
+    if (applyPhysSel) jpsi32->SelectCollisionCandidates(offlineTriggerMask);
+    jpsi32->SetMuonTrackCuts(trackCuts);
+    jpsi32->SelectSameTrgSignFake(kTRUE, 1);
+    jpsi32->UseMCLabel();
+    SetKinematicsRange(jpsi32);
+    
+    // JPsi task 3 v3
+    AliAnalysisTaskJPsi* jpsi33 = AddTaskJPsi("MB_TrgFake3");
+    if (applyPhysSel) jpsi33->SelectCollisionCandidates(offlineTriggerMask);
+    jpsi33->SetMuonTrackCuts(trackCuts);
+    jpsi33->SelectSameTrgSignFake(kTRUE, 2);
+    jpsi33->UseMCLabel();
+    SetKinematicsRange(jpsi33);
+    
+    // MTR sign task
+    gROOT->LoadMacro("AddTaskMTRSign.C");
+    AliAnalysisTaskMTRSign* mtrSign = AddTaskMTRSign(mc);
+    if(!mtrSign) {
+      Error("CreateAnalysisTrain","AliAnalysisTaskMTRSign not created!");
+      return;
+    }
+    if (applyPhysSel) mtrSign->SelectCollisionCandidates(offlineTriggerMask);
+    mtrSign->GetMuonEventCuts()->SetFilterMask(AliMuonEventCuts::kSelectedCentrality | AliMuonEventCuts::kSelectedTrig);
+    mtrSign->GetMuonEventCuts()->SetTrigClassPatterns("CPBI2_B1-B-NOPF-ALLNOTRD");
+    Double_t centralityBins[] = {0., 10., 20., 30., 40., 50., 60., 70., 80., 90.};
+    //      Double_t centralityBins[] = {-999., 999.};
+    Int_t nCentralityBins = sizeof(centralityBins)/sizeof(centralityBins[0])-1;
+    mtrSign->GetMuonEventCuts()->SetCentralityClasses(nCentralityBins, centralityBins);
+    *(mtrSign->GetMuonTrackCuts()) = trackCuts;
+    mtrSign->UseMCLabel();
+/*
     // JPsi task 1
     gROOT->LoadMacro("AddTaskJPsi.C");
     AliAnalysisTaskJPsi* jpsi1 = AddTaskJPsi("MB");
@@ -246,6 +330,7 @@ void CreateAnalysisTrain(TString dataType, Bool_t applyPhysSel, Bool_t mc, Bool_
       mtrSign->GetMuonEventCuts()->SetFilterMask(AliMuonEventCuts::kSelectedCentrality | AliMuonEventCuts::kSelectedTrig);
       mtrSign->GetMuonEventCuts()->SetTrigClassPatterns("CPBI2_B1-B-NOPF-ALLNOTRD");
       Double_t centralityBins[] = {0., 10., 20., 30., 40., 50., 60., 70., 80., 90.};
+//      Double_t centralityBins[] = {-999., 999.};
       Int_t nCentralityBins = sizeof(centralityBins)/sizeof(centralityBins[0])-1;
       mtrSign->GetMuonEventCuts()->SetCentralityClasses(nCentralityBins, centralityBins);
       *(mtrSign->GetMuonTrackCuts()) = trackCuts;
@@ -378,7 +463,7 @@ void CreateAnalysisTrain(TString dataType, Bool_t applyPhysSel, Bool_t mc, Bool_
       SetKinematicsRange(jpsi14);
       
     }
-    
+*/
   } else {
     
     // JPsi task 1
@@ -406,6 +491,20 @@ void CreateAnalysisTrain(TString dataType, Bool_t applyPhysSel, Bool_t mc, Bool_
     jpsi3->SelectTrgSign();
     SetKinematicsRange(jpsi3);
     
+    // JPsi task 3 v2
+    AliAnalysisTaskJPsi* jpsi32 = AddTaskJPsi("MUL_TrgSign2");
+    if (applyPhysSel) jpsi32->SelectCollisionCandidates(AliVEvent::kMuonUnlikePB);
+    jpsi32->SetMuonTrackCuts(trackCuts);
+    jpsi32->SelectTrgSign(kTRUE, 1);
+    SetKinematicsRange(jpsi32);
+    
+    // JPsi task 3 v3
+    AliAnalysisTaskJPsi* jpsi33 = AddTaskJPsi("MUL_TrgSign3");
+    if (applyPhysSel) jpsi33->SelectCollisionCandidates(AliVEvent::kMuonUnlikePB);
+    jpsi33->SetMuonTrackCuts(trackCuts);
+    jpsi33->SelectTrgSign(kTRUE, 2);
+    SetKinematicsRange(jpsi33);
+    
     // JPsi task 4
     AliAnalysisTaskJPsi* jpsi4 = AddTaskJPsi("MULorMLL_TrgSign");
     if (applyPhysSel) jpsi4->SelectCollisionCandidates(AliVEvent::kMuonUnlikePB | AliVEvent::kMuonLikePB);
@@ -413,12 +512,40 @@ void CreateAnalysisTrain(TString dataType, Bool_t applyPhysSel, Bool_t mc, Bool_
     jpsi4->SelectTrgSign();
     SetKinematicsRange(jpsi4);
     
+    // JPsi task 4 v2
+    AliAnalysisTaskJPsi* jpsi42 = AddTaskJPsi("MULorMLL_TrgSign2");
+    if (applyPhysSel) jpsi42->SelectCollisionCandidates(AliVEvent::kMuonUnlikePB | AliVEvent::kMuonLikePB);
+    jpsi42->SetMuonTrackCuts(trackCuts);
+    jpsi42->SelectTrgSign(kTRUE, 1);
+    SetKinematicsRange(jpsi42);
+    
+    // JPsi task 4 v3
+    AliAnalysisTaskJPsi* jpsi43 = AddTaskJPsi("MULorMLL_TrgSign3");
+    if (applyPhysSel) jpsi43->SelectCollisionCandidates(AliVEvent::kMuonUnlikePB | AliVEvent::kMuonLikePB);
+    jpsi43->SetMuonTrackCuts(trackCuts);
+    jpsi43->SelectTrgSign(kTRUE, 2);
+    SetKinematicsRange(jpsi43);
+    
     // JPsi task 5
     AliAnalysisTaskJPsi* jpsi5 = AddTaskJPsi("MULorMLL_TrgFake");
     if (applyPhysSel) jpsi5->SelectCollisionCandidates(AliVEvent::kMuonUnlikePB | AliVEvent::kMuonLikePB);
     jpsi5->SetMuonTrackCuts(trackCuts);
     jpsi5->SelectSameTrgSignFake();
     SetKinematicsRange(jpsi5);
+    
+    // JPsi task 5 v2
+    AliAnalysisTaskJPsi* jpsi52 = AddTaskJPsi("MULorMLL_TrgFake2");
+    if (applyPhysSel) jpsi52->SelectCollisionCandidates(AliVEvent::kMuonUnlikePB | AliVEvent::kMuonLikePB);
+    jpsi52->SetMuonTrackCuts(trackCuts);
+    jpsi52->SelectSameTrgSignFake(kTRUE, 1);
+    SetKinematicsRange(jpsi52);
+    
+    // JPsi task 5 v3
+    AliAnalysisTaskJPsi* jpsi53 = AddTaskJPsi("MULorMLL_TrgFake3");
+    if (applyPhysSel) jpsi53->SelectCollisionCandidates(AliVEvent::kMuonUnlikePB | AliVEvent::kMuonLikePB);
+    jpsi53->SetMuonTrackCuts(trackCuts);
+    jpsi53->SelectSameTrgSignFake(kTRUE, 2);
+    SetKinematicsRange(jpsi53);
     
     if (dataType == "ESD") {
       
@@ -431,11 +558,41 @@ void CreateAnalysisTrain(TString dataType, Bool_t applyPhysSel, Bool_t mc, Bool_
       }
       if (applyPhysSel) mtrSign->SelectCollisionCandidates(AliVEvent::kMuonUnlikePB | AliVEvent::kMuonLikePB);
       mtrSign->GetMuonEventCuts()->SetFilterMask(AliMuonEventCuts::kSelectedCentrality | AliMuonEventCuts::kSelectedTrig);
-      mtrSign->GetMuonEventCuts()->SetTrigClassPatterns("CPBI1MUL-B-NOPF-MUON,CPBI1MLL-B-NOPF-MUON,CPBI1MUL-B-NOPF-MUON&CPBI1MLL-B-NOPF-MUON");
-      Double_t centralityBins[] = {0., 10., 20., 30., 40., 50., 60., 70., 80., 90.};
+//      mtrSign->GetMuonEventCuts()->SetTrigClassPatterns("CPBI1MUL-B-NOPF-MUON,CPBI1MLL-B-NOPF-MUON,CPBI1MUL-B-NOPF-MUON&CPBI1MLL-B-NOPF-MUON");
+      mtrSign->GetMuonEventCuts()->SetTrigClassPatterns("CMUU7-B-NOPF-MUON|CMUU7-B-NOPF-ALLNOTRD,CMUL7-B-NOPF-MUON,(CMUU7-B-NOPF-MUON|CMUU7-B-NOPF-ALLNOTRD)&CMUL7-B-NOPF-MUON");
+//      Double_t centralityBins[] = {0., 10., 20., 30., 40., 50., 60., 70., 80., 90.};
+      Double_t centralityBins[] = {-999., 999.};
       Int_t nCentralityBins = sizeof(centralityBins)/sizeof(centralityBins[0])-1;
       mtrSign->GetMuonEventCuts()->SetCentralityClasses(nCentralityBins, centralityBins);
       *(mtrSign->GetMuonTrackCuts()) = trackCuts;
+      
+      // trigger rates
+      gROOT->LoadMacro("AddTaskTriggerRates.C");
+      AliAnalysisTaskTriggerRates* trgRates = AddTaskTriggerRates();
+      if(!trgRates) {
+        Error("CreateAnalysisTrain","AliAnalysisTaskTriggerRates not created!");
+        return;
+      }
+//      trgRates->SelectCentrality();
+//      trgRates->SetTrigClassPatterns("CPBI1MUL-B-NOPF-MUON", "CPBI1MLL-B-NOPF-MUON", "CPBI1MSL-B-NOPF-MUON", "CPBI1MSH-B-NOPF-MUON");
+      trgRates->SetTrigClassPatterns("CMUU7-B-NOPF-", "CMUL7-B-NOPF-", "CMUS7-B-NOPF-", "CMUSH7-B-NOPF-");
+      trgRates->PrintCounts();
+      
+      // trigger rates v2
+      AliAnalysisTaskTriggerRates* trgRates2 = AddTaskTriggerRates("2");
+//      trgRates2->SelectCentrality();
+//      trgRates2->SetTrigClassPatterns("CPBI1MUL-B-NOPF-MUON", "CPBI1MLL-B-NOPF-MUON", "CPBI1MSL-B-NOPF-MUON", "CPBI1MSH-B-NOPF-MUON");
+      trgRates2->SetTrigClassPatterns("CMUU7-B-NOPF-", "CMUL7-B-NOPF-", "CMUS7-B-NOPF-", "CMUSH7-B-NOPF-");
+      trgRates2->SetZeroDevRange(1);
+      trgRates2->PrintCounts();
+      
+      // trigger rates v3
+      AliAnalysisTaskTriggerRates* trgRates3 = AddTaskTriggerRates("3");
+//      trgRates3->SelectCentrality();
+//      trgRates3->SetTrigClassPatterns("CPBI1MUL-B-NOPF-MUON", "CPBI1MLL-B-NOPF-MUON", "CPBI1MSL-B-NOPF-MUON", "CPBI1MSH-B-NOPF-MUON");
+      trgRates3->SetTrigClassPatterns("CMUU7-B-NOPF-", "CMUL7-B-NOPF-", "CMUS7-B-NOPF-", "CMUSH7-B-NOPF-");
+      trgRates3->SetZeroDevRange(2);
+      trgRates3->PrintCounts();
       
     }
     
@@ -449,9 +606,12 @@ void SetKinematicsRange(TObject *jpsiTask)
   /// set pT and y ranges in the JPsi analysis task
   
   // define pT bins
-  const Int_t nPtBins = 19;
-  Float_t dPtLowEdge[nPtBins] = {0., 0., 2., 5., 0., 1., 2., 3., 4., 5., 6., 8., 2., 0., 3., 0.3, 0.3, 0.3, 0.3};
-  Float_t dPtUpEdge[nPtBins] = {8., 2., 5., 8., 1., 2., 3., 4., 5., 6., 8., 20., 8., 3., 8., 1., 8., 2., 3.};
+//  const Int_t nPtBins = 21;
+//  Float_t dPtLowEdge[nPtBins] = {0., 0., 2., 5., 0., 1., 2., 3., 4., 5., 6., 8., 10., 14., 2., 0., 3., 0.3, 0.3, 0.3, 0.3};
+//  Float_t dPtUpEdge[nPtBins] = {8., 2., 5., 8., 1., 2., 3., 4., 5., 6., 8., 10., 14., 20., 8., 3., 8., 1., 8., 2., 3.};
+  const Int_t nPtBins = 15;
+  Float_t dPtLowEdge[nPtBins] = {0., 0., 1., 2., 3., 4., 5., 6., 7., 8., 10., 12., 14., 16., 18.};
+  Float_t dPtUpEdge[nPtBins] = {20., 1., 2., 3., 4., 5., 6., 7., 8., 10., 12., 14., 16., 18., 20.};
   
   // define y bins
   const Int_t nYBins = 10;
