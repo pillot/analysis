@@ -381,10 +381,10 @@ void AliAnalysisTaskJPsiAccEffCorr2::UserExec(Option_t *)
   }
   
   // loop over reco tracks
-  Int_t ntracks = aod->GetNTracks();
+  Int_t ntracks = aod->GetNumberOfTracks();
   for (Int_t q=0; q<ntracks; q++){
     
-    AliAODTrack *mu = aod->GetTrack(q);
+    AliAODTrack *mu = static_cast<AliAODTrack*>(aod->GetTrack(q));
     
     if (mu->IsMuonTrack() && mu->GetMatchTrigger()>=fTrigLevel && mu->GetLabel() >= 0 &&
 	mu->Eta()>fYBinLowEdge[0] && mu->Eta()<fYBinLowEdge[fYBinLowEdge.GetSize()-1] &&
