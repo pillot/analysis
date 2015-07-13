@@ -137,9 +137,9 @@ void AliAnalysisTaskMuonRefitVtx::NotifyRun()
   
   // set OCDB location
   AliCDBManager* cdbm = AliCDBManager::Instance();
-  if (cdbm->IsDefaultStorageSet()) printf("PerformanceTask: CDB default storage already set!\n");
+  if (cdbm->IsDefaultStorageSet()) printf("RefitVtxTask: CDB default storage already set!\n");
   else cdbm->SetDefaultStorage(fDefaultStorage.Data());
-  if (cdbm->GetRun() > -1) printf("PerformanceTask: run number already set!\n");
+  if (cdbm->GetRun() > -1) printf("RefitVtxTask: run number already set!\n");
   else cdbm->SetRun(fCurrentRunNumber);
   
   // load magnetic field for track extrapolation
@@ -162,14 +162,12 @@ void AliAnalysisTaskMuonRefitVtx::NotifyRun()
     AliESDVertex* vertex = dynamic_cast<AliESDVertex*>(entry->GetObject());
     if (!vertex) return;
     if (vertex->GetXRes() < 2.8) {
-      fVtxPos[0] = vertex->GetX();
-      fVtxPos[1] = vertex->GetY();
-      fVtxSig[0] = vertex->GetXRes();
-      fVtxSig[1] = vertex->GetYRes();
-      printf("SPD Vertex position from OCDB --> x = %g ± %g, y = %g ± %g\n",
-	     fVtxPos[0], fVtxSig[0], fVtxPos[1], fVtxSig[1]);
+      vertex->GetXYZ(fVtxPos);
+      vertex->GetSigmaXYZ(fVtxSig);
+      printf("SPD Vertex position from OCDB --> x = %g ± %g, y = %g ± %g, z = %g ± %g\n",
+	     fVtxPos[0], fVtxSig[0], fVtxPos[1], fVtxSig[1], fVtxPos[2], fVtxSig[2]);
     } else {
-      printf("SPD Vertex position not valid --> x = 0 ± 0, y = 0 ± 0\n");
+      printf("SPD Vertex position not valid --> x = 0 ± 0, y = 0 ± 0, z = 0 ± 0\n");
     }
   }
   
