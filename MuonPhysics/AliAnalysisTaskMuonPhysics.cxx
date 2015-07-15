@@ -289,7 +289,10 @@ void AliAnalysisTaskMuonPhysics::UserExec(Option_t *)
   Bool_t isESD = kFALSE;
   if (dynamic_cast<AliESDEvent*>(evt)) isESD = kTRUE;
   else if (!dynamic_cast<AliAODEvent*>(evt)) return;
-  
+  /*
+  TString trigger = evt->GetFiredTriggerClasses();
+  if (!trigger.Contains("CINT7-B-")) return;
+  */
   if (isESD) LoadBranches();
   /*
   Int_t ievent = static_cast<AliESDEvent*>(evt)->GetEventNumberInFile();
@@ -363,7 +366,7 @@ void AliAnalysisTaskMuonPhysics::UserExec(Option_t *)
   // get the SPD vertex
   TString vtxSPD = "spdvtx:";
   Double_t vertex[3] = {0., 0., 0.};
-  const AliVVertex* vert = AliAnalysisMuonUtility::GetVertexSPD(evt);
+  const AliVVertex* vert = evt->GetPrimaryVertexSPD();
   if (vert && GetVtxStatus(*vert)) {
     vert->GetXYZ(vertex);
     vtxSPD += "yes";
@@ -668,6 +671,12 @@ Bool_t AliAnalysisTaskMuonPhysics::IsSelected(AliVParticle& track, Bool_t isESD,
   for (Int_t iCh = 6; iCh < 10; iCh++) if (AliAnalysisMuonUtility::IsTrkChamberHit(iCh, &track)) nFiredChInSt45++;
   if (nFiredChInSt45 < 3) return kFALSE;
   */
+  // skip tracks without cluster in station 1
+  //if (!AliAnalysisMuonUtility::IsTrkChamberHit(0, &track) && !AliAnalysisMuonUtility::IsTrkChamberHit(1, &track)) return kFALSE;
+  
+  // skip tracks without cluster in station 2
+  //if (!AliAnalysisMuonUtility::IsTrkChamberHit(2, &track) && !AliAnalysisMuonUtility::IsTrkChamberHit(3, &track)) return kFALSE;
+  
   // skip tracks with pT < 2 GeV/c
   //if (track.Pt() < 60.) return kFALSE;
   
