@@ -116,7 +116,7 @@ TGraphAsymmErrors* CreateRatioGraph(const char* name, const char* title, TGraphA
   ratio->GetXaxis()->SetTitle(GraphData.GetXaxis()->GetTitle());
   ratio->GetYaxis()->SetTitle("EffData/EffSim");
 
-  if ( !strncmp(GraphData.GetXaxis()->GetTitle(),"Run Number",10) )
+  if ( !strncmp(GraphData.GetXaxis()->GetTitle(),"run number",10) )
   {
     ratio->GetXaxis()->Set(nBins, -0.5, nBins-0.5);
   
@@ -172,7 +172,7 @@ TCanvas* DrawRatio(TString name, TString title, TGraphAsymmErrors* GraphData, TG
 { 
   Float_t fracOfHeight = 0.3;
   Float_t rightMargin = 0.03;
-  TCanvas *c = new TCanvas(name.Data(), "ratio",1200,800);
+  TCanvas *c = new TCanvas(name.Data(), name.Data(), 1200, 800);
 
   c->Divide(1,2,0,0);
   
@@ -274,7 +274,7 @@ TCanvas* DrawRatio(TString name, TString title, TGraphAsymmErrors* GraphData, TG
 }
 
 //-------------------------------------------------------------------------------------------------------------------------------------------
-void ComparisonDataMC(TString fileNameData, TString fileNameSim)
+void ComparisonDataMC(TString fileNameData, TString fileNameSim, Bool_t integrated = kFALSE)
 {
   // Open input Data files
   TFile *fileData = new TFile(fileNameData.Data(), "read");
@@ -289,6 +289,8 @@ void ComparisonDataMC(TString fileNameData, TString fileNameSim)
     return;
   }
   
+  TString hname = integrated ? "integratedTracking" : "tracking";
+  
   // Get Global Data and Sim graphs
   
 //  TGraphAsymmErrors *effVScentData = static_cast<TGraphAsymmErrors*>(fileData->FindObjectAny("trackingEffVscentrality"));
@@ -302,35 +304,47 @@ void ComparisonDataMC(TString fileNameData, TString fileNameSim)
 //    return;
 //  }
   
-  TGraphAsymmErrors *effVSyData = static_cast<TGraphAsymmErrors*>(fileData->FindObjectAny("trackingEffVsy"));
+  TGraphAsymmErrors *effVSrunData = static_cast<TGraphAsymmErrors*>(fileData->FindObjectAny("trackingEffVsRun"));
+  if (!effVSrunData) {
+    printf("Efficiency vs run from data not found\n");
+    return;
+  }
+  TGraphAsymmErrors *effVSrunSim = static_cast<TGraphAsymmErrors*>(fileSim->FindObjectAny("trackingEffVsRun"));
+  if (!effVSrunSim) {
+    printf("Efficiency vs run from sim not found\n");
+    return;
+  }
+  
+  
+  TGraphAsymmErrors *effVSyData = static_cast<TGraphAsymmErrors*>(fileData->FindObjectAny(Form("%sEffVsy",hname.Data())));
   if (!effVSyData) {
     printf("Efficiency vs rapidity from data not found\n");
     return;
   }
-  TGraphAsymmErrors *effVSySim = static_cast<TGraphAsymmErrors*>(fileSim->FindObjectAny("trackingEffVsy"));
+  TGraphAsymmErrors *effVSySim = static_cast<TGraphAsymmErrors*>(fileSim->FindObjectAny(Form("%sEffVsy",hname.Data())));
   if (!effVSySim) {
     printf("Efficiency vs rapidity from sim not found\n");
     return;
   }
 
   
-  TGraphAsymmErrors *effVSptData = static_cast<TGraphAsymmErrors*>(fileData->FindObjectAny("trackingEffVspt"));
+  TGraphAsymmErrors *effVSptData = static_cast<TGraphAsymmErrors*>(fileData->FindObjectAny(Form("%sEffVspt",hname.Data())));
   if (!effVSptData) {
     printf("Efficiency vs pt from data not found\n");
     return;
   }
-  TGraphAsymmErrors *effVSptSim = static_cast<TGraphAsymmErrors*>(fileSim->FindObjectAny("trackingEffVspt"));
+  TGraphAsymmErrors *effVSptSim = static_cast<TGraphAsymmErrors*>(fileSim->FindObjectAny(Form("%sEffVspt",hname.Data())));
   if (!effVSptSim) {
     printf("Efficiency vs pt from sim not found\n");
     return;
   }
   
-  TGraphAsymmErrors *effVSphiData = static_cast<TGraphAsymmErrors*>(fileData->FindObjectAny("trackingEffVsphi"));
+  TGraphAsymmErrors *effVSphiData = static_cast<TGraphAsymmErrors*>(fileData->FindObjectAny(Form("%sEffVsphi",hname.Data())));
   if (!effVSphiData) {
     printf("Efficiency vs phi from data not found\n");
     return;
   }
-  TGraphAsymmErrors *effVSphiSim = static_cast<TGraphAsymmErrors*>(fileSim->FindObjectAny("trackingEffVsphi"));
+  TGraphAsymmErrors *effVSphiSim = static_cast<TGraphAsymmErrors*>(fileSim->FindObjectAny(Form("%sEffVsphi",hname.Data())));
   if (!effVSphiSim) {
     printf("Efficiency vs phi from sim not found\n");
     return;
@@ -343,6 +357,18 @@ void ComparisonDataMC(TString fileNameData, TString fileNameSim)
   TObjArray globalRatiosAndEff;
   
 //  globalRatios.Add(CreateRatioGraph("RatioEffVsCent","data/sim tracking efficiency versus centrality",effVScentData,effVScentSim));
+  
+  //---- Eff vs run
+  TGraphAsymmErrors* effVSrunDataCopy = static_cast<TGraphAsymmErrors*>(effVSrunData->Clone()); // We make clones to do not modify them
+  TGraphAsymmErrors* effVSrunSimCopy = static_cast<TGraphAsymmErrors*>(effVSrunSim->Clone());
+  
+  TGraphAsymmErrors *ratioRun = CreateRatioGraph("RatioEffVsRun","data/sim tracking efficiency versus run",*effVSrunData,*effVSrunSim);
+  globalRatios.Add(ratioRun);
+  
+  TGraphAsymmErrors* ratioRunCopy = static_cast<TGraphAsymmErrors*>(ratioRun->Clone());
+  
+  globalRatiosAndEff.Add(DrawRatio("RatioEffVSRunAndEff","Comparison Data&MC tracking efficiency versus run", effVSrunDataCopy,effVSrunSimCopy,ratioRunCopy));
+  //-----
   
   //---- Eff vs y
   TGraphAsymmErrors* effVSyDataCopy = static_cast<TGraphAsymmErrors*>(effVSyData->Clone()); // We make clones to do not modify them
@@ -473,6 +499,8 @@ void ComparisonDataMC(TString fileNameData, TString fileNameSim)
  
   //--------
   
+  TString hname2 = integrated ? "IntegratedChamber" : "Chamber";
+  
   // Get Chamber and DE Data and Sim graphs
 //  TObjArray *listChEffVSrunData = static_cast<TObjArray*>(fileData->FindObjectAny("ChambersEffVSrun"));
 //  if (!listChEffVSrunData) {
@@ -485,12 +513,12 @@ void ComparisonDataMC(TString fileNameData, TString fileNameSim)
 //    return;
 //  }
 
-  TObjArray *listChEffVSDEData = static_cast<TObjArray*>(fileData->FindObjectAny("ChambersEffVSDE"));
+  TObjArray *listChEffVSDEData = static_cast<TObjArray*>(fileData->FindObjectAny(Form("%sEffVsDE",hname2.Data())));
   if (!listChEffVSDEData) {
     printf("list of Chamber efficiencies per DE from data not found\n");
     return;
   }
-  TObjArray *listChEffVSDESim = static_cast<TObjArray*>(fileSim->FindObjectAny("ChambersEffVSDE"));
+  TObjArray *listChEffVSDESim = static_cast<TObjArray*>(fileSim->FindObjectAny(Form("%sEffVsDE",hname2.Data())));
   if (!listChEffVSDESim) {
     printf("list of Chamber efficiencies per DE from sim not found\n");
     return;
@@ -599,8 +627,9 @@ void ComparisonDataMC(TString fileNameData, TString fileNameSim)
 //    }
   
     // Compute the ratios for Ch vs DE
-    gData = static_cast<TGraphAsymmErrors*>(listChEffVSDEData->FindObject(Form("Ch%dEffVSDE",ich+1)));
-    gSim = static_cast<TGraphAsymmErrors*>(listChEffVSDESim->FindObject(Form("Ch%dEffVSDE",ich+1)));
+    TString hname3 = integrated ? "integratedEff" : "eff";
+    gData = static_cast<TGraphAsymmErrors*>(listChEffVSDEData->FindObject(Form("%sCh%dVsDE",hname3.Data(),ich+1)));
+    gSim = static_cast<TGraphAsymmErrors*>(listChEffVSDESim->FindObject(Form("%sCh%dVsDE",hname3.Data(),ich+1)));
     
     if (!gData || !gSim )
     {
