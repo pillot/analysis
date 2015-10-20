@@ -268,13 +268,8 @@ void AliAnalysisTaskMuonPhysics::NotifyRun()
   /// Prepare processing of new run: load corresponding OADB objects...
   
   // get the trackCuts for this run
-  if (!fMuonTrackCuts) AliFatal("You must specify the requested selections (AliMuonTrackCut obj is missing)");
-  if (fMuonTrackCuts->GetPassName().IsNull())
-    fMuonTrackCuts->SetCustomParamFromRun(fCurrentRunNumber, AliAnalysisMuonUtility::GetPassName(fInputHandler));
-  else
-    fMuonTrackCuts->SetCustomParamFromRun(fCurrentRunNumber, fMuonTrackCuts->GetPassName());
-  fMuonTrackCuts->CustomParam()->SetChi2NormCut(3.5);
-  
+  if (!fMuonTrackCuts) AliFatal("You must specify the requested selections (AliMuonTrackCuts obj is missing)");
+  fMuonTrackCuts->SetRun(fInputHandler);
   // get the trackCuts2 for this run
   if (fMuonTrackCuts2) fMuonTrackCuts2->SetRun(fInputHandler);
   
@@ -291,7 +286,7 @@ void AliAnalysisTaskMuonPhysics::UserExec(Option_t *)
   else if (!dynamic_cast<AliAODEvent*>(evt)) return;
   /*
   TString trigger = evt->GetFiredTriggerClasses();
-  if (!trigger.Contains("CINT7-B-")) return;
+  if (!trigger.Contains("CMUL7-B-")) return;
   */
   if (isESD) LoadBranches();
   /*
@@ -532,7 +527,8 @@ void AliAnalysisTaskMuonPhysics::UserExec(Option_t *)
 	TLorentzVector muV2(track2->Px(), track2->Py(), track2->Pz(), track2->E());
 	TLorentzVector dimuV = muV1 + muV2;
 	
-        //if (dimuV.Pt() <= 5. || dimuV.Pt() > 8.) continue;
+        //if (dimuV.Pt() <= 18. || dimuV.Pt() > 20.) continue;
+        if (dimuV.Rapidity() <= -4. || dimuV.Rapidity() > -2.5) continue;
         
 	// fill dimuon histograms
 	((TH1F*)fList->UncheckedAt(kMass))->Fill(dimuV.M());
