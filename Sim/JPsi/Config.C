@@ -105,10 +105,7 @@ void Config()
 
   // Libraries required by geant321
 #if defined(__CINT__)
-  gSystem->Load("liblhapdf");      // Parton density functions
-  gSystem->Load("libEGPythia6");   // TGenerator interface
-  gSystem->Load("libpythia6");     // Pythia 6.2
-  gSystem->Load("libAliPythia6");  // ALICE specific implementations
+  gSystem->AddIncludePath("-I$ALICE_ROOT/include -I$ALICE_PHYSICS/include");
   gSystem->Load("libgeant321");
 #endif
 
@@ -365,8 +362,9 @@ AliGenerator* JPsi7TeV()
 //  AliGenParam *jpsi7TeV = new AliGenParam(1, AliGenMUONlib::kJpsi,"pp 2.76");
 //  AliGenParam *jpsi7TeV = new AliGenParam(1, AliGenMUONlib::kJpsi,"PbPb 2.76");
 //  AliGenParam *jpsi7TeV = new AliGenParam(1, AliGenMUONlib::kJpsi,"CDF pp 3.94");
-  AliGenParam *jpsi7TeV = new AliGenParam(1, AliGenMUONlib::kJpsi,"CDF pp 7");
+//  AliGenParam *jpsi7TeV = new AliGenParam(1, AliGenMUONlib::kJpsi,"CDF pp 7");
 //  AliGenParam *jpsi7TeV = new AliGenParam(1, AliGenMUONlib::kJpsi,"pPb 5.03");
+  AliGenParam *jpsi7TeV = new AliGenParam(1, AliGenMUONlib::kJpsi,"pp 8");
   jpsi7TeV->SetMomentumRange(0,999);
   jpsi7TeV->SetPtRange(0.,999.);
   jpsi7TeV->SetYRange(-4.2, -2.3);

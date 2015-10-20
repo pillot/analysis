@@ -3,20 +3,18 @@
 # $2 = merging stage                     
 # Stage_<n>.xml made via: find <OutputDir> *Stage<n-1>/*root_archive.zip
 Packages = {
-    "VO_ALICE@AliRoot::v5-05-27-AN",
-    "VO_ALICE@GEANT3::v1-15a-1",
-    "VO_ALICE@ROOT::v5-34-08",
+    "VO_ALICE@AliPhysics::vAN-20150930-1",
     "VO_ALICE@APISCONFIG::V1.1x"
 };
 Jobtag = {
     "comment:AOD merging stage $2"
 };
 InputDataCollection = {
-    "LF:/alice/cern.ch/user/p/ppillot/Data/LHC12h/muon_calo_pass2/QA/results/$1/Stage_$2.xml,nodownload"
+    "LF:/alice/cern.ch/user/p/ppillot/Data/LHC15g/muon_calo_pass1/QA/results/$1/Stage_$2.xml,nodownload"
 };
-OutputDir = "/alice/cern.ch/user/p/ppillot/Data/LHC12h/muon_calo_pass2/QA/results/$1/Stage_$2/#alien_counter_03i#";
+OutputDir = "/alice/cern.ch/user/p/ppillot/Data/LHC15g/muon_calo_pass1/QA/results/$1/Stage_$2/#alien_counter_03i#";
 InputFile = {
-    "LF:/alice/cern.ch/user/p/ppillot/Data/LHC12h/muon_calo_pass2/QA/AODtrain.C"
+    "LF:/alice/cern.ch/user/p/ppillot/Data/LHC15g/muon_calo_pass1/QA/AODtrain.C"
 };
 Executable = "AOD_merge.sh"; 
 Arguments = "1";
@@ -40,4 +38,4 @@ JDLVariables =
     "Packages",
     "OutputDir"
 }; 
-Validationcommand = "/alice/cern.ch/user/p/ppillot/Data/LHC12h/muon_calo_pass2/QA/validation_merge.sh"
+Validationcommand = "/alice/cern.ch/user/p/ppillot/Data/LHC15g/muon_calo_pass1/QA/validation_merge.sh"

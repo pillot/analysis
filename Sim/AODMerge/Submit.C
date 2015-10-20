@@ -105,14 +105,14 @@ void Submit(const char* inDir, const char* outDir, const char* resDir = "results
     }
     
     TString wn = (stage > 0) ? Form("Stage_%d.xml", stage) : "wn.xml";
-    TString find = (lastStage == 0) ?
-      Form("alien_find -x %s %s/%s *root_archive.zip", wn.Data(), inputDir.Data(), srun.Data()) :
+//    TString find = (lastStage == 0) ?
+//      Form("alien_find -x %s %s/%s *root_archive.zip", wn.Data(), inputDir.Data(), srun.Data()) :
 //      Form("alien_find -x %s %s/%s/ESDs/muon_calo_pass2 12%s*/root_archive.zip", wn.Data(), inputDir.Data(), srun.Data(), srun.Data()) :
 //      Form("alien_find -x %s %s/%s/vpass1 12%s*/root_archive.zip", wn.Data(), inputDir.Data(), srun.Data(), srun.Data()) :
-      Form("alien_find -x %s %s/%s/Stage_%d *root_archive.zip", wn.Data(), inputDir.Data(), srun.Data(), lastStage);
-//    TString find = (lastStage == 0) ?
-//      Form("alien_find -x %s %s/%s *Merged.QA.Data.root", wn.Data(), inputDir.Data(), srun.Data()) :
-//      Form("alien_find -x %s %s/%s/Stage_%d *Merged.QA.Data.root", wn.Data(), inputDir.Data(), srun.Data(), lastStage);
+//      Form("alien_find -x %s %s/%s/Stage_%d *root_archive.zip", wn.Data(), inputDir.Data(), srun.Data(), lastStage);
+    TString find = (lastStage == 0) ?
+      Form("alien_find -x %s %s/%s *Merged.QA.Data.root", wn.Data(), inputDir.Data(), srun.Data()) :
+      Form("alien_find -x %s %s/%s/Stage_%d *Merged.QA.Data.root", wn.Data(), inputDir.Data(), srun.Data(), lastStage);
     gSystem->Exec(Form("%s 1> %s 2>/dev/null", find.Data(), wn.Data()));
     gSystem->Exec(Form("grep -c /event %s > __nfiles__", wn.Data()));
     ifstream f2("__nfiles__");

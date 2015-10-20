@@ -17,7 +17,7 @@ void copyFiles(TString gridLocation)
     return;
   }
   
-  TString localDir = "/Users/pillot/Work/Alice/Work/Macros/Sim";
+  TString localDir = "/Users/pillot/Work/Alice/Macros/Sim";
   TString targetDir = "/alice/cern.ch/user/p/ppillot/";
   targetDir += gridLocation.Data();
   

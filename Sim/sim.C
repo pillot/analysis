@@ -1,5 +1,7 @@
 void sim(Int_t nev=1000) {
   
+  gSystem->Load("libpythia6");     // Pythia 6.2 (for decayer)
+  
   AliSimulation simulator;
   simulator.SetTriggerConfig("MUON");
   simulator.SetMakeDigits("MUON");
@@ -11,7 +13,7 @@ void sim(Int_t nev=1000) {
   simulator.SetRunHLT("");
   
   // raw OCDB
-  simulator.SetDefaultStorage("alien://folder=/alice/data/2011/OCDB");
+  simulator.SetDefaultStorage("alien://folder=/alice/data/2015/OCDB");
   //simulator.SetDefaultStorage("alien://Folder=/alice/simulation/2008/v4-15-Release/Ideal");
   //simulator.SetSpecificStorage("GRP/GRP/Data", "alien://Folder=/alice/data/2011/OCDB");
   

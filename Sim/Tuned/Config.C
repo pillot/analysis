@@ -69,10 +69,7 @@ void Config()
 
   // Libraries required by geant321
 #if defined(__CINT__)
-  gSystem->Load("liblhapdf");      // Parton density functions
-  gSystem->Load("libEGPythia6");   // TGenerator interface
-  gSystem->Load("libpythia6");     // Pythia 6.2
-  gSystem->Load("libAliPythia6");  // ALICE specific implementations
+  gSystem->AddIncludePath("-I$ALICE_ROOT/include -I$ALICE_PHYSICS/include");
   gSystem->Load("libgeant321");
 #endif
 

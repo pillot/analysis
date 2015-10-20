@@ -1,44 +1,39 @@
 Packages = 
    {
-    "VO_ALICE@AliRoot::v5-05-63-AN",
-    "VO_ALICE@GEANT3::v1-15a-1",
-    "VO_ALICE@ROOT::v5-34-08-4",
+    "VO_ALICE@AliPhysics::vAN-20150930-1",
+    "VO_ALICE@AliRoot::v5-06-42-1",
+    "VO_ALICE@GEANT3::v2-0-1",
     "VO_ALICE@APISCONFIG::V1.1x"
    }; 
 Jobtag = 
    {
-      "comment: single mu realistic (LHC11h)"
+      "comment: single mu realistic (LHC15g)"
    }; 
 split = "production:1-$2"; 
-OutputDir = "/alice/cern.ch/user/p/ppillot/Sim/LHC11h/muTuneLizardo/GenTuner/results/$1/#alien_counter_03i#"; 
+OutputDir = "/alice/cern.ch/user/p/ppillot/Sim/LHC15g/muTuneCMUU7/GenTuner/results/$1/#alien_counter_03i#";
 Price = 1; 
 Executable = "aliroot_new"; 
 InputFile = 
    {
-      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/muTuneLizardo/GenTuner/CheckESD.C",
-      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/muTuneLizardo/GenTuner/CheckAOD.C",
-      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/muTuneLizardo/GenTuner/MuonGenerator.C",
-      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/muTuneLizardo/GenTuner/Config.C",
-      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/muTuneLizardo/GenTuner/rec.C",
-      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/muTuneLizardo/GenTuner/sim.C",
-      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/muTuneLizardo/GenTuner/simrun.C",
-      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/muTuneLizardo/GenTuner/tag.C",
-      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/muTuneLizardo/GenTuner/AODtrainCustom.C",
-      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/muTuneLizardo/GenTuner/AddTaskESDMCLabelAddition.C",
-      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/muTuneLizardo/GenTuner/AliAnalysisTaskESDMCLabelAddition.cxx",
-      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/muTuneLizardo/GenTuner/AliAnalysisTaskESDMCLabelAddition.h",
-      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/muTuneLizardo/GenTuner/AddTaskMuonPerformance.C",
-      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/muTuneLizardo/GenTuner/AliAnalysisTaskMuonPerformance.cxx",
-      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/muTuneLizardo/GenTuner/AliAnalysisTaskMuonPerformance.h",
-      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/muTuneLizardo/GenTuner/AddTaskMUONTrackingEfficiency_old.C",
-      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/muTuneLizardo/GenTuner/AliAnalysisTaskMuonTrackingEff_old.cxx",
-      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/muTuneLizardo/GenTuner/AliAnalysisTaskMuonTrackingEff_old.h",
-      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/muTuneLizardo/GenTuner/AddTaskMUONTrackingEfficiency.C",
-      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/muTuneLizardo/GenTuner/AliAnalysisTaskMuonTrackingEff.cxx",
-      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/muTuneLizardo/GenTuner/AliAnalysisTaskMuonTrackingEff.h",
-      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/muTuneLizardo/GenTuner/AddTaskMuonPhysics.C",
-      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/muTuneLizardo/GenTuner/AliAnalysisTaskMuonPhysics.cxx",
-      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC11h/muTuneLizardo/GenTuner/AliAnalysisTaskMuonPhysics.h"
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC15g/muTuneCMUU7/GenTuner/CheckESD.C",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC15g/muTuneCMUU7/GenTuner/CheckAOD.C",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC15g/muTuneCMUU7/GenTuner/MuonGenerator.C",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC15g/muTuneCMUU7/GenTuner/Config.C",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC15g/muTuneCMUU7/GenTuner/rec.C",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC15g/muTuneCMUU7/GenTuner/sim.C",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC15g/muTuneCMUU7/GenTuner/simrun.C",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC15g/muTuneCMUU7/GenTuner/tag.C",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC15g/muTuneCMUU7/GenTuner/AODtrainCustom.C",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC15g/muTuneCMUU7/GenTuner/AddTaskESDMCLabelAddition.C",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC15g/muTuneCMUU7/GenTuner/PWGmuondep.par",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC15g/muTuneCMUU7/GenTuner/AddTaskMuonPerformance.C",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC15g/muTuneCMUU7/GenTuner/AddTaskMUONTrackingEfficiency.C",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC15g/muTuneCMUU7/GenTuner/PWGPPMUONdep.par",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC15g/muTuneCMUU7/GenTuner/AddTaskMuonQA.C",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC15g/muTuneCMUU7/GenTuner/PWGPPMUONlite.par",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC15g/muTuneCMUU7/GenTuner/AddTaskMuonPhysics.C",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC15g/muTuneCMUU7/GenTuner/AliAnalysisTaskMuonPhysics.cxx",
+      "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC15g/muTuneCMUU7/GenTuner/AliAnalysisTaskMuonPhysics.h"
    };
 User = "ppillot"; 
 OutputArchive = 
@@ -46,7 +41,7 @@ OutputArchive =
       "log_archive:stderr,stdout,sim.log,rec.log,aod.log,check.log,tag.log@disk=1",
       "root_archive.zip:galice.root,Kinematics*.root,TrackRefs*.root,AliESDs.root,AliAOD.root,AliAOD.Muons.root,Merged.QA.Data.root,Run*.root,AnalysisResults.root@disk=3"
    }; 
-splitarguments = "simrun.C --run $1 --chunk #alien_counter# --event $3 --process kMuon --energy 2760";
+splitarguments = "simrun.C --run $1 --chunk #alien_counter# --event $3 --process kMuon --energy 13000";
 TTL = 72000; 
 Workdirectorysize = 
    {
@@ -58,4 +53,4 @@ JDLVariables =
       "Packages",
       "OutputDir"
    }; 
-Validationcommand = "/alice/cern.ch/user/p/ppillot/Sim/LHC11h/muTuneLizardo/GenTuner/validation.sh"
+Validationcommand = "/alice/cern.ch/user/p/ppillot/Sim/LHC15g/muTuneCMUU7/GenTuner/validation.sh"
