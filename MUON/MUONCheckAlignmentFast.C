@@ -22,13 +22,13 @@
 #include "AliMUONGeometryTransformer.h"
 #include "AliMUONTrackerData.h"
 
-#include "mapping/AliMpConstants.h"
-#include "mapping/AliMpDEIterator.h"
-#include "mapping/AliMpDetElement.h"
-#include "mapping/AliMpVSegmentation.h"
-#include "mapping/AliMpSegmentation.h"
-#include "mapping/AliMpVPadIterator.h"
-#include "mapping/AliMpPad.h"
+#include "AliMpConstants.h"
+#include "AliMpDEIterator.h"
+#include "AliMpDetElement.h"
+#include "AliMpVSegmentation.h"
+#include "AliMpSegmentation.h"
+#include "AliMpVPadIterator.h"
+#include "AliMpPad.h"
 
 #endif
 
@@ -42,14 +42,15 @@
 
 
 //Int_t run = 167818;
-Int_t run = 169099; // LHC11h
+//Int_t run = 169099; // LHC11h
 //Int_t run = 192732; // LHC12h
 //Int_t run = 197388; // LHC13f
+Int_t run = 221128; // LHC15c
 
 TString alignStorage[2] = {
 //  "alien://folder=/alice/cern.ch/user/p/ppillot/OCDB2012",
-//  "alien://folder=/alice/data/2011/OCDB",
-  "alien://folder=/alice/simulation/2008/v4-15-Release/Ideal",
+  "alien://folder=/alice/data/2015/OCDB",
+//  "alien://folder=/alice/simulation/2008/v4-15-Release/Ideal",
 //  "alien://folder=/alice/cern.ch/user/p/ppillot/OCDB_PbPbSim",
 //  "alien://folder=/alice/cern.ch/user/j/jcastill/LHC11hMisAlignCDB3"
 //  "alien://folder=/alice/cern.ch/user/j/jcastill/pbpb11wrk/LHC11hMisAlignCDB4",
@@ -78,7 +79,7 @@ void MUONCheckAlignmentFast()
   
   // ocdb access
   AliCDBManager* cdbm = AliCDBManager::Instance();
-  cdbm->SetDefaultStorage("alien://folder=/alice/data/2011/OCDB");
+  cdbm->SetDefaultStorage("alien://folder=/alice/data/2015/OCDB");
   cdbm->SetRun(run);
   
   // load mapping
