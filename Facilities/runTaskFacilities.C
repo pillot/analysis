@@ -84,25 +84,11 @@ void CopyFileLocally(TList &pathList, TList &fileList, char overwrite = '\0')
 }
 
 //______________________________________________________________________________
-void LoadAlirootLocally(TString& extraLibs, TString& extraIncs, TString& extraTasks)
+void LoadAlirootLocally(TString& extraLibs, TString& extraIncs, TString& extraTasks, TString& extraPkgs)
 {
   /// Set environment locally
   
-  // Load common libraries
-  gSystem->Load("libVMC");
-  gSystem->Load("libTree.so");
-  gSystem->Load("libPhysics.so");
-  gSystem->Load("libMinuit.so");
-  gSystem->Load("libXMLParser.so");
-  gSystem->Load("libGui.so");
-  gSystem->Load("libSTEERBase");
-  gSystem->Load("libESD");
-  gSystem->Load("libAOD");
-  gSystem->Load("libANALYSIS");
-  gSystem->Load("libANALYSISalice");
-  
   // Load additional libraries
-  gSystem->Load("libProofPlayer");
   TObjArray* libs = extraLibs.Tokenize(":");
   for (Int_t i = 0; i < libs->GetEntriesFast(); i++)
     gSystem->Load(Form("lib%s",static_cast<TObjString*>(libs->UncheckedAt(i))->GetName()));
@@ -110,9 +96,18 @@ void LoadAlirootLocally(TString& extraLibs, TString& extraIncs, TString& extraTa
   
   // Add additional includes
   TObjArray* incs = extraIncs.Tokenize(":");
-  for (Int_t i = 0; i < incs->GetEntriesFast(); i++)
+  for (Int_t i = 0; i < incs->GetEntriesFast(); i++) {
     gROOT->ProcessLine(Form(".include $ALICE_ROOT/%s",static_cast<TObjString*>(incs->UncheckedAt(i))->GetName()));
+    gROOT->ProcessLine(Form(".include $ALICE_PHYSICS/%s",static_cast<TObjString*>(incs->UncheckedAt(i))->GetName()));
+  }
   delete incs;
+  
+  // Optionally add packages
+  TObjArray* pkgs = extraPkgs.Tokenize(":");
+  for (Int_t i = 0; i < pkgs->GetEntriesFast(); i++) {
+    AliAnalysisAlien::SetupPar(Form("%s.par",static_cast<TObjString*>(pkgs->UncheckedAt(i))->GetName()));
+  }
+  delete pkgs;
   
   // Compile additional tasks
   TObjArray* tasks = extraTasks.Tokenize(":");
@@ -123,8 +118,9 @@ void LoadAlirootLocally(TString& extraLibs, TString& extraIncs, TString& extraTa
 }
 
 //______________________________________________________________________________
-void LoadAlirootOnProof(TString& aaf, TString rootVersion, TString alirootVersion, TString& extraLibs,
-			TString& extraIncs, TString& extraTasks, Bool_t notOnClient = kFALSE, TString alirootMode = "")
+void LoadAlirootOnProof(TString& aaf, TString rootVersion, TString aliphysicsVersion, TString& extraLibs,
+			TString& extraIncs, TString& extraTasks, TString& extraPkgs,
+                        Bool_t notOnClient = kFALSE, TString alirootMode = "base")
 {
   /// Load aliroot packages and set environment on Proof
   
@@ -154,23 +150,32 @@ void LoadAlirootOnProof(TString& aaf, TString rootVersion, TString alirootVersio
   list->Add(new TNamed("ALIROOT_MODE", alirootMode.Data()));
   list->Add(new TNamed("ALIROOT_EXTRA_LIBS", extraLibs.Data()));
   list->Add(new TNamed("ALIROOT_EXTRA_INCLUDES", extraIncs.Data()));
+  list->Add(new TNamed("ALIROOT_ENABLE_ALIEN", "1"));
   if (aaf == "prooflite") {
     gProof->UploadPackage("$ALICE_ROOT/ANALYSIS/macros/AliRootProofLite.par");
     gProof->EnablePackage("$ALICE_ROOT/ANALYSIS/macros/AliRootProofLite.par", list);
-  } else gProof->EnablePackage(Form("VO_ALICE@AliRoot::%s",alirootVersion.Data()), list, notOnClient);
+  } else gProof->EnablePackage(Form("VO_ALICE@AliPhysics::%s",aliphysicsVersion.Data()), list, notOnClient);
+  
+  // Optionally add packages
+  TObjArray* pkgs = extraPkgs.Tokenize(":");
+  for (Int_t i = 0; i < pkgs->GetEntriesFast(); i++) {
+    gProof->UploadPackage(Form("%s.par",static_cast<TObjString*>(pkgs->UncheckedAt(i))->GetName()));
+    gProof->EnablePackage(Form("%s.par",static_cast<TObjString*>(pkgs->UncheckedAt(i))->GetName()), notOnClient);
+  }
+  delete pkgs;
   
   // compile additional tasks on workers
   TObjArray* tasks = extraTasks.Tokenize(":");
   for (Int_t i = 0; i < tasks->GetEntriesFast(); i++)
-    gProof->Load(Form("%s.cxx++g",static_cast<TObjString*>(tasks->UncheckedAt(i))->GetName()), notOnClient);
+    gProof->Load(Form("%s.cxx+g",static_cast<TObjString*>(tasks->UncheckedAt(i))->GetName()), notOnClient);
   delete tasks;
   
 }
 
 //______________________________________________________________________________
-TObject* CreateAlienHandler(TString runMode, TString& rootVersion, TString& alirootVersion, TString& runListName,
+TObject* CreateAlienHandler(TString runMode, TString& alirootVersion, TString& aliphysicsVersion, TString& runListName,
 			    TString &dataDir, TString &dataPattern, TString &outDir, TString& extraLibs,
-			    TString& extraIncs, TString& extraTasks, TString& analysisMacroName,
+			    TString& extraIncs, TString& extraTasks, TString& extraPkgs, TString& analysisMacroName,
 			    TString runFormat = "%09d", Int_t ttl = 30000, Int_t maxFilesPerJob = 100,
 			    Int_t maxMergeFiles = 10, Int_t maxMergeStages = 1)
 {
@@ -191,8 +196,8 @@ TObject* CreateAlienHandler(TString runMode, TString& rootVersion, TString& alir
   
   // Set versions of used packages
   plugin->SetAPIVersion("V1.1x");
-  //plugin->SetROOTVersion(rootVersion.Data());
-  plugin->SetAliROOTVersion(alirootVersion.Data());
+  if (!alirootVersion.IsNull()) plugin->SetAliROOTVersion(alirootVersion.Data());
+  if (!aliphysicsVersion.IsNull()) plugin->SetAliPhysicsVersion(aliphysicsVersion.Data());
   
   // Declare input data to be processed
   plugin->SetGridDataDir(dataDir.Data());
@@ -243,10 +248,19 @@ TObject* CreateAlienHandler(TString runMode, TString& rootVersion, TString& alir
   
   // Optionally add include paths
   TObjArray* incs = extraIncs.Tokenize(":");
-  for (Int_t i = 0; i < incs->GetEntriesFast(); i++)
+  for (Int_t i = 0; i < incs->GetEntriesFast(); i++) {
     plugin->AddIncludePath(Form("-I$ALICE_ROOT/%s",static_cast<TObjString*>(incs->UncheckedAt(i))->GetName()));
+    plugin->AddIncludePath(Form("-I$ALICE_PHYSICS/%s",static_cast<TObjString*>(incs->UncheckedAt(i))->GetName()));
+  }
   delete incs;
   plugin->AddIncludePath("-I.");
+  
+  // Optionally add packages
+  TObjArray* pkgs = extraPkgs.Tokenize(":");
+  for (Int_t i = 0; i < pkgs->GetEntriesFast(); i++) {
+    plugin->EnablePackage(Form("%s.par",static_cast<TObjString*>(pkgs->UncheckedAt(i))->GetName()));
+  }
+  delete pkgs;
   
   // Optionally set a name for the generated analysis macro (default MyAnalysis.C)
   plugin->SetAnalysisMacro(Form("%s.C",analysisMacroName.Data()));
