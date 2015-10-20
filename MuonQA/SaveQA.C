@@ -20,8 +20,8 @@
 #include "TH1.h"
 
 Bool_t isQATask = kTRUE;
-TString MultDirData = "HighMultiplicity";
-TString MultDirMC = "HighMultiplicity";
+TString MultDirData = "LowMultiplicity";
+TString MultDirMC = "LowMultiplicity";
 
 //----------------------------------------------------------------------------
 void SaveQA(TString inputDataFile, TString inputMCFile)
@@ -64,21 +64,21 @@ void SaveQA(TString inputDataFile, TString inputMCFile)
     c = runNumber.Last('/');
     runNumber.Remove(0,c+1);
     
-    TString runNumberCheck = currMCName;
-    c = runNumberCheck.Last('/');
-    runNumberCheck.Remove(c);
-    c = runNumberCheck.Last('/');
-    runNumberCheck.Remove(0,c+1);
+    TString runNumberMC = currMCName;
+    c = runNumberMC.Last('/');
+    runNumberMC.Remove(c);
+    c = runNumberMC.Last('/');
+    runNumberMC.Remove(0,c+1);
     
-    if (runNumberCheck != runNumber) {
+    if (runNumberMC.Atoi() != runNumber.Atoi()) {
       cout << "ERROR: mismatch found between the 2 files... Aborting." << endl;
       return;
     }
     
-    cout<<"\rprocessing run "<<runNumber.Data()<<" ...\r"<<flush;
+    cout<<"\rprocessing run "<<runNumberMC.Data()<<" ...\r"<<flush;
     
-    if (gSystem->AccessPathName(Form("displays/%s",runNumber.Data())))
-      gSystem->Exec(Form("mkdir displays/%s", runNumber.Data()));
+    if (gSystem->AccessPathName(Form("displays/%s",runNumberMC.Data())))
+      gSystem->Exec(Form("mkdir displays/%s", runNumberMC.Data()));
     
     TFile* currDataFile = new TFile(currDataName.Data(),"read");
     TFile* currMCFile = new TFile(currMCName.Data(),"read");
@@ -88,7 +88,7 @@ void SaveQA(TString inputDataFile, TString inputMCFile)
       objsData = static_cast<TObjArray*>(currDataFile->Get("MUON_QA/expert"));
       objsMC = static_cast<TObjArray*>(currMCFile->Get("MUON_QA/expert"));
       if (!objsData || !objsMC) {
-	cout << "lists not found for run " << runNumber.Data() << endl;
+	cout << "lists not found for run " << runNumberMC.Data() << endl;
 	break;
       }
     }
