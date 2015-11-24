@@ -8,39 +8,20 @@
  */
 
 
-//______________________________________________________________________________
-Double_t Pt(const Double_t *x, const Double_t *p)
-{
-  /// generated pT fit function
-  Double_t pT = *x;
-  return p[0] * (1. / TMath::Power(p[1] + TMath::Power(pT,p[2]), p[3]) + p[4] * TMath::Exp(p[5]*pT));
-}
+TF1 *fRes[2][3] = {{0x0,0x0,0x0},{0x0,0x0,0x0}};
 
 //______________________________________________________________________________
-Double_t Y(const Double_t *x, const Double_t *p)
-{
-  /// generated y fit function
-  Double_t y = *x;
-  Double_t arg = y/p[7];
-  return p[0] * (p[1] * (1. + p[2]*y + p[3]*y*y + p[4]*y*y*y + p[5]*y*y*y*y) + p[6]*TMath::Exp(-0.5*arg*arg));
-}
-
-//______________________________________________________________________________
-Double_t PtRat(const Double_t *x, const Double_t *p)
+Double_t PtRat(const Double_t *x, const Double_t */*p*/)
 {
   /// generated pT fit function ratio
-  const Double_t *p1 = &(p[0]);
-  const Double_t *p2 = &(p[6]);
-  return Pt(x,p1) / Pt(x,p2);
+  return (fRes[0][1] && fRes[0][0]) ? fRes[0][1]->Eval(*x) / fRes[0][0]->Eval(*x) : 0.;
 }
 
 //______________________________________________________________________________
-Double_t YRat(const Double_t *x, const Double_t *p)
+Double_t YRat(const Double_t *x, const Double_t */*p*/)
 {
   /// generated y fit function ratio
-  const Double_t *p1 = &(p[0]);
-  const Double_t *p2 = &(p[8]);
-  return Y(x,p1) / Y(x,p2);
+  return (fRes[1][1] && fRes[1][0]) ? fRes[1][1]->Eval(*x) / fRes[1][0]->Eval(*x) : 0.;
 }
 
 //______________________________________________________________________________
@@ -54,11 +35,8 @@ void Compare(TString sfile1, TString sfile2)
   TString sRes[6] = {"hPtGen", "hYGen", "hPhiGen", "hPtRec", "hYRec", "hPhiRec"};
   TH1 *hRes[6][3];
   for (Int_t i = 0; i < 6; i++) for (Int_t j = 0; j < 3; j++) hRes[i][j] = 0x0;
-  TString sfunc[2][2] = {"fPtFuncMC", "fPtFuncMC", "fYFuncMC", "fYFuncMC"};
-  void *func[4] = {Pt, Y, PtRat, YRat};
-  Int_t nPar[4] = {6, 8, 12, 16};
-  TF1 *fRes[2][3];
-  for (Int_t i = 0; i < 2; i++) for (Int_t j = 0; j < 3; j++) fRes[i][j] = 0x0;
+  TString sfunc[2][2] = {"fPtFuncNew", "fPtFuncNew", "fYFuncNew", "fYFuncNew"};
+  void *func[2] = {PtRat, YRat};
   
   // get results
   for (Int_t j = 0; j < 2; j++) {
@@ -80,8 +58,8 @@ void Compare(TString sfile1, TString sfile2)
       for (Int_t i = 0; i < 2; i++) {
 	TF1 *f = static_cast<TF1*>(file->FindObjectAny(sfunc[i][j].Data()));
 	if (f) {
-	  fRes[i][j] = new TF1(Form("%s%d",sfunc[i][j].Data(),j+1), func[i], f->GetXmin(), f->GetXmax(), nPar[i]);
-	  fRes[i][j]->SetParameters(f->GetParameters());
+          fRes[i][j] = new TF1(*f);
+          fRes[i][j]->SetName(Form("%s%d",f->GetName(),j+1));
 	}
       }
     }
@@ -106,12 +84,7 @@ void Compare(TString sfile1, TString sfile2)
     hRes[i][2]->Divide(hRes[i][0]);
   }
   for (Int_t i = 0; i < 2 && fRes[i][0] && fRes[i][1]; i++) {
-    fRes[i][2] = new TF1(Form("%sOver1",fRes[i][1]->GetName()), func[i+2], fRes[i][1]->GetXmin(), fRes[i][1]->GetXmax(), nPar[i+2]);
-    Double_t *p = new Double_t[nPar[i+2]];
-    fRes[i][1]->GetParameters(p);
-    fRes[i][0]->GetParameters(&(p[nPar[i]]));
-    fRes[i][2]->SetParameters(p);
-    delete[] p;
+    fRes[i][2] = new TF1(Form("%sOver1",fRes[i][1]->GetName()), func[i], fRes[i][1]->GetXmin(), fRes[i][1]->GetXmax(), 0);
   }
   
   // print results
@@ -120,9 +93,9 @@ void Compare(TString sfile1, TString sfile2)
     for (Int_t j = 0; j < 2 && fRes[i][j]; j++) {
       Double_t *param = fRes[i][j]->GetParameters();
       printf("\n%s parameters for single muon generator in file %d:\n", var[i].Data(), j+1);
-      printf("Double_t p[%d] = {", nPar[i]);
-      for (Int_t k = 0; k < nPar[i]-1; k++) printf("%g, ", param[k]);
-      printf("%g};\n", param[nPar[i]-1]);
+      printf("Double_t p[%d] = {", fRes[i][j]->GetNpar());
+      for (Int_t k = 0; k < fRes[i][j]->GetNpar()-1; k++) printf("%g, ", fRes[i][j]->GetParameter(k));
+      printf("%g};\n", fRes[i][j]->GetParameter(fRes[i][j]->GetNpar()-1));
     }
   }
   
@@ -150,6 +123,7 @@ void Compare(TString sfile1, TString sfile2)
   }
   
   // display results at the reconstruction level
+  TLegend *lRes = new TLegend(0.5,0.55,0.85,0.75);
   TCanvas *cRec = new TCanvas("cRec", "cRec", 1200, 800);
   cRec->Divide(3,2);
   cRec->cd(1);
@@ -157,9 +131,11 @@ void Compare(TString sfile1, TString sfile2)
     cRec->cd(i-2);
     if (i == 3) gPad->SetLogy();
     for (Int_t j = 0; j < 2 && hRes[i][j]; j++) {
+      if (i == 3) lRes->AddEntry(hRes[i][j],Form("file%d",j+1),"l");
       hRes[i][j]->SetLineColor(2*j+2);
       hRes[i][j]->Draw((j == 0) ? "" : "sames");
     }
+    if (i == 3) lRes->Draw("same");
     cRec->cd(i+1);
     if (hRes[i][2]) {
       hRes[i][2]->Draw();
