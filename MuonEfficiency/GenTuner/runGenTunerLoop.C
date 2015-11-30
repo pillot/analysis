@@ -8,12 +8,50 @@
  */
 
 
+TString aliphysicsVersion = "vAN-20150908";
+
 //______________________________________________________________________________
 void runGenTunerLoop(TString smode = "local", TString inputFileName = "AliAOD.root", Int_t nStep)
 {
   /// run the generator tuner in a loop
   
   if (nStep <= 0) return;
+  
+  gROOT->LoadMacro("$HOME/Work/Alice/Macros/Facilities/runTaskFacilities.C");
+  
+  // --- Check runing mode ---
+  Int_t mode = GetMode(smode, inputFileName);
+  if(mode < 0) {
+    Error("runGenTunerLoop","Please provide either an AOD root file a collection of AODs or a dataset.");
+    return;
+  }
+  
+  // --- copy files needed for this analysis ---
+  TList pathList; pathList.SetOwner();
+  pathList.Add(new TObjString("$WORK/Macros/MuonEfficiency/GenTuner"));
+  TList fileList; fileList.SetOwner();
+  fileList.Add(new TObjString("runGenTunerLoop.C"));
+  fileList.Add(new TObjString("runGenTuner.C"));
+  fileList.Add(new TObjString("AddTaskGenTuner.C"));
+  fileList.Add(new TObjString("AliAnalysisTaskGenTuner.cxx"));
+  fileList.Add(new TObjString("AliAnalysisTaskGenTuner.h"));
+  CopyFileLocally(pathList, fileList);
+  CopyInputFileLocally("/Users/pillot/Work/Alice/Data/2015/LHC15g/muon_calo_pass1/GenTuner/CMSL7/AnalysisResults.root", "ReferenceResults.root");
+  fileList.Add(new TObjString("ReferenceResults.root"));
+  
+  // --- saf3 case ---
+  if (mode == kSAF3Connect) {
+    
+    // run on SAF3
+    RunAnalysisOnSAF3(fileList, aliphysicsVersion, inputFileName);
+    
+    // draw the results locally
+    ShowResults(nStep);
+    
+    // do not try to re-run locally!
+    return;
+    
+  }
   
   TString resume = "";
   TGraphErrors *gOldPtParam[100], *gOldPtParamMC[100], *gNewPtParam[100];
@@ -34,14 +72,7 @@ void runGenTunerLoop(TString smode = "local", TString inputFileName = "AliAOD.ro
     }
     
     // run the generator tuner
-    if (resume != "y") {
-      if (iStep == 0)
-	gSystem->Exec(Form("root -b -q $WORK/Macros/MuonEfficiency/GenTuner/runGenTuner.C\\(\\\"%s\\\",\\\"%s\\\",%d\\)",
-			   smode.Data(), inputFileName.Data(), iStep));
-      else
-	gSystem->Exec(Form("root -b -q runGenTuner.C\\(\\\"%s\\\",\\\"%s\\\",%d,\\\'k\\\'\\)",
-			   smode.Data(), inputFileName.Data(), iStep));
-    }
+    if (resume != "y") gSystem->Exec(Form("root -b -q runGenTuner.C\\(\\\"%s\\\",\\\"%s\\\",%d,\\\'k\\\'\\)",smode.Data(), inputFileName.Data(), iStep));
     
     // get the new generator parameters and fill trending plots
     TFile *inFile = TFile::Open(inFileName.Data(),"READ");
@@ -167,10 +198,29 @@ void runGenTunerLoop(TString smode = "local", TString inputFileName = "AliAOD.ro
     }
   }
   
-  // print and plot last results and save trending plots
+  // save trending plots
   TString inFileName = Form("Results_step%d.root",nStep-1);
   TFile *inFile = TFile::Open(inFileName.Data(),"UPDATE");
   if (inFile && inFile->IsOpen()) {
+    cPtParams->Write(0x0, TObject::kOverwrite);
+    cYParams->Write(0x0, TObject::kOverwrite);
+  }
+  inFile->Close();
+  
+  // print and plot last results
+  ShowResults(nStep);
+  
+}
+
+//______________________________________________________________________________
+void ShowResults(Int_t nStep)
+{
+  /// print and plot last results
+  
+  TString inFileName = Form("Results_step%d.root",nStep-1);
+  TFile *inFile = TFile::Open(inFileName.Data(),"READ");
+  if (inFile && inFile->IsOpen()) {
+    
     TF1 *fPtFuncNew = static_cast<TF1*>(inFile->FindObjectAny("fPtFuncNew"));
     TF1 *fYFuncNew = static_cast<TF1*>(inFile->FindObjectAny("fYFuncNew"));
     if (fPtFuncNew && fYFuncNew) {
@@ -183,12 +233,19 @@ void runGenTunerLoop(TString smode = "local", TString inputFileName = "AliAOD.ro
       for (Int_t i = 0; i < fYFuncNew->GetNpar()-1; i++) printf("%g, ", fYFuncNew->GetParameter(i));
       printf("%g};\n\n", fYFuncNew->GetParameter(fYFuncNew->GetNpar()-1));
     }
+    
     TCanvas *cRes = static_cast<TCanvas*>(inFile->FindObjectAny("cRes"));
-    if (cRes) cRes->DrawClone();
+    if (cRes) cRes->Draw();
+    
     TCanvas *cRat = static_cast<TCanvas*>(inFile->FindObjectAny("cRat"));
-    if (cRat) cRat->DrawClone();
-    cPtParams->Write(0x0, TObject::kOverwrite);
-    cYParams->Write(0x0, TObject::kOverwrite);
+    if (cRat) cRat->Draw();
+    
+    TCanvas *cPtParams = static_cast<TCanvas*>(inFile->FindObjectAny("cPtParams"));
+    if (cPtParams) cPtParams->Draw();
+    
+    TCanvas *cYParams = static_cast<TCanvas*>(inFile->FindObjectAny("cYParams"));
+    if (cYParams) cYParams->Draw();
+    
   }
   inFile->Close();
   

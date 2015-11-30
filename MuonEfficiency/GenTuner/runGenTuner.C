@@ -106,9 +106,9 @@ void UpdateParametersAndRanges(Int_t iStep);
 void runGenTuner(TString smode = "local", TString inputFileName = "AliAOD.root",
 		 Int_t iStep = -1, char overwrite = '\0')
 {
-  /// Study the MUON performances
+  /// Tune single muon kinematics distribution
   
-  gROOT->LoadMacro("$WORK/Macros/Facilities/runTaskFacilities.C");
+  gROOT->LoadMacro("$HOME/Work/Alice/Macros/Facilities/runTaskFacilities.C");
   
   // --- Check runing mode ---
   Int_t mode = GetMode(smode, inputFileName);
@@ -126,6 +126,27 @@ void runGenTuner(TString smode = "local", TString inputFileName = "AliAOD.root",
   fileList.Add(new TObjString("AliAnalysisTaskGenTuner.cxx"));
   fileList.Add(new TObjString("AliAnalysisTaskGenTuner.h"));
   CopyFileLocally(pathList, fileList, overwrite);
+  CopyInputFileLocally("/Users/pillot/Work/Alice/Data/2015/LHC15g/muon_calo_pass1/GenTuner/CMSL7/AnalysisResults.root", "ReferenceResults.root", overwrite);
+  fileList.Add(new TObjString("ReferenceResults.root"));
+  
+  // --- saf3 case ---
+  if (mode == kSAF3Connect) {
+    
+    // run on SAF3
+    if (!RunAnalysisOnSAF3(fileList, aliphysicsVersion, inputFileName)) return;
+    
+    // draw the results locally
+    outFile = TFile::Open(Form("Results_step%d.root", iStep),"READ");
+    if (outFile && outFile->IsOpen()) {
+      outFile->FindObjectAny("cRes")->Draw();
+      outFile->FindObjectAny("cRat")->Draw();
+      outFile->Close();
+    }
+    
+    // do not try to re-run locally!
+    return;
+    
+  }
   
   // --- prepare environment ---
   TString extraLibs="PWGmuon";
@@ -205,8 +226,8 @@ TObject* CreateAnalysisTrain(TObject* alienHandler, Int_t iStep)
     Error("CreateAnalysisTrain","AliAnalysisTaskGenTuner not created!");
     return 0x0;
   }
-  if (applyPhysicsSelection) genTuner->SelectCollisionCandidates(AliVEvent::kMUU7);
-//  if (applyPhysicsSelection) genTuner->SelectCollisionCandidates(AliVEvent::kMUS7);
+//  if (applyPhysicsSelection) genTuner->SelectCollisionCandidates(AliVEvent::kMUU7);
+  if (applyPhysicsSelection) genTuner->SelectCollisionCandidates(AliVEvent::kMUS7);
 //  if (applyPhysicsSelection) genTuner->SelectCollisionCandidates(AliVEvent::kMUSH7);
   //genTuner->SelectCentrality(0., 90.);
   genTuner->SetMuonTrackCuts(trackCuts);
@@ -215,21 +236,7 @@ TObject* CreateAnalysisTrain(TObject* alienHandler, Int_t iStep)
   
   if (isMC) {
     
-    //genTuner->SetDataFile("/Users/pillot/Work/Alice/Work/Data/2013/LHC13d/muon_pass2/AOD/GenTuner/pT1GeV/AnalysisResults.root");
-    //genTuner->SetDataFile("/Users/pillot/Work/Alice/Work/Data/2013/LHC13d/muon_pass2/AOD/GenTuner/pT2GeV/AnalysisResults.root");
-    //genTuner->SetDataFile("/Users/pillot/Work/Alice/Work/Data/2013/LHC13e/muon_pass2/AOD/GenTuner/pT1GeV/AnalysisResults.root");
-    //genTuner->SetDataFile("/Users/pillot/Work/Alice/Work/Data/2013/LHC13e/muon_pass2/AOD/GenTuner/pT2GeV/AnalysisResults.root");
-    //genTuner->SetDataFile("/Users/pillot/Work/Alice/Work/Data/2013/LHC13de/muon_pass2/AOD/GenTuner/pT1GeV/AnalysisResults.root");
-    //genTuner->SetDataFile("/Users/pillot/Work/Alice/Work/Data/2013/LHC13de/muon_pass2/AOD/GenTuner/pT2GeV/AnalysisResults.root");
-    //genTuner->SetDataFile("/Users/pillot/Work/Alice/Work/Data/2013/LHC13f/muon_calo/AOD127/GenTuner/pT1GeV/AnalysisResults.root");
-    //genTuner->SetDataFile("/Users/pillot/Work/Alice/Work/Data/2013/LHC13f/muon_calo/AOD127/GenTuner/pT2GeV/AnalysisResults.root");
-    //genTuner->SetDataFile("/Users/pillot/Work/Alice/Work/Data/2013/LHC13f/muon_calo/AOD127/GenTuner/pT4GeV/AnalysisResults.root");
-    //genTuner->SetDataFile("/Users/pillot/Work/Alice/Work/Data/2013/LHC13f/muon_calo/AOD127/GenTuner/pT6GeV/AnalysisResults.root");
-    //genTuner->SetDataFile("/Users/pillot/Work/Alice/Work/Data/2013/LHC13f/muon_calo/AOD127/GenTuner/pT1GeV_y2.5-3/AnalysisResults.root");
-    //genTuner->SetDataFile("/Users/pillot/Work/Alice/Work/Data/2013/LHC13f/muon_calo/AOD127/GenTuner/pT1GeV_y3-4/AnalysisResults.root");
-    //genTuner->SetDataFile("/Users/pillot/Work/Alice/Data/2015/LHC15g/muon_calo_pass1/GenTuner/CMSL7/AnalysisResults.root");
-    //genTuner->SetDataFile("/Users/pillot/Work/Alice/Data/2015/LHC15g/muon_calo_pass1/GenTuner/any/AnalysisResults.root");
-    genTuner->SetDataFile("/Users/pillot/Work/Alice/Data/2015/LHC15g/muon_calo_pass1/GenTuner/CMUU7/AnalysisResults.root");
+    genTuner->SetDataFile("ReferenceResults.root");
     
     // update the parameters and the fitting ranges from the previous step if any
     UpdateParametersAndRanges(iStep);
