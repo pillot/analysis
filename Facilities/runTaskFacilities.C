@@ -7,7 +7,7 @@
  *
  */
 
-enum {kLocal, kProof, kProofLite, kGrid, kTerminate};
+enum {kLocal, kProof, kProofLite, kGrid, kTerminate, kSAF3Connect};
 
 //______________________________________________________________________________
 Int_t GetMode(TString smode, TString input)
@@ -19,6 +19,8 @@ Int_t GetMode(TString smode, TString input)
   else if ((smode == "test" || smode == "offline" || smode == "submit" || smode == "full" ||
 	    smode == "merge" || smode == "terminate") && input.EndsWith(".txt")) return kGrid;
   else if (smode == "terminateonly") return kTerminate;
+  else if (smode == "saf3")
+    return (gSystem->GetFromPipe("hostname") == "nansafmaster3.in2p3.fr") ? kProof : kSAF3Connect;
   return -1;
 }
 
@@ -40,6 +42,8 @@ TString GetDataType(TString input)
 void CopyFileLocally(TList &pathList, TList &fileList, char overwrite = '\0')
 {
   /// Copy files needed for this analysis
+  
+  if (gSystem->GetFromPipe("hostname") == "nansafmaster3.in2p3.fr") return; // files already there
   
   TIter nextFile(&fileList);
   TObjString *file;
@@ -80,6 +84,83 @@ void CopyFileLocally(TList &pathList, TList &fileList, char overwrite = '\0')
     }
     
   }
+  
+}
+
+//______________________________________________________________________________
+void CopyInputFileLocally(TString inFile, TString outFileName, char overwrite = '\0')
+{
+  /// Copy an input file needed for this analysis eventually changing its name
+  
+  if (gSystem->GetFromPipe("hostname") == "nansafmaster3.in2p3.fr") return; // files already there
+  
+  if (overwrite != 'a' && overwrite != 'k') {
+    
+    overwrite = '\0';
+    
+    if (!gSystem->AccessPathName(outFileName.Data())) {
+      
+      while (overwrite != 'y' && overwrite != 'n') {
+        cout<<Form("input file %s exist in current directory. Overwrite? [y=yes, n=no] ",outFileName.Data())<<flush;
+        cin>>overwrite;
+      }
+      
+    } else overwrite = 'y';
+    
+  }
+  
+  if (overwrite == 'y' || overwrite == 'a' || (overwrite == 'k' && gSystem->AccessPathName(outFileName.Data()))) {
+    
+    if (!gSystem->AccessPathName(Form("%s", gSystem->ExpandPathName(inFile.Data()))))
+      gSystem->Exec(Form("cp -p %s %s", inFile.Data(), outFileName.Data()));
+    else cout<<Form("file %s not found\n",inFile.Data())<<flush;
+    
+  }
+  
+}
+
+//______________________________________________________________________________
+Bool_t CopyFileOnSAF3(TList &fileList, TString dataset)
+{
+  /// Copy files needed for this analysis from current to saf3 directory
+  
+  TString saf3dir = gSystem->ExpandPathName("$HOME/saf3");
+  if (gSystem->AccessPathName(Form("%s/.vaf", saf3dir.Data()))) {
+    cout<<"saf3 folder is not mounted"<<endl;
+    cout<<"please retry as it can take some time to mount it"<<endl;
+    return kFALSE;
+  }
+  
+  TString remoteLocation = gSystem->pwd();
+  remoteLocation.ReplaceAll(gSystem->Getenv("HOME"),saf3dir.Data());
+  if (gSystem->AccessPathName(remoteLocation.Data())) gSystem->Exec(Form("mkdir -p %s", remoteLocation.Data()));
+  
+  TIter nextFile(&fileList);
+  TObjString *file;
+  while ((file = static_cast<TObjString*>(nextFile()))) {
+    
+    if (gSystem->AccessPathName(file->GetName())) {
+      cout<<Form("file %s not found in current directory\n",file->GetName())<<flush;
+      return kFALSE;
+    }
+    
+    TString remoteFile = remoteLocation+"/"+file->GetName();
+    gSystem->Exec(Form("cp -p %s %s", file->GetName(), remoteFile.Data()));
+    
+  }
+  
+  gSystem->Exec(Form("cp runAnalysis.sh %s/runAnalysis.sh", remoteLocation.Data()));
+  
+  if (gSystem->AccessPathName(Form("%s/Work/Alice/Macros/Facilities", saf3dir.Data())))
+    gSystem->Exec(Form("mkdir -p %s/Work/Alice/Macros/Facilities", saf3dir.Data()));
+  gSystem->Exec("cp -p $HOME/Work/Alice/Macros/Facilities/runTaskFacilities.C $HOME/saf3/Work/Alice/Macros/Facilities/runTaskFacilities.C");
+  
+  if (dataset.EndsWith(".txt")) {
+    gSystem->Exec(Form("cat %s | awk {'print $1\";Mode=cache\"}' > datasetSaf3.txt", dataset.Data()));
+    gSystem->Exec(Form("cp datasetSaf3.txt %s/datasetSaf3.txt", remoteLocation.Data()));
+  }
+  
+  return kTRUE;
   
 }
 
@@ -130,6 +211,7 @@ void LoadAlirootOnProof(TString& aaf, TString rootVersion, TString aliphysicsVer
   // connect
   if (aaf == "prooflite") TProof::Open("");
   //  if (aaf == "prooflite") TProof::Open("workers=2");
+  else if (aaf == "saf3") TProof::Open("pod://");
   else {
     TString location, nWorkers;
     if (aaf == "caf") {
@@ -150,10 +232,14 @@ void LoadAlirootOnProof(TString& aaf, TString rootVersion, TString aliphysicsVer
   list->Add(new TNamed("ALIROOT_MODE", alirootMode.Data()));
   list->Add(new TNamed("ALIROOT_EXTRA_LIBS", extraLibs.Data()));
   list->Add(new TNamed("ALIROOT_EXTRA_INCLUDES", extraIncs.Data()));
-  list->Add(new TNamed("ALIROOT_ENABLE_ALIEN", "1"));
+//  list->Add(new TNamed("ALIROOT_ENABLE_ALIEN", "1"));
   if (aaf == "prooflite") {
     gProof->UploadPackage("$ALICE_ROOT/ANALYSIS/macros/AliRootProofLite.par");
     gProof->EnablePackage("$ALICE_ROOT/ANALYSIS/macros/AliRootProofLite.par", list);
+  } else if (aaf == "saf3") {
+    TString home = gSystem->Getenv("HOME");
+    gProof->UploadPackage(Form("%s/AliceVaf.par", home.Data()));
+    gProof->EnablePackage(Form("%s/AliceVaf.par", home.Data()), list);
   } else gProof->EnablePackage(Form("VO_ALICE@AliPhysics::%s",aliphysicsVersion.Data()), list, notOnClient);
   
   // Optionally add packages
@@ -342,5 +428,68 @@ void StartAnalysis(Int_t mode, TObject* inputObj)
       mgr->StartAnalysis("local", static_cast<TChain*>(inputObj));
     }
   }
+}
+
+//______________________________________________________________________________
+Bool_t RunAnalysisOnSAF3(TList &fileList, TString aliphysicsVersion, TString dataset)
+{
+  /// Run analysis on SAF3
+  
+  // --- mount nansafmaster3 ---
+  TString saf3dir = gSystem->ExpandPathName("$HOME/saf3");
+  if (gSystem->AccessPathName(saf3dir.Data())) gSystem->Exec(Form("mkdir %s", saf3dir.Data()));
+  if (gSystem->AccessPathName(Form("%s/.vaf", saf3dir.Data()))) {
+    Int_t ret = gSystem->Exec(Form("sshfs -o ssh_command=\"gsissh -p1975\" nansafmaster3.in2p3.fr: %s", saf3dir.Data()));
+    if (ret != 0) {
+      cout<<"mounting of saf3 folder failed"<<endl;
+      return kFALSE;
+    }
+  }
+  
+  // --- create the executable to run on SAF3 ---
+  CreateSAF3Executable(dataset);
+  
+  // --- copy files needed for this analysis ---
+  if (!CopyFileOnSAF3(fileList, dataset)) {
+    cout << "cp problem" << endl;
+    return kFALSE;
+  }
+  
+  // --- change the AliPhysics version on SAF3 ---
+  gSystem->Exec(Form("sed -i '' 's/VafAliPhysicsVersion.*/VafAliPhysicsVersion=\"%s\"/g' $HOME/saf3/.vaf/vaf.conf", aliphysicsVersion.Data()));
+  
+  // --- enter SAF3 and run analysis ---
+  TString analysisLocation = gSystem->pwd();
+  analysisLocation.ReplaceAll(Form("%s/", gSystem->Getenv("HOME")), "");
+  gSystem->Exec(Form("gsissh -p 1975 -t -Y nansafmaster3.in2p3.fr 'cd %s; ~/saf3-enter \"\" \"./runAnalysis.sh; exit\"'", analysisLocation.Data()));
+  
+  // --- copy analysis results (assuming analysis run smootly) ---
+  gSystem->Exec(Form("cp -p %s/%s/*.root .", saf3dir.Data(), analysisLocation.Data()));
+  
+  return kTRUE;
+  
+}
+
+//______________________________________________________________________________
+void CreateSAF3Executable(TString dataset)
+{
+  /// Create the executable to run on SAF3
+  ofstream outFile("runAnalysis.sh");
+  outFile << "#!/bin/bash" << endl;
+  outFile << "vafctl start" << endl;
+  Int_t nWorkers = 88;
+  outFile << "nWorkers=" << nWorkers << endl;
+  outFile << "let \"nWorkers -= `pod-info -n`\"" << endl;
+  outFile << "echo \"requesting $nWorkers additional workers\"" << endl;
+  outFile << "vafreq $nWorkers" << endl;
+  outFile << "vafwait " << nWorkers << endl;
+  outFile << "root -b -q ";
+  TString macro = gSystem->GetFromPipe("tail -n 1 $HOME/.root_hist | sed 's/(.*)//g;s/^\.x\ //g;s:^.*/::g'");
+  TString arg = gSystem->GetFromPipe("tail -n 1 $HOME/.root_hist | sed 's/.*(/(/g'");
+  if (dataset.EndsWith(".txt")) arg.ReplaceAll(dataset.Data(), "datasetSaf3.txt");
+  outFile << "'" << macro.Data() << arg.Data() << "'" << endl;
+  outFile << "vafctl stop" << endl;
+  outFile.close();
+  gSystem->Exec("chmod u+x runAnalysis.sh");
 }
 
