@@ -1,0 +1,38 @@
+Packages =
+{
+  "VO_ALICE@AliRoot::v5-07-11-1",
+  "VO_ALICE@APISCONFIG::V1.1x"
+};
+Jobtag =
+{
+  "comment:LHC period LHC15n - MUON test reco"
+};
+OutputDir = "/alice/cern.ch/user/p/ppillot/Data/LHC15n/reco/PbPbParam_AlignV6/$1/$2";
+Price = 1;
+Executable = "runRecoChunk.sh";
+Arguments = "$2.root";
+InputFile =
+{
+  "LF:/alice/cern.ch/user/p/ppillot/Data/LHC15n/reco/PbPbParam_AlignV6/rec.C",
+  "LF:/alice/data/2015/LHC15n/$1/muon_calo_pass1/OCDB.root",
+  "LF:/alice/data/2015/LHC15n/$1/raw/$2.root"
+};
+User = "ppillot";
+OutputArchive =
+{
+  "log_archive:rec.log@disk=1",
+  "root_archive.zip:AliESDs.root,@disk=3"
+};
+TTL = "86400";
+Workdirectorysize =
+{
+  "6000MB"
+};
+GUIDFILE = "guid.txt";
+JDLVariables =
+{
+  "Packages",
+  "OutputDir"
+};
+Validationcommand = "/alice/cern.ch/user/p/ppillot/Data/LHC15n/reco/PbPbParam_AlignV6/validation.sh"
+
