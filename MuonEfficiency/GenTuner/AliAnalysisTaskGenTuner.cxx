@@ -37,6 +37,7 @@
 #include "AliAODDimuon.h"
 
 // ANALYSIS includes
+#include "AliMultSelection.h"
 #include "AliAnalysisTaskSE.h"
 #include "AliAnalysisManager.h"
 
@@ -175,8 +176,9 @@ void AliAnalysisTaskGenTuner::UserExec(Option_t *)
   if ( !aod ) return;
   
   // select the centrality range
-  Float_t centrality = aod->GetCentrality()->GetCentralityPercentileUnchecked("V0M");
-  if (centrality <= fCentMin || centrality > fCentMax) return;
+  AliMultSelection *multSelection = static_cast<AliMultSelection*>(aod->FindListObject("MultSelection"));
+  Float_t centrality = multSelection ? multSelection->GetMultiplicityPercentile("V0M") : -1.;
+  if (centrality < fCentMin || centrality > fCentMax) return;
   
   // fill the MC part if running on MC
   TArrayD weight;
