@@ -21,8 +21,11 @@
 // kinematics range for histogram projection (pT, y, phi, charge)
 const Float_t kineRange[4][2] = {{-999., 999.}, {-999., 999.}, {-999., 999.}, {-999., 999.}};
 
+// centrality range for each input file
+const Float_t centRange[2][2] = {{-999., 999.}, {-999., 999.}};
+
 // in case the ouput containers of the efficiency task have an extension in their name (like in the train)
-TString extension[2] = {"_1","_2"};
+TString extension[2] = {"","_2"};
 
 const Int_t nHist = 3;
 TString sRes[nHist] = {"fHistPt", "fHistY", "fHistPhi"};
@@ -32,6 +35,7 @@ void LoadRunWeights(TString fileName);
 void AddHisto(TString sfile[2], TH1 *hRes[nHist][3], Double_t weight);
 void AddHistoProj(TString sfile[2], TH1 *hProj[4][3], Double_t weight);
 void SetKineRange(THnSparse& hKine);
+void SetCentRange(THnSparse& hKine, const Float_t centRange[2]);
 
 //______________________________________________________________________________
 void CompareMuonDistributions(TString dir1, TString dir2, TString fileNameWeights = "")
@@ -176,6 +180,7 @@ void AddHistoProj(TString sfile[2], TH1 *hProj[4][3], Double_t weight)
       THnSparse *hKine = static_cast<THnSparse*>(list->FindObject("hKine"));
       if (!hKine) return;
       SetKineRange(*hKine);
+      SetCentRange(*hKine, centRange[j]);
       for (Int_t i = 0; i < 4; i++) {
         if (!hProj[i][j]) {
           hProj[i][j] = hKine->Projection(i+1,"eo");
@@ -210,6 +215,20 @@ void SetKineRange(THnSparse& hKine)
     Int_t upBin = a->FindBin(kineRange[i][1]);
     a->SetRange(lowBin, upBin);
   }
+  
+}
+
+//______________________________________________________________________________
+void SetCentRange(THnSparse& hKine, const Float_t centRange[2])
+{
+  /// Sets the centrality range for histogram projection
+  /// If the range exceeds the minimum (maximum) it includes the underflow (overflow)
+  /// in the integration (same behaviour as if the range is not set)
+  
+  TAxis *a = hKine.GetAxis(0);
+  Int_t lowBin = a->FindBin(centRange[0]);
+  Int_t upBin = a->FindBin(centRange[1]);
+  a->SetRange(lowBin, upBin);
   
 }
 
