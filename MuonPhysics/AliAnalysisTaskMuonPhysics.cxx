@@ -34,7 +34,7 @@
 #include "AliVParticle.h"
 #include "AliESDMuonTrack.h"
 #include "AliAODTrack.h"
-#include "AliCentrality.h"
+#include "AliMultSelection.h"
 #include "AliESDVertex.h"
 #include "AliVVertex.h"
 #include "AliMultiplicity.h"
@@ -341,10 +341,10 @@ void AliAnalysisTaskMuonPhysics::UserExec(Option_t *)
   if (ievent == 8705) return;
   */
   // get the centrality percentile
-  Float_t centrality = evt->GetCentrality()->GetCentralityPercentile("V0M");
-//  Float_t centrality = evt->GetCentrality()->GetCentralityPercentile("V0A");
-  if (centrality <= fCentMin || centrality > fCentMax) return;
-  TString centKey = (centrality >0 && centrality < 100) ? Form("%d", (Int_t)centrality) : "";
+  AliMultSelection *multSelection = static_cast<AliMultSelection*>(evt->FindListObject("MultSelection"));
+  Float_t centrality = multSelection ? multSelection->GetMultiplicityPercentile("V0M") : -1.;
+  if (centrality < fCentMin || centrality > fCentMax) return;
+  TString centKey = (centrality >= 0 && centrality < 100) ? Form("%d", (Int_t)centrality) : "";
   
   // get the tracklet multiplicity
   Int_t ntracklets = 0;
