@@ -117,7 +117,7 @@ Double_t yRange[2] = {-4.3, -2.3};
 
 Bool_t isMC = kTRUE;
 Bool_t applyPhysicsSelection = kFALSE;
-TString referenceDataFile = "/Users/pillot/Work/Alice/Data/2015/LHC15n/muon_calo_pass1/AODs/GenTuner/AnalysisResults.root";
+TString referenceDataFile = "/Users/pillot/Work/Alice/Data/2015/LHC15n/muon_calo_pass1/AODs/GenTuner/CMUS7/AnalysisResults.root";
 
 
 void UpdateParametersAndRanges(Int_t iStep);
@@ -132,7 +132,7 @@ void runGenTuner(TString smode = "local", TString inputFileName = "AliAOD.Muons.
   // --- general analysis setup ---
   TString rootVersion = "";
   TString alirootVersion = "";
-  TString aliphysicsVersion = "vAN-20160104-1";
+  TString aliphysicsVersion = "vAN-20160112-1";
   TString extraLibs="";
   TString extraIncs="include";
   TString extraTasks="AliAnalysisTaskGenTuner";
@@ -164,6 +164,7 @@ void runGenTuner(TString smode = "local", TString inputFileName = "AliAOD.Muons.
     CopyInputFileLocally(referenceDataFile.Data(), "ReferenceResults.root", overwrite);
     fileList.Add(new TObjString("ReferenceResults.root"));
   }
+//  fileList.Add(new TObjString("runWeight.txt"));
   
   // --- run the analysis (saf3 is a special case as the analysis is launched on the server) ---
   if (mode == kSAF3Connect) {
@@ -238,8 +239,6 @@ TObject* CreateAnalysisTrain(Int_t iStep)
   trackCuts.SetAllowDefaultParams();
   trackCuts.SetFilterMask(AliMuonTrackCuts::kMuMatchLpt | AliMuonTrackCuts::kMuEta |
 			  AliMuonTrackCuts::kMuThetaAbs | AliMuonTrackCuts::kMuPdca);
-//  trackCuts.SetFilterMask(AliMuonTrackCuts::kMuMatchHpt | AliMuonTrackCuts::kMuEta |
-//			  AliMuonTrackCuts::kMuThetaAbs | AliMuonTrackCuts::kMuPdca);
   if (isMC) trackCuts.SetIsMC(kTRUE);
   
   // generator tuner
@@ -256,6 +255,8 @@ TObject* CreateAnalysisTrain(Int_t iStep)
   genTuner->SetMuonTrackCuts(trackCuts);
   genTuner->SetMuonPtCut(1.);
   genTuner->SetMuonGenPtCut(0.8);
+  
+//  genTuner->RunWeight("runWeight.txt");
   
   if (isMC) {
     
@@ -274,6 +275,10 @@ TObject* CreateAnalysisTrain(Int_t iStep)
     
     // enable the weighing
     if (iStep > 0) genTuner->Weight(kTRUE);
+    
+    // enable the run weighing
+    if (iStep > 0) genTuner->RunWeight("Results_step0.root", "ReferenceResults.root");
+//    if (iStep > 0) genTuner->RunWeight("Results_step0.root", "runWeight.txt");
     
   }
   

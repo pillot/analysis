@@ -15,6 +15,8 @@
 class TH1;
 class TF1;
 class TCanvas;
+class THashList;
+class AliCounterCollection;
 
 //________________________________________________________________________
 class AliAnalysisTaskGenTuner : public AliAnalysisTaskSE {
@@ -41,8 +43,14 @@ public:
   /// set the generated muon low pT cut
   void SetMuonGenPtCut(Double_t cut) {fGenPtCut = cut;}
   
-  /// weight simulated/reconstructed particles using using given functions
+  /// weight simulated/reconstructed particles using given functions
   void Weight(Bool_t flag) {fWeight = flag;}
+  
+  // weight each run using the values in the given text file
+  void RunWeight(TString &fileName);
+  
+  // weight each run using the original/new number of events in the given text of root files
+  void RunWeight(TString &fileNameOrigin, TString &fileNameNew);
   
   // set the name of the data file used in terminate to tune the generated distributions
   void SetDataFile(const Char_t* name) {fDataFile = name;}
@@ -99,6 +107,15 @@ private:
   // generated y fit function ratio
   Double_t YRat(const Double_t *x, const Double_t *p);
   
+  // Load the weights (or number of events) per run
+  THashList* LoadRunWeights(const TString &fileName);
+  
+  // Load the weights (or number of events) per run from the given text file
+  THashList* LoadRunWeightsFromTextFile(const TString &fileName);
+  
+  // Load the number of events per run from the AliCounterCollection in the given root file
+  THashList* LoadRunWeightsFromRootFile(const TString &fileName);
+  
 private:
   
   enum eList {
@@ -111,6 +128,7 @@ private:
   };
   
   TObjArray*  fList; //!< List of output object
+  AliCounterCollection* fEventCounters; //!< event statistics
   
   Double_t fCentMin;                ///< select centrality > fCentMin
   Double_t fCentMax;                ///< select centrality <= fCentMax
@@ -127,10 +145,12 @@ private:
   TF1     *fYFuncNew;               ///< new generated y fit function with new parameters
   TF1     *fYFunc;                  //!< current generated y fit function with current parameters
   TF1     *fYFuncMC;                //!< current generated y fit function with current parameters in MC range
+  THashList *fRunWeights;           ///< list of weights for every runs
+  Double_t fRunWeight;              //!< weight of the current run
   TCanvas *fcRes;                   //!< generated and reconstructed distributions
   TCanvas *fcRat;                   //!< data/MC ratios
   
-  ClassDef(AliAnalysisTaskGenTuner, 2);
+  ClassDef(AliAnalysisTaskGenTuner, 3);
 };
 
 //________________________________________________________________________

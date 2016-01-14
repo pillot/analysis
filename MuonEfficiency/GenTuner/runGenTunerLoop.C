@@ -8,7 +8,7 @@
  */
 
 
-TString referenceDataFile = "/Users/pillot/Work/Alice/Data/2015/LHC15n/muon_calo_pass1/AODs/GenTuner/AnalysisResults.root";
+TString referenceDataFile = "/Users/pillot/Work/Alice/Data/2015/LHC15n/muon_calo_pass1/AODs/GenTuner/CMUS7/AnalysisResults.root";
 
 
 //______________________________________________________________________________
@@ -19,7 +19,7 @@ void runGenTunerLoop(TString smode = "local", TString inputFileName = "AliAOD.ro
   if (nStep <= 0) return;
   
   // --- general analysis setup ---
-  TString aliphysicsVersion = "vAN-20160104-1";
+  TString aliphysicsVersion = "vAN-20160112-1";
   TList pathList; pathList.SetOwner();
   pathList.Add(new TObjString("$WORK/Macros/MuonEfficiency/GenTuner"));
   TList fileList; fileList.SetOwner();
@@ -39,6 +39,7 @@ void runGenTunerLoop(TString smode = "local", TString inputFileName = "AliAOD.ro
   CopyFileLocally(pathList, fileList);
   CopyInputFileLocally(referenceDataFile.Data(), "ReferenceResults.root");
   fileList.Add(new TObjString("ReferenceResults.root"));
+//  fileList.Add(new TObjString("runWeight.txt"));
   
   // --- Check runing mode ---
   Int_t mode = GetMode(smode, inputFileName);

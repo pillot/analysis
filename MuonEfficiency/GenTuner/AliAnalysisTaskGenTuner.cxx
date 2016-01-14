@@ -16,6 +16,7 @@
 #include <Riostream.h>
 
 // ROOT includes
+#include <TSystem.h>
 #include <TMath.h>
 #include <TH1.h>
 #include <TH1D.h>
@@ -26,6 +27,8 @@
 #include <TString.h>
 #include <TObjArray.h>
 #include <TLegend.h>
+#include <THashList.h>
+#include <TParameter.h>
 
 // STEER includes
 #include "AliLog.h"
@@ -35,10 +38,13 @@
 #include "AliAODMCParticle.h"
 #include "AliAODTrack.h"
 #include "AliAODDimuon.h"
+#include "AliCounterCollection.h"
 
 // ANALYSIS includes
 #include "AliMultSelection.h"
 #include "AliAnalysisTaskSE.h"
+#include "AliAnalysisDataSlot.h"
+#include "AliAnalysisDataContainer.h"
 #include "AliAnalysisManager.h"
 
 #include "AliAnalysisTaskGenTuner.h"
@@ -50,6 +56,7 @@ ClassImp(AliAnalysisTaskGenTuner)
 AliAnalysisTaskGenTuner::AliAnalysisTaskGenTuner() :
 AliAnalysisTaskSE(),
 fList(0x0),
+fEventCounters(0x0),
 fCentMin(-FLT_MAX),
 fCentMax(FLT_MAX),
 fMuonTrackCuts(0x0),
@@ -65,6 +72,8 @@ fYFuncOld(0x0),
 fYFuncNew(0x0),
 fYFunc(0x0),
 fYFuncMC(0x0),
+fRunWeights(0x0),
+fRunWeight(1.),
 fcRes(0x0),
 fcRat(0x0)
 {
@@ -75,6 +84,7 @@ fcRat(0x0)
 AliAnalysisTaskGenTuner::AliAnalysisTaskGenTuner(const char *name) :
 AliAnalysisTaskSE(name),
 fList(0x0),
+fEventCounters(0x0),
 fCentMin(-FLT_MAX),
 fCentMax(FLT_MAX),
 fMuonTrackCuts(0x0),
@@ -90,6 +100,8 @@ fYFuncOld(0x0),
 fYFuncNew(0x0),
 fYFunc(0x0),
 fYFuncMC(0x0),
+fRunWeights(0x0),
+fRunWeight(1.),
 fcRes(0x0),
 fcRat(0x0)
 {
@@ -97,6 +109,7 @@ fcRat(0x0)
   
   // Output slot #1 writes into a TObjArray container
   DefineOutput(1,TObjArray::Class());
+  DefineOutput(2,AliCounterCollection::Class());
   
 }
 
@@ -105,7 +118,10 @@ AliAnalysisTaskGenTuner::~AliAnalysisTaskGenTuner()
 {
   /// Destructor
   
-  if (!AliAnalysisManager::GetAnalysisManager()->IsProofMode()) delete fList;
+  if (!AliAnalysisManager::GetAnalysisManager()->IsProofMode()) {
+    delete fList;
+    delete fEventCounters;
+  }
   delete fMuonTrackCuts;
   delete fPtFuncOld;
   delete fPtFuncNew;
@@ -115,6 +131,7 @@ AliAnalysisTaskGenTuner::~AliAnalysisTaskGenTuner()
   delete fYFuncNew;
   delete fYFunc;
   delete fYFuncMC;
+  delete fRunWeights;
   delete fcRes;
   delete fcRat;
   
@@ -150,8 +167,14 @@ void AliAnalysisTaskGenTuner::UserCreateOutputObjects()
   hPhiRec->Sumw2();
   fList->AddAtAndExpand(hPhiRec, kPhiRec);
   
+  // initialize event counters
+  fEventCounters = new AliCounterCollection(GetOutputSlot(2)->GetContainer()->GetName());
+  fEventCounters->AddRubric("run", 100000);
+  fEventCounters->Init();
+  
   // Post data at least once per task to ensure data synchronisation (required for merging)
   PostData(1, fList);
+  PostData(2, fEventCounters);
   
 }
 
@@ -164,6 +187,12 @@ void AliAnalysisTaskGenTuner::NotifyRun()
   if (!fMuonTrackCuts) AliFatal("You must specify the requested selections (AliMuonTrackCut obj is missing)");
   fMuonTrackCuts->SetRun(fInputHandler);
   
+  // set the current run weight
+  if (fRunWeights) {
+    TParameter<Double_t> *weight = static_cast<TParameter<Double_t>*>(fRunWeights->FindObject(Form("%d", fCurrentRunNumber)));
+    fRunWeight = weight ? weight->GetVal() : 0.;
+  }
+  
 }
 
 //________________________________________________________________________
@@ -175,10 +204,16 @@ void AliAnalysisTaskGenTuner::UserExec(Option_t *)
   AliAODEvent* aod = dynamic_cast<AliAODEvent*>(InputEvent());
   if ( !aod ) return;
   
+  // trigger selection
+  //if (!aod->GetFiredTriggerClasses().Contains("CINT7-B-NOPF-MUFAST")) return;
+  
   // select the centrality range
   AliMultSelection *multSelection = static_cast<AliMultSelection*>(aod->FindListObject("MultSelection"));
   Float_t centrality = multSelection ? multSelection->GetMultiplicityPercentile("V0M") : -1.;
   if (centrality < fCentMin || centrality > fCentMax) return;
+  
+  // analyzed events
+  fEventCounters->Count(Form("run:%d", fCurrentRunNumber));
   
   // fill the MC part if running on MC
   TArrayD weight;
@@ -203,7 +238,7 @@ void AliAnalysisTaskGenTuner::UserExec(Option_t *)
 	}
       } else weight[i] = 1.;
       
-      Double_t w = weight[i];
+      Double_t w = fRunWeight * weight[i];
       ((TH1*)fList->UncheckedAt(kPtGen))->Fill(pT, w);
       ((TH1*)fList->UncheckedAt(kYGen))->Fill(y, w);
       ((TH1*)fList->UncheckedAt(kPhiGen))->Fill(mctrack->Phi()*TMath::RadToDeg(), w);
@@ -222,7 +257,7 @@ void AliAnalysisTaskGenTuner::UserExec(Option_t *)
     if (!fMuonTrackCuts->IsSelected(track) || (fPtCut > 0. && pT < fPtCut) ||
 	(MCEvent() && mcLabel < 0)) continue;
     
-    Double_t w = (weight.GetSize() > 0) ? weight[mcLabel] : 1.;
+    Double_t w = (weight.GetSize() > 0) ? fRunWeight * weight[mcLabel] : fRunWeight;
     ((TH1*)fList->UncheckedAt(kPtRec))->Fill(pT, w);
     ((TH1*)fList->UncheckedAt(kYRec))->Fill(track->Y(), w);
     ((TH1*)fList->UncheckedAt(kPhiRec))->Fill(track->Phi()*TMath::RadToDeg(), w);
@@ -231,6 +266,7 @@ void AliAnalysisTaskGenTuner::UserExec(Option_t *)
   
   // Post final data. It will be written to a file with option "RECREATE"
   PostData(1, fList);
+  PostData(2, fEventCounters);
   
 }
 
@@ -277,7 +313,7 @@ void AliAnalysisTaskGenTuner::Terminate(Option_t *)
     if (!dataFile || !dataFile->IsOpen()) return;
     TObjArray* data = static_cast<TObjArray*>(dataFile->FindObjectAny("Histograms"));
     if (!data) return;
-    for (Int_t i = 3; i < 6; i++){
+    for (Int_t i = 3; i < 6; i++) {
       hRef[i] = static_cast<TH1*>(data->UncheckedAt(hIndex[i])->Clone());
       hRef[i]->SetDirectory(0);
     }
@@ -672,5 +708,159 @@ Double_t AliAnalysisTaskGenTuner::YRat(const Double_t *x, const Double_t */*p*/)
 {
   /// generated y fit function ratio
   return (fYFunc && fYFuncNew) ? fYFuncNew->Eval(*x) / fYFunc->Eval(*x) : 0.;
+}
+
+//________________________________________________________________________
+void AliAnalysisTaskGenTuner::RunWeight(TString &fileName)
+{
+  /// weight each run using the values in the given text file
+  
+  if (!gSystem->GetFromPipe(Form("file %s", fileName.Data())).Contains("text"))
+    AliFatal("weights must be in a text file");
+  
+  delete fRunWeights;
+  fRunWeights = LoadRunWeights(fileName);
+  
+}
+
+//________________________________________________________________________
+void AliAnalysisTaskGenTuner::RunWeight(TString &fileNameOrigin, TString &fileNameNew)
+{
+  /// weight each run using the original/new number of events in the given text of root files
+  
+  delete fRunWeights;
+  fRunWeights = new THashList(1000);
+  fRunWeights->SetOwner();
+  
+  THashList *nEvsOld = LoadRunWeights(fileNameOrigin);
+  if (!nEvsOld) return;
+  nEvsOld->Sort();
+  
+  THashList *nEvsNew = LoadRunWeights(fileNameNew);
+  if (!nEvsNew) return;
+  nEvsNew->Sort();
+  
+  if (nEvsOld->GetSize() != nEvsNew->GetSize()) AliFatal("the 2 files do not contain the same number of runs");
+  
+  TIter nextRunOld(nEvsOld);
+  TIter nextRunNew(nEvsNew);
+  TParameter<Double_t> *nEvOld = 0x0, *nEvNew = 0x0;
+  while ((nEvOld = static_cast<TParameter<Double_t>*>(nextRunOld())) &&
+         (nEvNew = static_cast<TParameter<Double_t>*>(nextRunNew()))) {
+    
+    const char *run = nEvNew->GetName();
+    if (!strstr(nEvOld->GetName(), run)) AliFatal("the 2 files do not contain the same runs");
+    
+    Double_t weight = (nEvOld->GetVal() > 0) ? nEvNew->GetVal() / nEvOld->GetVal() : 0.;
+    fRunWeights->Add(new TParameter<Double_t>(run, weight));
+    
+  }
+  
+  delete nEvsOld;
+  delete nEvsNew;
+  
+}
+
+//________________________________________________________________________
+THashList* AliAnalysisTaskGenTuner::LoadRunWeights(const TString &fileName)
+{
+  /// Load the weights (or number of events) per run
+  
+  TString fileType = gSystem->GetFromPipe(Form("file %s", fileName.Data()));
+  
+  if (fileType.Contains("ROOT")) return LoadRunWeightsFromRootFile(fileName);
+  else if (fileType.Contains("text")) return LoadRunWeightsFromTextFile(fileName);
+  else if (fileType.Contains("No such file")) AliFatal(Form("file %s not found", fileName.Data()));
+  else AliFatal("number of events must be either in a text file or in an AliCounterCollection in a root file");
+  
+  return 0x0;
+  
+}
+
+//________________________________________________________________________
+THashList* AliAnalysisTaskGenTuner::LoadRunWeightsFromTextFile(const TString &fileName)
+{
+  /// Load the weights (or number of events) per run from the given text file
+  
+  THashList *weights = new THashList(1000);
+  weights->SetOwner();
+  
+  ifstream inFile(fileName);
+  if (!inFile.is_open()) AliFatal(Form("cannot open file %s", fileName.Data()));
+  
+  TString line;
+  while (! inFile.eof() ) {
+    
+    line.ReadLine(inFile,kTRUE);
+    if(line.IsNull()) continue;
+    
+    TObjArray *param = line.Tokenize(" ");
+    if (param->GetEntries() != 2) AliFatal(Form("bad input line %s", line.Data()));
+    
+    Int_t run = ((TObjString*)param->UncheckedAt(0))->String().Atoi();
+    if (run < 0) AliFatal(Form("invalid run number: %d", run));
+    
+    Float_t weight = ((TObjString*)param->UncheckedAt(1))->String().Atof();
+    if (weight < 0.) AliFatal(Form("invalid weight: %g", weight));
+    
+    if (weights->FindObject(Form("%d",run))) AliFatal(Form("weight for run %d already exist", run));
+    
+    weights->Add(new TParameter<Double_t>(Form("%d",run), weight));
+    
+    delete param;
+  }
+  
+  inFile.close();
+  
+  return weights;
+  
+}
+
+//________________________________________________________________________
+THashList* AliAnalysisTaskGenTuner::LoadRunWeightsFromRootFile(const TString &fileName)
+{
+  /// Load the number of events per run from the AliCounterCollection in the given root file
+  
+  THashList *weights = new THashList(1000);
+  weights->SetOwner();
+  
+  TFile* inFile = TFile::Open(fileName.Data(),"READ");
+  if (!inFile || !inFile->IsOpen()) {
+    AliFatal(Form("cannot open file %s", fileName.Data()));
+    return 0x0;
+  }
+  
+  AliCounterCollection* eventCounters = static_cast<AliCounterCollection*>(inFile->FindObjectAny("eventCounters"));
+  if (!eventCounters) {
+    AliFatal(Form("cannot find eventCounters in file %s", fileName.Data()));
+    return 0x0;
+  }
+  
+  TH1D *hnEvs = eventCounters->Get("run", "");
+  if (!hnEvs) {
+    AliFatal(Form("invalid eventCounters in file %s", fileName.Data()));
+    return 0x0;
+  }
+  hnEvs->SetDirectory(0);
+  
+  for (Int_t irun = 1; irun <= hnEvs->GetNbinsX(); ++irun) {
+    
+    Int_t run = atoi(hnEvs->GetXaxis()->GetBinLabel(irun));
+    if (run < 0) AliFatal(Form("invalid run number: %d", run));
+    
+    Double_t weight = hnEvs->GetBinContent(irun);
+    if (weight < 0.) AliFatal(Form("invalid weight: %g", weight));
+    
+    if (weights->FindObject(Form("%d",run))) AliFatal(Form("weight for run %d already exist", run));
+    
+    weights->Add(new TParameter<Double_t>(Form("%d",run), weight));
+    
+  }
+  
+  delete hnEvs;
+  inFile->Close();
+  
+  return weights;
+  
 }
 

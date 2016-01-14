@@ -39,7 +39,9 @@ AliAnalysisTaskGenTuner* AddTaskGenTuner()
   
   // Create and connect output containers
   AliAnalysisDataContainer *histo = mgr->CreateContainer("Histograms", TObjArray::Class(), AliAnalysisManager::kOutputContainer, outputfile);
+  AliAnalysisDataContainer *eventStat = mgr->CreateContainer("eventCounters", AliCounterCollection::Class(), AliAnalysisManager::kOutputContainer, outputfile);
   mgr->ConnectOutput(task, 1, histo);
+  mgr->ConnectOutput(task, 2, eventStat);
   
   return task;
 }
