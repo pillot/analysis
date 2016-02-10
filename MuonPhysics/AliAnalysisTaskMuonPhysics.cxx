@@ -64,6 +64,7 @@ fEventCounters(0x0),
 fTrigCounters(0x0),
 fMuonTrackCuts(0x0),
 fMuonTrackCuts2(0x0),
+fPtCut(-1.),
 fUseMCLabel(kFALSE),
 fSelectBadTracks(kFALSE),
 fCentMin(-FLT_MAX),
@@ -82,6 +83,7 @@ fEventCounters(0x0),
 fTrigCounters(0x0),
 fMuonTrackCuts(0x0),
 fMuonTrackCuts2(0x0),
+fPtCut(-1.),
 fUseMCLabel(kFALSE),
 fSelectBadTracks(kFALSE),
 fCentMin(-FLT_MAX),
@@ -599,7 +601,8 @@ void AliAnalysisTaskMuonPhysics::Terminate(Option_t *)
   
   // reset track cuts
 //  fMuonTrackCuts->SetCustomParamFromRun(169859, "pass2_muon");
-  fMuonTrackCuts->SetCustomParamFromRun(189576, "muon_calo_pass2");
+//  fMuonTrackCuts->SetCustomParamFromRun(189576, "muon_calo_pass2");
+  fMuonTrackCuts->SetCustomParamFromRun(244340, "muon_calo_pass1");
   fMuonTrackCuts->Print();
   
   // pDCA cut functions
@@ -673,8 +676,8 @@ Bool_t AliAnalysisTaskMuonPhysics::IsSelected(AliVParticle& track, Bool_t isESD,
   // skip tracks without cluster in station 2
   //if (!AliAnalysisMuonUtility::IsTrkChamberHit(2, &track) && !AliAnalysisMuonUtility::IsTrkChamberHit(3, &track)) return kFALSE;
   
-  // skip tracks with pT < 2 GeV/c
-  //if (track.Pt() < 60.) return kFALSE;
+  // skip tracks with pT < fPtCut
+  if (fPtCut > 0. && track.Pt() < fPtCut) return kFALSE;
   
   // skip tracks with p < 200 GeV/c
   //if (track.P() < 100.) return kFALSE;

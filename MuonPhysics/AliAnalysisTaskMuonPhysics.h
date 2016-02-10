@@ -34,6 +34,9 @@ public:
   // set standard cuts to select tracks not to be considered
   void SetMuonTrackCuts2(AliMuonTrackCuts &trackCuts);
   
+  /// set the muon low pT cut to select tracks to be considered
+  void SetMuonPtCut(Double_t cut) {fPtCut = cut;}
+  
   /// set the flag to select tracks using MC label
   void UseMCLabel(Bool_t flag = kTRUE) { fUseMCLabel = flag; }
   
@@ -102,13 +105,14 @@ private:
   
   AliMuonTrackCuts* fMuonTrackCuts; ///< cuts to select tracks to be considered
   AliMuonTrackCuts* fMuonTrackCuts2;///< cuts to select tracks not to be considered
+  Double_t fPtCut;                  ///< minimum pT cut to select tracks to be considered
   Bool_t   fUseMCLabel;             ///< Select tracks using MC label
   Bool_t   fSelectBadTracks;        ///< Select bad (or no longer matched) tracks
   Double_t fCentMin;                ///< Select centrality > fCentMin
   Double_t fCentMax;                ///< Select centrality <= fCentMax
   Bool_t   fVsRun;                  ///< Fill counters versus run
   
-  ClassDef(AliAnalysisTaskMuonPhysics, 1);
+  ClassDef(AliAnalysisTaskMuonPhysics, 2);
 };
 
 //________________________________________________________________________
