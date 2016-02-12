@@ -17,19 +17,23 @@ Bool_t      useSysInfo          = kFALSE; // use sys info
 // ### Analysis modules to be included. Some may not be yet fully implemented.
 //==============================================================================
 Int_t       iAODhandler        = 1;      // Analysis produces an AOD or dAOD's
-Int_t       iESDMCLabelAddition= 1;      // Recompute MC labels for MUON
+Int_t       iMUONCDBConnect    = 1;      // Task to load MUON OCDB objects                       (> 1 = use parfile)
+Int_t       iESDMCLabelAddition= 1;      // Recompute MC labels for MUON                         (> 1 = use parfile)
 Int_t       iESDfilter         = 1;      // ESD to AOD filter (barrel + muon tracks)
 Int_t       iMUONcopyAOD       = 1;      // Task that copies only muon events in a separate AOD (PWG3)
 Int_t       iMUONRefit         = 0;      // Refit ESD muon tracks before producing AODs
-Int_t       iMUONQA            = 1;      // run muon QA task on ESDs
-Int_t       iMUONPerformance   = 1;      // Task to study the muon performances in MC simulation
-Int_t       iMUONEfficiency    = 1;      // Task to measure the muon efficiency
+Int_t       iMUONQA            = 0;      // run muon QA task on ESDs                             (> 1 = use parfile)
+Int_t       iMUONPerformance   = 1;      // Task to study the muon performances in MC simulation (> 1 = use parfile)
+Int_t       iMUONEfficiency    = 1;      // Task to measure the muon efficiency                  (> 1 = use parfile)
 Int_t       iMUONPhysics       = 1;      // Task to make some physics analysis
 
 // ### OCDB settings for all tasks.
 //==============================================================================
-TString alignStorage = "alien://folder=/alice/simulation/2008/v4-15-Release/Residual";
+TString alignStorage = "";
+//TString alignStorage = "alien://folder=/alice/simulation/2008/v4-15-Release/Residual";
 //TString alignStorage = "alien://folder=/alice/cern.ch/user/p/ppillot/OCDB_PbPbSim"; // residual 2011
+Int_t alignVersion = 5;
+Int_t alignSubVersion = -1;
 TString recoParamStorage = "";
 //TString recoParamStorage = "alien://folder=/alice/cern.ch/user/p/ppillot/OCDB2012_newReco";
 
@@ -145,6 +149,18 @@ void AddAnalysisTasks(Int_t merge){
     //      tender->SetDebugLevel(2);
   }
   
+  if (iMUONCDBConnect) {
+    if (iMUONCDBConnect > 1) gROOT->LoadMacro("AddTaskMuonCDBConnect.C");
+    else gROOT->LoadMacro("$ALICE_PHYSICS/PWG/muondep/AddTaskMuonCDBConnect.C");
+    AliAnalysisTaskMuonCDBConnect *cdbConnect = AddTaskMuonCDBConnect();
+    if (!alignStorage.IsNull() || alignVersion >= 0 || alignSubVersion >= 0)
+      cdbConnect->SetAlignStorage(alignStorage.Data(), alignVersion, alignSubVersion);
+    if (!recoParamStorage.IsNull()) cdbConnect->SetRecoParamStorage(recoParamStorage.Data());
+    cdbConnect->LoadMagField();
+    cdbConnect->LoadGeometry();
+    cdbConnect->LoadMapping();
+  }
+  
   UInt_t offlineTriggerMask = 0;
   if (usePhysicsSelection) {
     // Physics selection task
@@ -156,9 +172,10 @@ void AddAnalysisTasks(Int_t merge){
   
   // Centrality (only Pb-Pb)
   if (iCollision && useCentrality) {
-    gROOT->LoadMacro("$ALICE_ROOT/ANALYSIS/macros/AddTaskCentrality.C");
-    AliCentralitySelectionTask *taskCentrality = AddTaskCentrality();
-    taskCentrality->SelectCollisionCandidates(offlineTriggerMask);
+    gROOT->LoadMacro("$ALICE_PHYSICS/OADB/COMMON/MULTIPLICITY/macros/AddTaskMultSelection.C");
+    AliMultSelectionTask *mult = AddTaskMultSelection(kFALSE);
+//    mult->SetAlternateOADBforEstimators("LHC15o");
+    mult->SelectCollisionCandidates(offlineTriggerMask);
   }
   
   // track selection
@@ -171,28 +188,32 @@ void AddAnalysisTasks(Int_t merge){
   }
   
   if (iMUONRefit) {
-    gROOT->LoadMacro("AddTaskMuonRefit.C");
+    if (iMUONRefit > 1) gROOT->LoadMacro("AddTaskMuonRefit.C");
+    else gROOT->LoadMacro("$ALICE_PHYSICS/PWG/muondep/AddTaskMuonRefit.C");
     AliAnalysisTaskMuonRefit* refit = AddTaskMuonRefit(-1., -1., kTRUE, -1., -1.);
     if (!alignStorage.IsNull()) refit->SetAlignStorage(alignStorage.Data());
     refit->RemoveMonoCathodClusters(kTRUE, kFALSE);
   }
   
   if(iESDMCLabelAddition) {
-    gROOT->LoadMacro("AddTaskESDMCLabelAddition.C");
+    if(iESDMCLabelAddition > 1) gROOT->LoadMacro("AddTaskESDMCLabelAddition.C");
+    else gROOT->LoadMacro("$ALICE_PHYSICS/PWG/muondep/AddTaskESDMCLabelAddition.C");
     AliAnalysisTaskESDMCLabelAddition *esdmclabel = AddTaskESDMCLabelAddition();
     if (!alignStorage.IsNull()) esdmclabel->SetAlignStorage(alignStorage.Data());
     if (!recoParamStorage.IsNull()) esdmclabel->SetRecoParamStorage(recoParamStorage.Data());
   }
   
   if (iMUONQA) {
-    gROOT->LoadMacro("AddTaskMuonQA.C");
+    if (iMUONQA > 1) gROOT->LoadMacro("AddTaskMuonQA.C");
+    else gROOT->LoadMacro("$ALICE_PHYSICS/PWGPP/PilotTrain/AddTaskMuonQA.C");
     AliAnalysisTaskMuonQA* muonQA = AddTaskMuonQA(kFALSE, kFALSE, kFALSE, 0);
     if (usePhysicsSelection) muonQA->SelectCollisionCandidates(offlineTriggerMask);
     muonQA->SetTrackCuts(trackCuts);
   }
   
   if (useMC && useTR && iMUONPerformance) {
-    gROOT->LoadMacro("AddTaskMuonPerformance.C");
+    if (iMUONPerformance > 1) gROOT->LoadMacro("AddTaskMuonPerformance.C");
+    else gROOT->LoadMacro("$ALICE_PHYSICS/PWGPP/MUON/dep/AddTaskMuonPerformance.C");
     AliAnalysisTaskMuonPerformance* muonPerformance = AddTaskMuonPerformance();
     if (usePhysicsSelection) muonPerformance->SelectCollisionCandidates(offlineTriggerMask);
     if (!alignStorage.IsNull()) muonPerformance->SetAlignStorage(alignStorage.Data());
@@ -202,12 +223,14 @@ void AddAnalysisTasks(Int_t merge){
   }
   
   if (iMUONEfficiency) {
-    gROOT->LoadMacro("AddTaskMUONTrackingEfficiency.C");
-    AliAnalysisTaskMuonTrackingEff* muonEfficiency = AddTaskMUONTrackingEfficiency(*trackCuts);
+    if (iMUONEfficiency > 1) gROOT->LoadMacro("AddTaskMUONTrackingEfficiency.C");
+    else gROOT->LoadMacro("$ALICE_PHYSICS/PWGPP/MUON/dep/AddTaskMUONTrackingEfficiency.C");
+    AliAnalysisTaskMuonTrackingEff* muonEfficiency = AddTaskMUONTrackingEfficiency(kFALSE,kTRUE,"");
     if (usePhysicsSelection) muonEfficiency->SelectCollisionCandidates(offlineTriggerMask);
     if (!alignStorage.IsNull()) muonEfficiency->SetAlignStorage(alignStorage.Data());
     if (!recoParamStorage.IsNull()) muonEfficiency->SetRecoParamStorage(recoParamStorage.Data());
-    muonEfficiency->SetMuonPtCut(1.);
+    muonEfficiency->SetMuonTrackCuts(*trackCuts);
+    //muonEfficiency->SetMuonPtCut(1.);
     muonEfficiency->UseMCLabel(kTRUE);
     muonEfficiency->EnableDisplay(kFALSE);
   }
@@ -227,10 +250,9 @@ void AddAnalysisTasks(Int_t merge){
     if (iMUONcopyAOD) {
       printf("Registering delta AOD file\n");
       mgr->RegisterExtraFile("AliAOD.Muons.root");
-      mgr->RegisterExtraFile("AliAOD.Dimuons.root");
-      AliAnalysisTaskESDfilter *taskesdfilter = AddTaskESDFilter(useKFILTER, kTRUE, kFALSE, kFALSE /*usePhysicsSelection*/,kFALSE,kTRUE,kTRUE,kTRUE,1100,1); // others
+      AliAnalysisTaskESDfilter *taskesdfilter = AddTaskESDFilter(useKFILTER, kTRUE, kFALSE, kFALSE /*usePhysicsSelection*/,kFALSE,kTRUE,kTRUE,kTRUE,1500,1); // others
     } else {
-      AliAnalysisTaskESDfilter *taskesdfilter = AddTaskESDFilter(useKFILTER, kFALSE, kFALSE, kFALSE /*usePhysicsSelection*/,kFALSE,kTRUE,kTRUE,kTRUE,1100,1); // others
+      AliAnalysisTaskESDfilter *taskesdfilter = AddTaskESDFilter(useKFILTER, kFALSE, kFALSE, kFALSE /*usePhysicsSelection*/,kFALSE,kTRUE,kTRUE,kTRUE,1500,1); // others
     }   
   }   
   
@@ -256,13 +278,13 @@ Bool_t LoadCommonLibraries()
 Bool_t LoadAnalysisLibraries()
 {
   // Load common analysis libraries.
-  if (iMUONQA) {
+  if (iMUONQA > 1) {
     if (!AliAnalysisAlien::SetupPar("PWGPPMUONlite.par")) return kFALSE;
   }
-  if (iMUONRefit || iESDMCLabelAddition) {
+  if ((iMUONRefit > 1) || (iESDMCLabelAddition > 1) || (iMUONCDBConnect > 1)) {
     if (!AliAnalysisAlien::SetupPar("PWGmuondep.par")) return kFALSE;
   }
-  if (useMC && useTR && iMUONPerformance || iMUONEfficiency) {
+  if ((useMC && useTR && (iMUONPerformance > 1)) || (iMUONEfficiency > 1)) {
     if (!AliAnalysisAlien::SetupPar("PWGPPMUONdep.par")) return kFALSE;
   }
   if (iMUONPhysics) {
