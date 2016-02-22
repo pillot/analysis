@@ -21,7 +21,8 @@ Int_t       iMUONCDBConnect    = 1;      // Task to load MUON OCDB objects      
 Int_t       iESDMCLabelAddition= 1;      // Recompute MC labels for MUON                         (> 1 = use parfile)
 Int_t       iESDfilter         = 1;      // ESD to AOD filter (barrel + muon tracks)
 Int_t       iMUONcopyAOD       = 1;      // Task that copies only muon events in a separate AOD (PWG3)
-Int_t       iMUONRefit         = 0;      // Refit ESD muon tracks before producing AODs
+Int_t       iMUONRefit         = 0;      // Refit ESD muon tracks before producing AODs          (> 1 = use parfile)
+Int_t       iMUONRefitVtx      = 0;      // Refit ESD muon tracks at vtx before producing AODs   (> 1 = use parfile)
 Int_t       iMUONQA            = 0;      // run muon QA task on ESDs                             (> 1 = use parfile)
 Int_t       iMUONPerformance   = 1;      // Task to study the muon performances in MC simulation (> 1 = use parfile)
 Int_t       iMUONEfficiency    = 1;      // Task to measure the muon efficiency                  (> 1 = use parfile)
@@ -175,7 +176,6 @@ void AddAnalysisTasks(Int_t merge){
     gROOT->LoadMacro("$ALICE_PHYSICS/OADB/COMMON/MULTIPLICITY/macros/AddTaskMultSelection.C");
     AliMultSelectionTask *mult = AddTaskMultSelection(kFALSE);
 //    mult->SetAlternateOADBforEstimators("LHC15o");
-    mult->SelectCollisionCandidates(offlineTriggerMask);
   }
   
   // track selection
@@ -192,7 +192,15 @@ void AddAnalysisTasks(Int_t merge){
     else gROOT->LoadMacro("$ALICE_PHYSICS/PWG/muondep/AddTaskMuonRefit.C");
     AliAnalysisTaskMuonRefit* refit = AddTaskMuonRefit(-1., -1., kTRUE, -1., -1.);
     if (!alignStorage.IsNull()) refit->SetAlignStorage(alignStorage.Data());
+    refit->ReAlign("", 5, -1, "alien://folder=/alice/cern.ch/user/h/hupereir/CDB/LHC15_orig_3_dca_neg");
     refit->RemoveMonoCathodClusters(kTRUE, kFALSE);
+  }
+  
+  if (iMUONRefitVtx) {
+    if (iMUONRefitVtx > 1) gROOT->LoadMacro("AddTaskMuonRefitVtx.C");
+    else gROOT->LoadMacro("$ALICE_PHYSICS/PWG/muondep/AddTaskMuonRefitVtx.C");
+    AliAnalysisTaskMuonRefitVtx* refitVtx = AddTaskMuonRefitVtx(kFALSE, kFALSE, kTRUE);
+    refitVtx->ShiftVtx(-0.29, 0.46, 0.);
   }
   
   if(iESDMCLabelAddition) {
@@ -281,7 +289,7 @@ Bool_t LoadAnalysisLibraries()
   if (iMUONQA > 1) {
     if (!AliAnalysisAlien::SetupPar("PWGPPMUONlite.par")) return kFALSE;
   }
-  if ((iMUONRefit > 1) || (iESDMCLabelAddition > 1) || (iMUONCDBConnect > 1)) {
+  if ((iMUONRefit > 1) || (iMUONRefitVtx > 1) || (iESDMCLabelAddition > 1) || (iMUONCDBConnect > 1)) {
     if (!AliAnalysisAlien::SetupPar("PWGmuondep.par")) return kFALSE;
   }
   if ((useMC && useTR && (iMUONPerformance > 1)) || (iMUONEfficiency > 1)) {
@@ -316,7 +324,8 @@ void AODmerge()
   TString outputDir = "wn.xml";
   //  TString outputDir = "fileList.txt";
 //  TString outputFiles = "AliAOD.root,AliAOD.Muons.root,AnalysisResults.root";
-  TString outputFiles = "Merged.QA.Data.root,AnalysisResults.root";
+//  TString outputFiles = "Merged.QA.Data.root,AnalysisResults.root";
+  TString outputFiles = "AnalysisResults.root";
   //  TString outputFiles = "AliAOD.Muons.root";
   TString mergeExcludes = "";
   TObjArray *list = outputFiles.Tokenize(",");
