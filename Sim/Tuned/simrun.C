@@ -7,7 +7,7 @@
   int nrun = 0;
   int nchunk = 0;
   int nevent = 0;
-  int seed = 0;
+  UInt_t seed = 0;
 
   char sseed[1024];
   char srun[1024];
@@ -43,7 +43,7 @@
   }
 
   seed = nrun * 10000 + nchunk;
-  sprintf(sseed,"%d",seed);
+  sprintf(sseed,"%u",seed);
 
   if (seed==0) {
     fprintf(stderr,"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
@@ -51,7 +51,7 @@
     fprintf(stderr,"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
   } else {
     fprintf(stdout,"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-    fprintf(stdout,"!!!  MC Seed is %d \n",seed);
+    fprintf(stdout,"!!!  MC Seed is %u \n",seed);
     fprintf(stdout,"!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
   }
   
