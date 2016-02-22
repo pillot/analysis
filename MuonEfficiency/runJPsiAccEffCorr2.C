@@ -8,112 +8,133 @@
  */
 
 
-TString rootVersion = "v5-34-05";
-TString alirootVersion = "v5-04-46-AN";
-TString dataDir = "/alice/data/2010/LHC10h";
-TString dataPattern = "pass2/*AliESDs.root";
-TString runFormat = "%09d";
-TString outDir = "Data/LHC10h/pass2/Eff/pDCAChi2";
-Int_t ttl = 30000;
-Int_t maxFilesPerJob = 100;
-Int_t maxMergeFiles = 10;
-Int_t maxMergeStages = 2;
-
 //______________________________________________________________________________
-void runJPsiAccEffCorr2(TString smode = "local", TString inputFileName = "AliAOD.root")
+void runJPsiAccEffCorr2(TString smode = "local", TString inputFileName = "AliAOD.root",
+                        Bool_t applyPhysicsSelection = kTRUE, Bool_t embedding = kTRUE)
 {
-  /// Study the MUON performances
+  /// Compute the JPsi acc*eff correction
   
-  gROOT->LoadMacro("$WORK/Macros/Facilities/runTaskFacilities.C");
-  
-  // --- Check runing mode ---
-  Int_t mode = GetMode(smode, inputFileName);
-  if(mode < 0) {
-    Error("runJPsiAccEffCorr","Please provide either an ESD root file a collection of ESDs or a dataset.");
-    return;
-  }
-  
-  // --- copy files needed for this analysis ---
+  // --- general analysis setup ---
+  TString rootVersion = "";
+  TString alirootVersion = "";
+  TString aliphysicsVersion = "v5-08-00-01-1";
+  TString extraLibs="";
+  TString extraIncs="include";
+  TString extraTasks="AliAnalysisTaskJPsiAccEffCorr2";
+  TString extraPkgs="";
   TList pathList; pathList.SetOwner();
   pathList.Add(new TObjString("$WORK/Macros/MuonEfficiency"));
   TList fileList; fileList.SetOwner();
   fileList.Add(new TObjString("runJPsiAccEffCorr2.C"));
+  fileList.Add(new TObjString("AddTaskJPsiAccEffCorr2.C"));
   fileList.Add(new TObjString("AliAnalysisTaskJPsiAccEffCorr2.cxx"));
   fileList.Add(new TObjString("AliAnalysisTaskJPsiAccEffCorr2.h"));
-  CopyFileLocally(pathList, fileList);
   
-  // --- prepare environment ---
-  TString extraLibs="";
-  TString extraIncs="";
-  TString extraTasks="AliAnalysisTaskJPsiAccEffCorr2";
-  LoadAlirootLocally(extraLibs, extraIncs, extraTasks);
-  AliAnalysisGrid *alienHandler = 0x0;
-  if (mode == kProof || mode == kProofLite) LoadAlirootOnProof(smode, rootVersion, alirootVersion, extraLibs, extraIncs, extraTasks, kTRUE);
-  else if (mode == kGrid || mode == kTerminate) {
-    TString analysisMacroName = "AccEff";
-    alienHandler = static_cast<AliAnalysisGrid*>(CreateAlienHandler(smode, rootVersion, alirootVersion, inputFileName, dataDir, dataPattern, outDir, extraLibs, extraIncs, extraTasks, analysisMacroName, runFormat, ttl, maxFilesPerJob, maxMergeFiles, maxMergeStages));
-    if (!alienHandler) return;
+  // --- grid specific setup ---
+  TString dataDir = "/alice/sim/2016/LHC16b1";
+  TString dataPattern = "p80/AOD/*AliAOD.root";
+  TString runFormat = "%d";
+  TString outDir = "Sim/LHC15o/EmbedJPsi/AccEff/AOD";
+  TString analysisMacroName = "AccEff";
+  Int_t ttl = 30000;
+  Int_t maxFilesPerJob = 20;
+  Int_t maxMergeFiles = 10;
+  Int_t maxMergeStages = 2;
+  
+  // --- saf3 specific setup ---
+  Bool_t splitDataset = kFALSE;
+  
+  gROOT->LoadMacro("$HOME/Work/Alice/Macros/Facilities/runTaskFacilities.C");
+  
+  // --- prepare the analysis environment ---
+  Int_t mode = PrepareAnalysis(smode, inputFileName, extraLibs, extraIncs, extraTasks, extraPkgs, pathList, fileList);
+  
+  // --- run the analysis (saf3 is a special case as the analysis is launched on the server) ---
+  if (mode == kSAF3Connect) {
+    
+    RunAnalysisOnSAF3(fileList, aliphysicsVersion, inputFileName, splitDataset);
+    
+  } else {
+    
+    // get data type
+    TString dataType = GetDataType(mode, inputFileName, dataPattern);
+    CreateAnalysisTrain(dataType, applyPhysicsSelection, embedding);
+    
+    if (smode == "saf3" && splitDataset) AliAnalysisManager::GetAnalysisManager()->SetSkipTerminate(kTRUE);
+    
+    RunAnalysis(smode, inputFileName, rootVersion, alirootVersion, aliphysicsVersion, extraLibs, extraIncs, extraTasks, extraPkgs, dataDir, dataPattern, outDir, analysisMacroName, runFormat, ttl, maxFilesPerJob, maxMergeFiles, maxMergeStages);
+    
   }
-  
-  // --- Create the analysis train ---
-  CreateAnalysisTrain(alienHandler);
-  
-  // --- Create input object ---
-  TObject* inputObj = CreateInputObject(mode, inputFileName);
-  
-  // --- start analysis ---
-  StartAnalysis(mode, inputObj);
   
 }
 
 //______________________________________________________________________________
-void CreateAnalysisTrain(TObject* alienHandler)
+void CreateAnalysisTrain(TString dataType, Bool_t applyPhysicsSelection, Bool_t embedding)
 {
   /// create the analysis train and configure it
   
   // analysis manager
   AliAnalysisManager *mgr = new AliAnalysisManager("JPsiAccEffCorrAnalysis");
   
-  // Connect plugin to the analysis manager if any
-  if (alienHandler) mgr->SetGridHandler(static_cast<AliAnalysisGrid*>(alienHandler));
+  // ESD or AOD handler
+  if (dataType == "ESD") {
+    AliESDInputHandler* esdH = new AliESDInputHandler();
+    esdH->SetReadFriends(kFALSE);
+    mgr->SetInputEventHandler(esdH);
+    AliMCEventHandler* mcH = new AliMCEventHandler();
+    mgr->SetMCtruthEventHandler(mcH);
+  } else if (dataType == "AOD") {
+    AliInputEventHandler* aodH = new AliAODInputHandler;
+    mgr->SetInputEventHandler(aodH);
+  } else {
+    Error("CreateAnalysisTrain","Unknown data type. Cannot define input handler!");
+    return;
+  }
   
-  // AOD handler
-  AliInputEventHandler* aodH = new AliAODInputHandler;
-  mgr->SetInputEventHandler(aodH);
+  UInt_t offlineTriggerMask = AliVEvent::kMUSPB;
+  if (dataType == "ESD") {
+    
+    // event selection
+    if (applyPhysicsSelection) {
+      gROOT->LoadMacro("$ALICE_PHYSICS/OADB/macros/AddTaskPhysicsSelection.C");
+      AliPhysicsSelectionTask* physicsSelection = embedding ? AddTaskPhysicsSelection() : AddTaskPhysicsSelection(kTRUE);
+      if(!physicsSelection) {
+        Error("CreateAnalysisTrain","AliPhysicsSelectionTask not created!");
+        return;
+      }
+    }
+    
+    // multiplicity/centrality selection
+    gROOT->LoadMacro("$ALICE_PHYSICS/OADB/COMMON/MULTIPLICITY/macros/AddTaskMultSelection.C");
+    AliMultSelectionTask *mult = AddTaskMultSelection(kFALSE);
+    if(!mult) {
+      Error("CreateAnalysisTrain","AliMultSelectionTask not created!");
+      return;
+    }
+    mult->SetAlternateOADBforEstimators("LHC15o");
+    if (applyPhysicsSelection) mult->SelectCollisionCandidates(offlineTriggerMask);
+    
+  }
   
   // Acc*Eff results
-  AliAnalysisTaskJPsiAccEffCorr2 *jPsiAccEffCorr = new AliAnalysisTaskJPsiAccEffCorr2("JPsiAccEffCorr");
-  //  jPsiAccEffCorr->SelectCollisionCandidates(AliVEvent::kMB | AliVEvent::kMUON);
-  //  jPsiAccEffCorr->SelectCollisionCandidates(AliVEvent::kMB);
-  //  jPsiAccEffCorr->SelectCollisionCandidates(AliVEvent::kAny);
+  gROOT->LoadMacro("AddTaskJPsiAccEffCorr2.C");
+  AliAnalysisTaskJPsiAccEffCorr2 *jPsiAccEffCorr = AddTaskJPsiAccEffCorr2();
+  if(!jPsiAccEffCorr) {
+    Error("CreateAnalysisTrain","AliAnalysisTaskJPsiAccEffCorr2 not created!");
+    return;
+  }
+  if (applyPhysicsSelection) jPsiAccEffCorr->SelectCollisionCandidates(offlineTriggerMask);
   jPsiAccEffCorr->SetTrigLevel(2);
   jPsiAccEffCorr->SetNMatch(2);
-  //jPsiAccEffCorr->SetMuLowPtCut(1.13);
-  Float_t centBinLowEdge[] = {-999., 999.};
+  Float_t centBinLowEdge[] = {0.,10.,20.,30.,40.,50.,60.,70.,80.,90.};
   jPsiAccEffCorr->SetCentBins((Int_t)(sizeof(centBinLowEdge)/sizeof(Float_t))-1, centBinLowEdge);
-  //Float_t pTBinLowEdge[] = {0., 0.5, 1., 1.5, 2., 2.5, 3., 3.5, 4., 4.5, 5., 6., 7., 8., 9., 11., 13., 15., 1000000.};
-  //Float_t pTBinLowEdge[] = {0., 1., 2., 3., 4., 5., 6., 7., 9., 11., 15., 1000000.}; // Igor's ranges
-  Float_t pTBinLowEdge[] = {0., 1., 2., 3., 4., 5., 6., 8., 10., 15., 1000000.}; // Roberta's ranges
-  //  Float_t pTBinLowEdge[] = {0., 2., 5., 8.};
+  Float_t pTBinLowEdge[] = {0.,1.,2.,3.,4.,5.,6.,8.};
   jPsiAccEffCorr->SetPtBins((Int_t)(sizeof(pTBinLowEdge)/sizeof(Float_t))-1, pTBinLowEdge);
-  Float_t yBinLowEdge[] = {-4., -3.75, -3.5, -3.25, -3., -2.75, -2.5};
-  //Float_t yBinLowEdge[] = {-4., -3.81, -3.62, -3.43}; // LHC13de
-  //Float_t yBinLowEdge[] = {-3.07, -2.88, -2.69, -2.5}; // LHC13f
-  //  Float_t yBinLowEdge[] = {-4., -3.25, -2.5};
+  Float_t yBinLowEdge[] = {-4.,-3.5,-3.,-2.5};
   jPsiAccEffCorr->SetYBins((Int_t)(sizeof(yBinLowEdge)/sizeof(Float_t))-1, yBinLowEdge);
-//  jPsiAccEffCorr->LoadRunWeights("../../runWeights.txt");
-//  SetSigWeights(jPsiAccEffCorr);
+  jPsiAccEffCorr->LoadRunWeights("../../runWeightCMUL7.txt");
+  SetSigWeights(jPsiAccEffCorr);
   
-  mgr->AddTask(jPsiAccEffCorr);
-  mgr->ConnectInput(jPsiAccEffCorr, 0, mgr->GetCommonInputContainer());
-  TString outputfile = AliAnalysisManager::GetCommonFileName();
-  outputfile += ":JPsiAccEffCorr";
-  AliAnalysisDataContainer *histo = mgr->CreateContainer("Histograms", TObjArray::Class(), AliAnalysisManager::kOutputContainer, outputfile);
-  mgr->ConnectOutput(jPsiAccEffCorr, 1, histo);
-  AliAnalysisDataContainer *eventStat = mgr->CreateContainer("EventCounters", AliCounterCollection::Class(), AliAnalysisManager::kOutputContainer, outputfile);
-  mgr->ConnectOutput(jPsiAccEffCorr, 2, eventStat);
-  AliAnalysisDataContainer *jPsiStat = mgr->CreateContainer("JPsiCounters", AliCounterCollection::Class(), AliAnalysisManager::kOutputContainer, outputfile);
-  mgr->ConnectOutput(jPsiAccEffCorr, 3, jPsiStat);
 }
 
 //______________________________________________________________________________
@@ -121,6 +142,16 @@ void SetSigWeights(TObject* jPsiAccEffCorr)
 {
   /// set the number of measured JPsi per pt/y bin or the <Ncoll> used to weight the acc*eff versus centrality
   
+  // Ncoll per centrality bin (width=10) to weight the acc*eff calculation
+  Float_t nColl10CentBinLowEdge[] = {0., 10., 20., 30., 40., 50., 60., 70., 80., 90.};
+  Double_t nColl10[] = {1636., 1001., 601., 344., 183., 90., 40., 16., 6.};
+  (static_cast<AliAnalysisTaskJPsiAccEffCorr2*>(jPsiAccEffCorr))->SetSigWeights("nColl (width=10)", 0., 8., -4., -2.5, (Int_t)(sizeof(nColl10)/sizeof(Double_t)), nColl10CentBinLowEdge, nColl10, kFALSE);
+  
+  // NJpsi per centrality bin (width=10) integrated over pt and y to weight the acc*eff calculation
+  Float_t centBinLowEdge00[] = {0., 10., 20., 30., 40., 50., 60., 70., 80., 90.};
+  Double_t nJpsi00[] = {118139., 73280., 46010., 25294., 15034., 7884., 4023., 2062., 910.};
+  (static_cast<AliAnalysisTaskJPsiAccEffCorr2*>(jPsiAccEffCorr))->SetSigWeights("nJPsi", 0., 8., -4., -2.5, (Int_t)(sizeof(nJpsi00)/sizeof(Double_t)), centBinLowEdge00, nJpsi00, kTRUE);
+  /*
   // Ncoll per centrality bin (width=10) to weight the acc*eff calculation
   Float_t nColl10CentBinLowEdge[9] = {0., 10., 20., 30., 40., 50., 60., 70., 80.};
   Double_t nColl10[8] = {1502.7, 923.26, 558.68, 321.20, 171.67, 85.13, 38.51, 15.78};
@@ -155,6 +186,7 @@ void SetSigWeights(TObject* jPsiAccEffCorr)
   Float_t centBinLowEdge20[4] = {0., 20., 40., 80.};
   Double_t nJpsi20[3] = {340., 151., 56.};
   (static_cast<AliAnalysisTaskJPsiAccEffCorr2*>(jPsiAccEffCorr))->SetSigWeights("nJPsi", 3., 1.e9, -4., -2.5, (Int_t)(sizeof(nJpsi20)/sizeof(Double_t)), centBinLowEdge20, nJpsi20, kTRUE);
+  */
   
 }
 

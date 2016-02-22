@@ -31,21 +31,21 @@
 
 // STEER includes
 #include "AliLog.h"
+#include "AliVEvent.h"
+#include "AliMCEvent.h"
+#include "AliESDEvent.h"
 #include "AliAODEvent.h"
-#include "AliAODMCHeader.h"
-#include "AliAODMCParticle.h"
-#include "AliAODTrack.h"
-#include "AliAODDimuon.h"
+#include "AliVParticle.h"
+#include "AliMultSelection.h"
+#include "AliCounterCollection.h"
 
 // ANALYSIS includes
 #include "AliAnalysisTaskSE.h"
 #include "AliAnalysisDataSlot.h"
 #include "AliAnalysisDataContainer.h"
 #include "AliAnalysisManager.h"
+#include "AliAnalysisMuonUtility.h"
 #include "AliAnalysisTaskJPsiAccEffCorr2.h"
-
-// PWG3 includes
-#include "AliCounterCollection.h"
 
 
 //========================================================================
@@ -297,12 +297,17 @@ void AliAnalysisTaskJPsiAccEffCorr2::UserExec(Option_t *)
 {
   /// Called for each event
   
-  // get AOD event
-  AliAODEvent* aod = dynamic_cast<AliAODEvent*>(InputEvent());
-  if ( !aod ) return;
+  // get event
+  AliVEvent *evt = InputEvent();
+  if (!dynamic_cast<AliESDEvent*>(evt) && !dynamic_cast<AliAODEvent*>(evt)) return;
+  
+  // get MC event
+  AliMCEvent *mcEvt = MCEvent();
+  if (!mcEvt) return;
   
   // get the centrality percentile
-  Float_t centrality = aod->GetCentrality()->GetCentralityPercentileUnchecked("V0M");
+  AliMultSelection *multSelection = static_cast<AliMultSelection*>(evt->FindListObject("MultSelection"));
+  Float_t centrality = multSelection ? multSelection->GetMultiplicityPercentile("V0M") : -1.;
   TString centKey = "";
   for (Int_t icent = 0; icent < fCentBinLowEdge.GetSize()-1; icent++)
     if (centrality > fCentBinLowEdge[icent] && centrality <= fCentBinLowEdge[icent+1])
@@ -311,18 +316,20 @@ void AliAnalysisTaskJPsiAccEffCorr2::UserExec(Option_t *)
   //if (centrality > 90) return;
   
   TString matchKey[3] = {"any", "1", "2"};
-//  Double_t rAbsMin = 17.622;
-//  Double_t rAbsMax = 89.;
+  //  Double_t rAbsMin = 17.622;
+  //  Double_t rAbsMax = 89.;
   Double_t rAbsMin = 17.6;
   Double_t rAbsMax = 89.5;
   Double_t mcPhi = 999.;
   
-  TClonesArray *mcarray = dynamic_cast<TClonesArray*>(aod->FindListObject(AliAODMCParticle::StdBranchName()));
+  // ------ MC part ------
+  Int_t nMCTracks = mcEvt->GetNumberOfTracks();
   /*
   // remove events with JPsi outside -4.2<y<-2.3
-  for (Int_t ii=0; ii<mcarray->GetEntries(); ii++) {
-    AliAODMCParticle *mctrack = (AliAODMCParticle*) mcarray->UncheckedAt(ii); 
-    if (mctrack->GetPdgCode() == 443 && (mctrack->Y()<-4.2 || mctrack->Y()>-2.3)) return;
+  for (Int_t iMCTrack = 0; iMCTrack < nMCTracks; ++iMCTrack) {
+    AliVParticle *mctrack = mcEvt->GetTrack(iMCTrack);
+    if (AliAnalysisMuonUtility::IsPrimary(mctrack,mcEvt) && mctrack->PdgCode() == 443 &&
+        (mctrack->Y() < -4.2 || mctrack->Y() > -2.3)) return;
   }
   */
   // fill event counter
@@ -330,42 +337,47 @@ void AliAnalysisTaskJPsiAccEffCorr2::UserExec(Option_t *)
   if (!centKey.IsNull()) fEventCounters->Count(Form("event:any/cent:%s/run:%d",centKey.Data(),fCurrentRunNumber));
   
   // vertex resolution
-  AliAODMCHeader* aodMCHeader = static_cast<AliAODMCHeader*>(aod->FindListObject(AliAODMCHeader::StdBranchName()));
-  ((TH1F*)fList->UncheckedAt(kDzVtx))->Fill(aod->GetPrimaryVertex()->GetZ()-aodMCHeader->GetVtxZ());
+  Double_t zVtx = evt->GetPrimaryVertex()->GetZ();
+  Double_t zVtxMC = AliAnalysisMuonUtility::GetMCVertexZ(evt,mcEvt);
+  ((TH1F*)fList->UncheckedAt(kDzVtx))->Fill(zVtx-zVtxMC);
   
-  // loop over MC tracks
-  for (Int_t ii=0; ii<mcarray->GetEntries(); ii++) {
+  for (Int_t iMCTrack = 0; iMCTrack < nMCTracks; ++iMCTrack) {
     
-    AliAODMCParticle *mctrack = (AliAODMCParticle*) mcarray->UncheckedAt(ii); 
+    AliVParticle *mctrack = mcEvt->GetTrack(iMCTrack);
+    
+    Double_t pT = mctrack->Pt();
+    Double_t eta = mctrack->Eta();
+    Double_t y = mctrack->Y();
     
     // look for muons
-    if (TMath::Abs(mctrack->GetPdgCode()) == 13 &&
-	mctrack->Eta()>fYBinLowEdge[0] && mctrack->Eta()<fYBinLowEdge[fYBinLowEdge.GetSize()-1]) {
+    if (TMath::Abs(mctrack->PdgCode()) == 13 &&
+	eta >= fYBinLowEdge[0] && eta <= fYBinLowEdge[fYBinLowEdge.GetSize()-1]) {
       
-      ((TH1F*)fList->UncheckedAt(kPtGenMu))->Fill(mctrack->Pt());
-      ((TH1F*)fList->UncheckedAt(kYGenMu))->Fill(mctrack->Y());
+      ((TH1F*)fList->UncheckedAt(kPtGenMu))->Fill(pT);
+      ((TH1F*)fList->UncheckedAt(kYGenMu))->Fill(y);
       
     }
     
     // look for generated particles
-    if(mctrack->IsPrimary() && !mctrack->IsPhysicalPrimary() &&
-       mctrack->Y()>fYBinLowEdge[0] && mctrack->Y()<fYBinLowEdge[fYBinLowEdge.GetSize()-1]) {
+    if(AliAnalysisMuonUtility::IsPrimary(mctrack,mcEvt) && mctrack->PdgCode() == 443 &&
+       y >= fYBinLowEdge[0] && y < fYBinLowEdge[fYBinLowEdge.GetSize()-1]) {
       
-      ((TH1F*)fList->UncheckedAt(kPtGen))->Fill(mctrack->Pt());
-      ((TH1F*)fList->UncheckedAt(kYGen))->Fill(mctrack->Y());
       mcPhi = mctrack->Phi();
+      
+      ((TH1F*)fList->UncheckedAt(kPtGen))->Fill(pT);
+      ((TH1F*)fList->UncheckedAt(kYGen))->Fill(y);
       
       // pt bin
       TString ptKey = "";
       for (Int_t ipt = 0; ipt < fPtBinLowEdge.GetSize()-1; ipt++)
-	if (mctrack->Pt() >= fPtBinLowEdge[ipt] && mctrack->Pt() < fPtBinLowEdge[ipt+1])
+	if (pT >= fPtBinLowEdge[ipt] && pT < fPtBinLowEdge[ipt+1])
 	  ptKey = Form("%g-%g",fPtBinLowEdge[ipt],fPtBinLowEdge[ipt+1]);
       if (ptKey.IsNull()) continue;
       
       // y bin
       TString yKey = "";
       for (Int_t iy = 0; iy < fYBinLowEdge.GetSize()-1; iy++)
-	if (mctrack->Y() >= fYBinLowEdge[iy] && mctrack->Y() < fYBinLowEdge[iy+1])
+	if (y >= fYBinLowEdge[iy] && y < fYBinLowEdge[iy+1])
 	  yKey = Form("%g-%g",fYBinLowEdge[iy],fYBinLowEdge[iy+1]);
       if (yKey.IsNull()) continue;
       
@@ -380,118 +392,136 @@ void AliAnalysisTaskJPsiAccEffCorr2::UserExec(Option_t *)
     
   }
   
-  // loop over reco tracks
-  Int_t ntracks = aod->GetNumberOfTracks();
-  for (Int_t q=0; q<ntracks; q++){
-    
-    AliAODTrack *mu = static_cast<AliAODTrack*>(aod->GetTrack(q));
-    
-    if (mu->IsMuonTrack() && mu->GetMatchTrigger()>=fTrigLevel && mu->GetLabel() >= 0 &&
-	mu->Eta()>fYBinLowEdge[0] && mu->Eta()<fYBinLowEdge[fYBinLowEdge.GetSize()-1] &&
-	mu->GetRAtAbsorberEnd()>rAbsMin && mu->GetRAtAbsorberEnd()<rAbsMax
-	) {
-      
-      ((TH1F*)fList->UncheckedAt(kPtRecMu))->Fill(mu->Pt());
-      ((TH1F*)fList->UncheckedAt(kYRecMu))->Fill(mu->Y());
-      
-    }
-    
-  }
-  
-  // loop over reco dimuons
+  // ------ Reco part ------
   Bool_t jpsiFound = kFALSE;
-  Int_t ndimu = aod->GetNDimuons();
-  for(Int_t q=0; q<ndimu; q++) {
+  Int_t nTracks = AliAnalysisMuonUtility::GetNTracks(evt);
+  for (Int_t iTrack1 = 0; iTrack1 < nTracks; iTrack1++) {
     
-    AliAODDimuon *dimu = aod->GetDimuon(q);
+    AliVParticle *track1 = AliAnalysisMuonUtility::GetTrack(iTrack1, evt);
+    if (!AliAnalysisMuonUtility::IsMuonTrack(track1)) continue;
     
-    //Double_t ptCut1 = gRandom->Gaus(fMuLowPtCut,0.333);
-    //Double_t ptCut2 = gRandom->Gaus(fMuLowPtCut,0.333);
+    if (track1->GetLabel() < 0) continue;
     
-    //Double_t thetaTrackAbsEnd0 = TMath::ATan(dimu->GetMu(0)->GetRAtAbsorberEnd()/505.) * TMath::RadToDeg();
-    //Double_t thetaTrackAbsEnd1 = TMath::ATan(dimu->GetMu(1)->GetRAtAbsorberEnd()/505.) * TMath::RadToDeg();
-    if(dimu->Charge()==0 && dimu->Y()>fYBinLowEdge[0] && dimu->Y()<fYBinLowEdge[fYBinLowEdge.GetSize()-1] &&
-       //dimu->Pt() < 1.5 &&
-       dimu->GetMu(0)->Eta()>-4. && dimu->GetMu(0)->Eta()<-2.5 &&
-       dimu->GetMu(1)->Eta()>-4. && dimu->GetMu(1)->Eta()<-2.5 &&
-       //dimu->GetMu(0)->Pt()>ptCut1 && dimu->GetMu(1)->Pt()>ptCut2 &&
-       dimu->GetMu(0)->Pt()>fMuLowPtCut && dimu->GetMu(1)->Pt()>fMuLowPtCut &&
-       dimu->GetMu(0)->GetRAtAbsorberEnd()>rAbsMin && dimu->GetMu(0)->GetRAtAbsorberEnd()<rAbsMax &&
-       dimu->GetMu(1)->GetRAtAbsorberEnd()>rAbsMin && dimu->GetMu(1)->GetRAtAbsorberEnd()<rAbsMax 
-       //thetaTrackAbsEnd0>2. && thetaTrackAbsEnd0<10. &&
-       //thetaTrackAbsEnd1>2. && thetaTrackAbsEnd1<10.
-       //&& dimu->GetMu(0)->GetLabel() >= 0 && dimu->GetMu(1)->GetLabel() >= 0
-       ){
+    TLorentzVector muV1(track1->Px(), track1->Py(), track1->Pz(), track1->E());
+    Short_t charge1 = track1->Charge();
+    Int_t matchTrig1 = AliAnalysisMuonUtility::GetMatchTrigger(track1);
+    Double_t eta1 = track1->Eta();
+    Double_t rAbs1 = AliAnalysisMuonUtility::GetRabs(track1);
+    //Double_t thetaAbs1 = AliAnalysisMuonUtility::GetThetaAbsDeg(track1);
+    Double_t pT1 = track1->Pt();
+    
+    // fill single muon information
+    if (matchTrig1 >= fTrigLevel &&
+	eta1 >= fYBinLowEdge[0] && eta1 <= fYBinLowEdge[fYBinLowEdge.GetSize()-1] &&
+	rAbs1 >= rAbsMin && rAbs1 <= rAbsMax) {
       
-      //if (dimu->GetMu(0)->GetLabel() < 0 || dimu->GetMu(1)->GetLabel() < 0) printf("no label\n");
-      /*
-      // remove events with muons generated outside 168.5<Theta<178.5
-      Bool_t accOk = kTRUE;
-      for (Int_t imu = 0; imu < 2; imu++) {
-	Int_t label = dimu->GetMu(imu)->GetLabel();
-	AliAODMCParticle *mctrack = (label >= 0) ? (AliAODMCParticle*) mcarray->UncheckedAt(label) : 0x0;
-	if (mctrack && mctrack->GetPdgCode() == 13 && mctrack->GetMother() >= 0 &&
-	    ((AliAODMCParticle*) mcarray->UncheckedAt(mctrack->GetMother()))->GetPdgCode() == 443 &&
-	    (mctrack->Theta()*TMath::RadToDeg() < 168.5 || mctrack->Theta()*TMath::RadToDeg() > 178.5)) {
-	  printf("theta = %f\n",mctrack->Theta()*TMath::RadToDeg());
-	  accOk = kFALSE;
-	}
-      }
-      if (!accOk) {
-	printf("--> reject event\n");
-	continue;
-      }
-      */
-      Bool_t trigOk[3] = {kTRUE, kFALSE, kFALSE};
-      if(dimu->GetMu(0)->GetMatchTrigger()>=fTrigLevel || dimu->GetMu(1)->GetMatchTrigger()>=fTrigLevel) trigOk[1] = kTRUE;
-      if(dimu->GetMu(0)->GetMatchTrigger()>=fTrigLevel && dimu->GetMu(1)->GetMatchTrigger()>=fTrigLevel) trigOk[2] = kTRUE;
+      ((TH1F*)fList->UncheckedAt(kPtRecMu))->Fill(pT1);
+      ((TH1F*)fList->UncheckedAt(kYRecMu))->Fill(track1->Y());
       
-      if (trigOk[2]) {
-	((TH1F*)fList->UncheckedAt(kPtRec))->Fill(dimu->Pt());
-	((TH1F*)fList->UncheckedAt(kYRec))->Fill(dimu->Y());
-	((TH1F*)fList->UncheckedAt(kMass))->Fill(dimu->M());
-	Double_t phi = dimu->Phi();
-	if (phi < 0.) phi += 2.*TMath::Pi();
-	Double_t dPhi = (phi-mcPhi);
-	if (dPhi < -TMath::Pi()) dPhi += 2.*TMath::Pi();
-	else if (dPhi > TMath::Pi()) dPhi -= 2.*TMath::Pi();
-	((TH1F*)fList->UncheckedAt(kDphi))->Fill(dPhi*TMath::RadToDeg());
-	if (dPhi > -0.5*TMath::Pi() && dPhi < 0.5*TMath::Pi()) ((TH1F*)fList->UncheckedAt(kCos2Dphi))->Fill(TMath::Cos(2.*dPhi));
-	//((TH1F*)fList->UncheckedAt(kPtRecMu))->Fill(dimu->GetMu(0)->Pt());
-	//((TH1F*)fList->UncheckedAt(kYRecMu))->Fill(dimu->GetMu(0)->Y());
-	//((TH1F*)fList->UncheckedAt(kPtRecMu))->Fill(dimu->GetMu(1)->Pt());
-	//((TH1F*)fList->UncheckedAt(kYRecMu))->Fill(dimu->GetMu(1)->Y());
-	jpsiFound = kTRUE;
-      }
+    }
+    
+    for (Int_t iTrack2 = iTrack1 + 1; iTrack2 < nTracks; iTrack2++) {
       
-      // pt bin
-      TString ptKey;
-      for (Int_t ipt = 0; ipt < fPtBinLowEdge.GetSize()-1; ipt++)
-	if (dimu->Pt() >= fPtBinLowEdge[ipt] && dimu->Pt() < fPtBinLowEdge[ipt+1])
-	  ptKey = Form("%g-%g",fPtBinLowEdge[ipt],fPtBinLowEdge[ipt+1]);
-      if (ptKey.IsNull()) continue;
+      AliVParticle *track2 = AliAnalysisMuonUtility::GetTrack(iTrack2, evt);
+      if (!AliAnalysisMuonUtility::IsMuonTrack(track2)) continue;
       
-      // y bin
-      TString yKey;
-      for (Int_t iy = 0; iy < fYBinLowEdge.GetSize()-1; iy++)
-	if (dimu->Y() >= fYBinLowEdge[iy] && dimu->Y() < fYBinLowEdge[iy+1])
-	  yKey = Form("%g-%g",fYBinLowEdge[iy],fYBinLowEdge[iy+1]);
-      if (yKey.IsNull()) continue;
+      if (track2->GetLabel() < 0) continue;
       
-      for (Int_t itrg = 0; itrg < 3; itrg++) {
-	if (!trigOk[itrg]) continue;
-	fJPsiCounters->Count(Form("type:rec/match:%s/ptbin:%s/ybin:%s/cent:any/run:%d",
-				  matchKey[itrg].Data(),ptKey.Data(),yKey.Data(),fCurrentRunNumber));
-	if (!centKey.IsNull()) fJPsiCounters->Count(Form("type:rec/match:%s/ptbin:%s/ybin:%s/cent:%s/run:%d",
-							 matchKey[itrg].Data(),ptKey.Data(),yKey.Data(),centKey.Data(),fCurrentRunNumber));
+      TLorentzVector muV2(track2->Px(), track2->Py(), track2->Pz(), track2->E());
+      Short_t charge2 = track2->Charge();
+      Int_t matchTrig2 = AliAnalysisMuonUtility::GetMatchTrigger(track2);
+      Double_t eta2 = track2->Eta();
+      Double_t rAbs2 = AliAnalysisMuonUtility::GetRabs(track2);
+      //Double_t thetaAbs2 = AliAnalysisMuonUtility::GetThetaAbsDeg(track2);
+      Double_t pT2 = track2->Pt();
+      
+      TLorentzVector dimuV = muV1 + muV2;
+      Short_t charge = charge1*charge2;
+      Double_t pT = dimuV.Pt();
+      Double_t y = dimuV.Rapidity();
+      
+      // fill dimuon information
+      //Double_t ptCut1 = gRandom->Gaus(fMuLowPtCut,0.333);
+      //Double_t ptCut2 = gRandom->Gaus(fMuLowPtCut,0.333);
+      if(charge < 0 &&
+         y >= fYBinLowEdge[0] && y < fYBinLowEdge[fYBinLowEdge.GetSize()-1] &&
+         eta1 >= -4. && eta1 <= -2.5 && eta2 >= -4. && eta2 <= -2.5 &&
+         //pT1 > ptCut1 && pT2 > ptCut2 &&
+         pT1 > fMuLowPtCut && pT2 > fMuLowPtCut &&
+         rAbs1 >= rAbsMin && rAbs1 <= rAbsMax && rAbs2 >= rAbsMin && rAbs2 <= rAbsMax
+         //thetaAbs1 > 2. && thetaAbs1 < 10. && thetaAbs2 > 2. && thetaAbs2 < 10.
+         ) {
+        /*
+        // remove events with muons generated outside 168.5<Theta<178.5
+        Bool_t accOk = kTRUE;
+        AliVParticle *mu[2] = {track1, track2};
+        for (Int_t imu = 0; imu < 2; imu++) {
+          Int_t label = mu[imu]->GetLabel();
+          AliVParticle *mctrack = mcEvt->GetTrack(label);
+          if (mctrack && mctrack->PdgCode() == 13 && mctrack->GetMother() >= 0 &&
+              mcEvt->GetTrack(mctrack->GetMother())->PdgCode() == 443 &&
+              (mctrack->Theta()*TMath::RadToDeg() < 168.5 || mctrack->Theta()*TMath::RadToDeg() > 178.5)) {
+            printf("theta = %f\n",mctrack->Theta()*TMath::RadToDeg());
+            accOk = kFALSE;
+          }
+        }
+        if (!accOk) {
+          printf("--> reject event\n");
+          continue;
+        }
+        */
+        Bool_t trigOk[3] = {kTRUE, kFALSE, kFALSE};
+        if(matchTrig1 >= fTrigLevel || matchTrig2 >= fTrigLevel) trigOk[1] = kTRUE;
+        if(matchTrig1 >= fTrigLevel && matchTrig2 >= fTrigLevel) trigOk[2] = kTRUE;
+        
+        if (trigOk[2]) {
+          ((TH1F*)fList->UncheckedAt(kPtRec))->Fill(pT);
+          ((TH1F*)fList->UncheckedAt(kYRec))->Fill(y);
+          ((TH1F*)fList->UncheckedAt(kMass))->Fill(dimuV.M());
+          Double_t phi = dimuV.Phi();
+          if (phi < 0.) phi += 2.*TMath::Pi();
+          Double_t dPhi = (phi-mcPhi);
+          if (dPhi < -TMath::Pi()) dPhi += 2.*TMath::Pi();
+          else if (dPhi > TMath::Pi()) dPhi -= 2.*TMath::Pi();
+          ((TH1F*)fList->UncheckedAt(kDphi))->Fill(dPhi*TMath::RadToDeg());
+          if (dPhi > -0.5*TMath::Pi() && dPhi < 0.5*TMath::Pi()) ((TH1F*)fList->UncheckedAt(kCos2Dphi))->Fill(TMath::Cos(2.*dPhi));
+          //((TH1F*)fList->UncheckedAt(kPtRecMu))->Fill(pT1);
+          //((TH1F*)fList->UncheckedAt(kYRecMu))->Fill(track1->Y());
+          //((TH1F*)fList->UncheckedAt(kPtRecMu))->Fill(pT2);
+          //((TH1F*)fList->UncheckedAt(kYRecMu))->Fill(track2->Y());
+          jpsiFound = kTRUE;
+        }
+        
+        // pt bin
+        TString ptKey;
+        for (Int_t ipt = 0; ipt < fPtBinLowEdge.GetSize()-1; ipt++)
+          if (pT >= fPtBinLowEdge[ipt] && pT < fPtBinLowEdge[ipt+1])
+            ptKey = Form("%g-%g",fPtBinLowEdge[ipt],fPtBinLowEdge[ipt+1]);
+        if (ptKey.IsNull()) continue;
+        
+        // y bin
+        TString yKey;
+        for (Int_t iy = 0; iy < fYBinLowEdge.GetSize()-1; iy++)
+          if (y >= fYBinLowEdge[iy] && y < fYBinLowEdge[iy+1])
+            yKey = Form("%g-%g",fYBinLowEdge[iy],fYBinLowEdge[iy+1]);
+        if (yKey.IsNull()) continue;
+        
+        for (Int_t itrg = 0; itrg < 3; itrg++) {
+          if (!trigOk[itrg]) continue;
+          fJPsiCounters->Count(Form("type:rec/match:%s/ptbin:%s/ybin:%s/cent:any/run:%d",
+                                    matchKey[itrg].Data(),ptKey.Data(),yKey.Data(),fCurrentRunNumber));
+          if (!centKey.IsNull()) fJPsiCounters->Count(Form("type:rec/match:%s/ptbin:%s/ybin:%s/cent:%s/run:%d",
+                                                           matchKey[itrg].Data(),ptKey.Data(),yKey.Data(),centKey.Data(),fCurrentRunNumber));
+        }
+        
       }
       
     }
     
   }
   
-  // vertex resolution for event with a valid reconstructed JPsi
-  if (jpsiFound) ((TH1F*)fList->UncheckedAt(kDzVtx2))->Fill(aod->GetPrimaryVertex()->GetZ()-aodMCHeader->GetVtxZ());
+  // vertex resolution for events with a valid reconstructed JPsi
+  if (jpsiFound) ((TH1F*)fList->UncheckedAt(kDzVtx2))->Fill(zVtx-zVtxMC);
   
   // Post final data. It will be written to a file with option "RECREATE"
   PostData(1, fList);
