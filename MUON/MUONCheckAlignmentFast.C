@@ -45,11 +45,13 @@
 //Int_t run = 169099; // LHC11h
 //Int_t run = 192732; // LHC12h
 //Int_t run = 197388; // LHC13f
-Int_t run = 221128; // LHC15c
+//Int_t run = 221128; // LHC15c
+Int_t run = 244340; // LHC15n
 
 TString alignStorage[2] = {
 //  "alien://folder=/alice/cern.ch/user/p/ppillot/OCDB2012",
-  "alien://folder=/alice/data/2015/OCDB",
+//  "alien://folder=/alice/data/2015/OCDB",
+  "alien://folder=/alice/simulation/2008/v4-15-Release/Full",
 //  "alien://folder=/alice/simulation/2008/v4-15-Release/Ideal",
 //  "alien://folder=/alice/cern.ch/user/p/ppillot/OCDB_PbPbSim",
 //  "alien://folder=/alice/cern.ch/user/j/jcastill/LHC11hMisAlignCDB3"
@@ -59,8 +61,13 @@ TString alignStorage[2] = {
 //  "alien://folder=/alice/cern.ch/user/j/jcastill/LHC11hMisAlignCDB3"
 //  "alien://folder=/alice/simulation/2008/v4-15-Release/Residual"
 //  "alien://folder=/alice/simulation/2008/v4-15-Release/Full"
-  "local://."
+  "alien://folder=/alice/data/2015/OCDB"
+//  "local://."
 };
+
+Int_t version[2] = {-1, 5};
+
+Int_t subversion[2] = {-1, -1};
 
 // disable the display at the channel level to get an output file
 // of a reasonable size that fit in a mail
@@ -93,7 +100,7 @@ void MUONCheckAlignmentFast()
     AliGeomManager::GetGeometry()->UnlockGeometry();
     AliGeomManager::LoadGeometry();
     if (!AliGeomManager::GetGeometry()) return;
-    cdbm->SetSpecificStorage("MUON/Align/Data",alignStorage[i].Data());
+    cdbm->SetSpecificStorage("MUON/Align/Data",alignStorage[i].Data(),version[i],subversion[i]);
     AliGeomManager::ApplyAlignObjsFromCDB("MUON");
     geoTransformer[i].LoadGeometryData();
   }
