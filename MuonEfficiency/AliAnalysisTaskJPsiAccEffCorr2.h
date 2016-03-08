@@ -119,6 +119,9 @@ public:
   /// set the muon pt cut value
   void SetMuLowPtCut(Double_t cut) {fMuLowPtCut = cut;}
   
+  /// set the flag to select tracks using MC label (activated by default)
+  void UseMCLabel(Bool_t flag = kTRUE) { fUseMCLabel = flag; }
+  
   // Set the number of signal versus centrality in a given pt/y bin
   void SetSigWeights(const Char_t *name, Float_t ptMin, Float_t ptMax, Float_t yMin, Float_t yMax,
 		     Int_t nCentBin, Float_t *binLowEdge, Double_t *nSig, Bool_t weightRec);
@@ -186,6 +189,8 @@ private:
   TObjArray*  fList; //!< List of output object
   AliCounterCollection* fEventCounters; //!< event statistics
   AliCounterCollection* fJPsiCounters;  //!< JPsi statistics
+  TObjArray*  fMassVspT; //!< List of invariant mass distributions versus pT bin
+  TObjArray*  fMassVsy; //!< List of invariant mass distributions versus y bin
   
   TArrayF   fCentBinLowEdge; ///< centrality bin low-edge values
   TArrayF   fPtBinLowEdge;   ///< pT bin low-edge values
@@ -193,10 +198,11 @@ private:
   Int_t     fTrigLevel;      ///< trigger level to be matched with (1=all, 2=low, 3=high)
   Int_t     fNMatch;         ///< number of muons to be matched with the trigger (0, 1 or 2)
   Double_t  fMuLowPtCut;     ///< muon pt cut value
+  Bool_t    fUseMCLabel;     ///< select tracks using MC label
   TList     *fSigWeights;    ///< number of signal versus centrality for different pt/y bins
   THashList *fRunWeights;    ///< number of interested events per run
   
-  ClassDef(AliAnalysisTaskJPsiAccEffCorr2, 1);
+  ClassDef(AliAnalysisTaskJPsiAccEffCorr2, 2);
 };
 
 #endif

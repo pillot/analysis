@@ -152,12 +152,15 @@ AliAnalysisTaskSE(),
 fList(0x0),
 fEventCounters(0x0),
 fJPsiCounters(0x0),
+fMassVspT(0x0),
+fMassVsy(0x0),
 fCentBinLowEdge(0),
 fPtBinLowEdge(0),
 fYBinLowEdge(0),
 fTrigLevel(1),
 fNMatch(2),
 fMuLowPtCut(-1.),
+fUseMCLabel(kTRUE),
 fSigWeights(0x0),
 fRunWeights(0x0)
 {
@@ -170,12 +173,15 @@ AliAnalysisTaskSE(name),
 fList(0x0),
 fEventCounters(0x0),
 fJPsiCounters(0x0),
+fMassVspT(0x0),
+fMassVsy(0x0),
 fCentBinLowEdge(0),
 fPtBinLowEdge(0),
 fYBinLowEdge(0),
 fTrigLevel(1),
 fNMatch(2),
 fMuLowPtCut(-1.),
+fUseMCLabel(kTRUE),
 fSigWeights(0x0),
 fRunWeights(0x0)
 {
@@ -196,6 +202,10 @@ fRunWeights(0x0)
   DefineOutput(2,AliCounterCollection::Class());
   // Output slot #3 writes JPsi counters
   DefineOutput(3,AliCounterCollection::Class());
+  // Output slot #1 writes into a TObjArray container
+  DefineOutput(4,TObjArray::Class());
+  // Output slot #1 writes into a TObjArray container
+  DefineOutput(5,TObjArray::Class());
 }
 
 //________________________________________________________________________
@@ -206,6 +216,8 @@ AliAnalysisTaskJPsiAccEffCorr2::~AliAnalysisTaskJPsiAccEffCorr2()
     delete fList;
     delete fEventCounters;
     delete fJPsiCounters;
+    delete fMassVspT;
+    delete fMassVsy;
   }
   delete fSigWeights;
   delete fRunWeights;
@@ -257,6 +269,37 @@ void AliAnalysisTaskJPsiAccEffCorr2::UserCreateOutputObjects()
   TH1F* hCos2Dphi = new TH1F("hCos2Dphi","J/#psi cos(2.#times(#phi_{rec}-#phi_{MC})) distribution;cos(2.#times(#phi_{rec}-#phi_{MC}));N_{J/#psi}", 200, -1., 1.);
   fList->AddAtAndExpand(hCos2Dphi, kCos2Dphi);
   
+  // initialize mass histos
+  fMassVspT = new TObjArray(2000);
+  fMassVspT->SetOwner();
+  
+  TString ptbin = Form("%g-%g",fPtBinLowEdge[0],fPtBinLowEdge[fPtBinLowEdge.GetSize()-1]);
+  hMass = new TH1F(Form("hMass_pT%s",ptbin.Data()),Form("invariant mass distribution, pT %s;Mass (GeV/c^{2});N_{J/#psi} / 0.025 GeV/c",ptbin.Data()), 400, 0., 10.);
+  fMassVspT->AddAtAndExpand(hMass, 0);
+  
+  for (Int_t i=0; i<fPtBinLowEdge.GetSize()-1; i++) {
+    
+    ptbin = Form("%g-%g",fPtBinLowEdge[i],fPtBinLowEdge[i+1]);
+    hMass = new TH1F(Form("hMass_pT%s",ptbin.Data()),Form("invariant mass distribution, pT %s;Mass (GeV/c^{2});N_{J/#psi} / 0.025 GeV/c",ptbin.Data()), 400, 0., 10.);
+    fMassVspT->AddAtAndExpand(hMass, i+1);
+    
+  }
+  
+  fMassVsy = new TObjArray(2000);
+  fMassVsy->SetOwner();
+  
+  TString ybin = Form("%g-%g",fYBinLowEdge[0],fYBinLowEdge[fYBinLowEdge.GetSize()-1]);
+  hMass = new TH1F(Form("hMass_y%s",ybin.Data()),Form("invariant mass distribution, y %s;Mass (GeV/c^{2});N_{J/#psi} / 0.025 GeV/c",ybin.Data()), 400, 0., 10.);
+  fMassVsy->AddAtAndExpand(hMass, 0);
+  
+  for (Int_t i=0; i<fYBinLowEdge.GetSize()-1; i++) {
+    
+    ybin = Form("%g-%g",fYBinLowEdge[i],fYBinLowEdge[i+1]);
+    hMass = new TH1F(Form("hMass_y%s",ybin.Data()),Form("invariant mass distribution, y %s;Mass (GeV/c^{2});N_{J/#psi} / 0.025 GeV/c",ybin.Data()), 400, 0., 10.);
+    fMassVsy->AddAtAndExpand(hMass, i+1);
+    
+  }
+  
   // initialize counters
   
   // centrality binning
@@ -290,6 +333,8 @@ void AliAnalysisTaskJPsiAccEffCorr2::UserCreateOutputObjects()
   PostData(1, fList);
   PostData(2, fEventCounters);
   PostData(3, fJPsiCounters);
+  PostData(4, fMassVspT);
+  PostData(5, fMassVsy);
 }
 
 //________________________________________________________________________
@@ -400,14 +445,14 @@ void AliAnalysisTaskJPsiAccEffCorr2::UserExec(Option_t *)
     AliVParticle *track1 = AliAnalysisMuonUtility::GetTrack(iTrack1, evt);
     if (!AliAnalysisMuonUtility::IsMuonTrack(track1)) continue;
     
-    if (track1->GetLabel() < 0) continue;
+    if (fUseMCLabel && track1->GetLabel() < 0) continue;
     
     TLorentzVector muV1(track1->Px(), track1->Py(), track1->Pz(), track1->E());
     Short_t charge1 = track1->Charge();
     Int_t matchTrig1 = AliAnalysisMuonUtility::GetMatchTrigger(track1);
     Double_t eta1 = track1->Eta();
     Double_t rAbs1 = AliAnalysisMuonUtility::GetRabs(track1);
-    //Double_t thetaAbs1 = AliAnalysisMuonUtility::GetThetaAbsDeg(track1);
+    Double_t thetaAbs1 = AliAnalysisMuonUtility::GetThetaAbsDeg(track1);
     Double_t pT1 = track1->Pt();
     
     // fill single muon information
@@ -425,20 +470,21 @@ void AliAnalysisTaskJPsiAccEffCorr2::UserExec(Option_t *)
       AliVParticle *track2 = AliAnalysisMuonUtility::GetTrack(iTrack2, evt);
       if (!AliAnalysisMuonUtility::IsMuonTrack(track2)) continue;
       
-      if (track2->GetLabel() < 0) continue;
+      if (fUseMCLabel && track2->GetLabel() < 0) continue;
       
       TLorentzVector muV2(track2->Px(), track2->Py(), track2->Pz(), track2->E());
       Short_t charge2 = track2->Charge();
       Int_t matchTrig2 = AliAnalysisMuonUtility::GetMatchTrigger(track2);
       Double_t eta2 = track2->Eta();
       Double_t rAbs2 = AliAnalysisMuonUtility::GetRabs(track2);
-      //Double_t thetaAbs2 = AliAnalysisMuonUtility::GetThetaAbsDeg(track2);
+      Double_t thetaAbs2 = AliAnalysisMuonUtility::GetThetaAbsDeg(track2);
       Double_t pT2 = track2->Pt();
       
       TLorentzVector dimuV = muV1 + muV2;
       Short_t charge = charge1*charge2;
       Double_t pT = dimuV.Pt();
       Double_t y = dimuV.Rapidity();
+      Double_t m = dimuV.M();
       
       // fill dimuon information
       //Double_t ptCut1 = gRandom->Gaus(fMuLowPtCut,0.333);
@@ -448,8 +494,8 @@ void AliAnalysisTaskJPsiAccEffCorr2::UserExec(Option_t *)
          eta1 >= -4. && eta1 <= -2.5 && eta2 >= -4. && eta2 <= -2.5 &&
          //pT1 > ptCut1 && pT2 > ptCut2 &&
          pT1 > fMuLowPtCut && pT2 > fMuLowPtCut &&
-         rAbs1 >= rAbsMin && rAbs1 <= rAbsMax && rAbs2 >= rAbsMin && rAbs2 <= rAbsMax
-         //thetaAbs1 > 2. && thetaAbs1 < 10. && thetaAbs2 > 2. && thetaAbs2 < 10.
+         //rAbs1 >= rAbsMin && rAbs1 <= rAbsMax && rAbs2 >= rAbsMin && rAbs2 <= rAbsMax
+         thetaAbs1 >= 2. && thetaAbs1 <= 10. && thetaAbs2 >= 2. && thetaAbs2 <= 10.
          ) {
         /*
         // remove events with muons generated outside 168.5<Theta<178.5
@@ -477,7 +523,7 @@ void AliAnalysisTaskJPsiAccEffCorr2::UserExec(Option_t *)
         if (trigOk[2]) {
           ((TH1F*)fList->UncheckedAt(kPtRec))->Fill(pT);
           ((TH1F*)fList->UncheckedAt(kYRec))->Fill(y);
-          ((TH1F*)fList->UncheckedAt(kMass))->Fill(dimuV.M());
+          ((TH1F*)fList->UncheckedAt(kMass))->Fill(m);
           Double_t phi = dimuV.Phi();
           if (phi < 0.) phi += 2.*TMath::Pi();
           Double_t dPhi = (phi-mcPhi);
@@ -494,16 +540,24 @@ void AliAnalysisTaskJPsiAccEffCorr2::UserExec(Option_t *)
         
         // pt bin
         TString ptKey;
-        for (Int_t ipt = 0; ipt < fPtBinLowEdge.GetSize()-1; ipt++)
-          if (pT >= fPtBinLowEdge[ipt] && pT < fPtBinLowEdge[ipt+1])
+        Int_t ipt;
+        for (ipt = 0; ipt < fPtBinLowEdge.GetSize()-1; ipt++) {
+          if (pT >= fPtBinLowEdge[ipt] && pT < fPtBinLowEdge[ipt+1]) {
             ptKey = Form("%g-%g",fPtBinLowEdge[ipt],fPtBinLowEdge[ipt+1]);
+            break;
+          }
+        }
         if (ptKey.IsNull()) continue;
         
         // y bin
         TString yKey;
-        for (Int_t iy = 0; iy < fYBinLowEdge.GetSize()-1; iy++)
-          if (y >= fYBinLowEdge[iy] && y < fYBinLowEdge[iy+1])
+        Int_t iy;
+        for (iy = 0; iy < fYBinLowEdge.GetSize()-1; iy++) {
+          if (y >= fYBinLowEdge[iy] && y < fYBinLowEdge[iy+1]) {
             yKey = Form("%g-%g",fYBinLowEdge[iy],fYBinLowEdge[iy+1]);
+            break;
+          }
+        }
         if (yKey.IsNull()) continue;
         
         for (Int_t itrg = 0; itrg < 3; itrg++) {
@@ -512,6 +566,14 @@ void AliAnalysisTaskJPsiAccEffCorr2::UserExec(Option_t *)
                                     matchKey[itrg].Data(),ptKey.Data(),yKey.Data(),fCurrentRunNumber));
           if (!centKey.IsNull()) fJPsiCounters->Count(Form("type:rec/match:%s/ptbin:%s/ybin:%s/cent:%s/run:%d",
                                                            matchKey[itrg].Data(),ptKey.Data(),yKey.Data(),centKey.Data(),fCurrentRunNumber));
+        }
+        
+        // fill mass histos
+        if (trigOk[2]) {
+          ((TH1F*)fMassVspT->UncheckedAt(0))->Fill(m);
+          ((TH1F*)fMassVspT->UncheckedAt(ipt+1))->Fill(m);
+          ((TH1F*)fMassVsy->UncheckedAt(0))->Fill(m);
+          ((TH1F*)fMassVsy->UncheckedAt(iy+1))->Fill(m);
         }
         
       }
@@ -527,6 +589,8 @@ void AliAnalysisTaskJPsiAccEffCorr2::UserExec(Option_t *)
   PostData(1, fList);
   PostData(2, fEventCounters);
   PostData(3, fJPsiCounters);
+  PostData(4, fMassVspT);
+  PostData(5, fMassVsy);
   
 }
 

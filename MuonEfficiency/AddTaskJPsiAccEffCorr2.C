@@ -42,9 +42,13 @@ AliAnalysisTaskJPsiAccEffCorr2* AddTaskJPsiAccEffCorr2(TString extension = "")
   AliAnalysisDataContainer *histo = mgr->CreateContainer(Form("Histograms%s",suffix.Data()), TObjArray::Class(), AliAnalysisManager::kOutputContainer, outputfile);
   AliAnalysisDataContainer *eventStat = mgr->CreateContainer(Form("EventCounters%s",suffix.Data()), AliCounterCollection::Class(), AliAnalysisManager::kOutputContainer, outputfile);
   AliAnalysisDataContainer *jPsiStat = mgr->CreateContainer(Form("JPsiCounters%s",suffix.Data()), AliCounterCollection::Class(), AliAnalysisManager::kOutputContainer, outputfile);
+  AliAnalysisDataContainer *massVspT = mgr->CreateContainer(Form("MassVspT%s",suffix.Data()), TObjArray::Class(), AliAnalysisManager::kOutputContainer, outputfile);
+  AliAnalysisDataContainer *massVsy = mgr->CreateContainer(Form("MassVsy%s",suffix.Data()), TObjArray::Class(), AliAnalysisManager::kOutputContainer, outputfile);
   mgr->ConnectOutput(task, 1, histo);
   mgr->ConnectOutput(task, 2, eventStat);
   mgr->ConnectOutput(task, 3, jPsiStat);
+  mgr->ConnectOutput(task, 4, massVspT);
+  mgr->ConnectOutput(task, 5, massVsy);
   
   return task;
 }
