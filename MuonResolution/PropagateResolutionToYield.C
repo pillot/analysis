@@ -33,22 +33,25 @@
 Double_t sigmaxChSt1 = 0.000450; // used to compute uncertainty on the slope at vtx
 Double_t sigmayChSt1 = 0.000150; // used to compute uncertainty on the slope at vtx
 Double_t sigmayCh = 0.000200; // used to compute uncertainty on the momentum at vtx
-*/// Breit Wigner fit (correspond to gamma values = FWHM/2.)
+// Breit Wigner fit (correspond to gamma values = FWHM/2.)
 Double_t sigmaxChSt1 = 0.000550; // used to compute uncertainty on the slope at vtx
 Double_t sigmayChSt1 = 0.000190; // used to compute uncertainty on the slope at vtx
 Double_t sigmayCh = 0.000280; // used to compute uncertainty on the momentum at vtx
-// ------------
-/*// --- SIM ---
-Double_t sigmaxChSt1 = 0.000565; // used to compute uncertainty on the slope at vtx
-Double_t sigmayChSt1 = 0.000150; // used to compute uncertainty on the slope at vtx
-//Double_t sigmayCh = 0.000177; // used to compute uncertainty on the momentum at vtx
-Double_t sigmayCh = 0.000158; // used to compute uncertainty on the momentum at vtx
-// -----------
-*/
+*/// ------------
+// --- SIM ---
+Double_t sigmaxChSt1 = 0.000544; // used to compute uncertainty on the slope at vtx
+Double_t sigmayChSt1 = 0.000131; // used to compute uncertainty on the slope at vtx
+Double_t sigmayCh = 0.000160; // used to compute uncertainty on the momentum at vtx
+/*// Breit Wigner fit (correspond to gamma values = FWHM/2.)
+Double_t sigmaxChSt1 = 0.000665; // used to compute uncertainty on the slope at vtx
+Double_t sigmayChSt1 = 0.000166; // used to compute uncertainty on the slope at vtx
+Double_t sigmayCh = 0.000224; // used to compute uncertainty on the momentum at vtx
+*/// -----------
+
 // use a Breit Wigner function instead of a gaussian to describe the chamber resolution
-Bool_t useBreitWigner = kTRUE;
+Bool_t useBreitWigner = kFALSE;
 Double_t sigmaTrk = 0.002; // chamber resolution used during tracking
-Double_t sigmaTrkCut = 6.; // sigma cut used during tracking
+Double_t sigmaTrkCut = 4.; // sigma cut used during tracking
 
 // tune the parameterization of MCS and energy loss to fit the momentum and angular resolution given by:
 // - kTRUE:  the Kalman filter
@@ -90,8 +93,8 @@ Double_t pAccCut = 0.5;
 
 // pT/eta/phi ranges for generation
 //Double_t pTRange[2] = {0.8,50.};
-Double_t pTRange[2] = {1.,100.};
-//Double_t pTRange[2] = {1.,20.};
+//Double_t pTRange[2] = {1.,100.};
+Double_t pTRange[2] = {1.,15.};
 Double_t npTBinPerGeV = 2.;
 Double_t etaRange[2] = {-4.2,-2.3};
 Double_t nEtaBinPerUnit = 50.;
@@ -107,6 +110,8 @@ Bool_t generateUniform = kTRUE;
 // generate in pT/y instead of pT/eta
 Bool_t generateY = kTRUE;
 
+// draw Delta_p histograms versus p
+Bool_t drawResPVsP = kTRUE;
 
 Double_t DnDpT( const Double_t *x, const Double_t *par );
 Double_t DnDeta( const Double_t *x, const Double_t *par );
@@ -119,6 +124,7 @@ Double_t SigmaThetaDevFromMCS2(Double_t p);
 Double_t SigmaThetaDevFromRes2();
 Double_t SigmaSlopeFromMCSInAbs2(Double_t p, Double_t theta);
 Double_t SigmaSlopeFromMCSInCh2(Double_t p, Bool_t at1stCl, Double_t zB);
+//Double_t SigmaPosFromRes2(Bool_t bendingDir, Bool_t at1stCl, Double_t zB);
 Double_t SigmaSlopeFromRes2(Bool_t bendingDir, Bool_t at1stCl, Double_t zB);
 Double_t ELoss(Double_t p, Double_t theta);
 Double_t ELossFluctuation2(Double_t p, Double_t rhoZoverA);
@@ -127,7 +133,8 @@ Double_t GetSigma(TH1 *h, Double_t *sigmaErr = 0x0);
 Double_t GetSigmaBreitWigner(TH1 *h, Double_t *sigmaErr = 0x0);
 void FitGausResVsMom(TH2 *h, TGraphAsymmErrors *gSigma, Int_t rebinP);
 Double_t langaufun(Double_t *x, Double_t *par);
-void FitLandauGausResVsP(TH2 *h, TGraphAsymmErrors *gSigma, Int_t rebinP);
+Double_t GausInvXFun(Double_t *x, Double_t *par);
+void FitPResVsP(TH2 *h, TGraphAsymmErrors *gSigma, Int_t rebinP, Double_t pSwitch);
 
 
 //-----------------------------------------------------------------------
@@ -137,44 +144,46 @@ void PropagateResolutionToYield(TString fileResMeas = "results.root",
 {
   /// propagate the momentum resolution to an uncertainty on the muon yield vs pT
   
+  gRandom->SetSeed(0);
+  
   setbuf(stdout, NULL);
   TCanvas *dummy = new TCanvas("dummy","dummy",10,10,68,1);
   
   // momentum relative resolution versus p
-  TF1 *fPResVsP02 = new TF1("fPResVsP02",PResVsP,0.,300.,1);
+  TF1 *fPResVsP02 = new TF1("fPResVsP02",PResVsP,0.,1000.,1);
   fPResVsP02->SetParameter(0,1);
   fPResVsP02->SetNpx(10000);
   fPResVsP02->SetLineColor(15);
-  TF1 *fPResVsP23 = new TF1("fPResVsP23",PResVsP,0.,300.,1);
+  TF1 *fPResVsP23 = new TF1("fPResVsP23",PResVsP,0.,1000.,1);
   fPResVsP23->SetParameter(0,2.5);
   fPResVsP23->SetNpx(10000);
   fPResVsP23->SetLineColor(2);
-  TF1 *fPResVsP310 = new TF1("fPResVsP310",PResVsP,0.,300.,1);
+  TF1 *fPResVsP310 = new TF1("fPResVsP310",PResVsP,0.,1000.,1);
   fPResVsP310->SetParameter(0,6);
   fPResVsP310->SetNpx(10000);
   fPResVsP310->SetLineColor(6);
   // slope resolution versus p
-  TF1 *fSlopeXResVsP02 = new TF1("fSlopeXResVsP02",SlopeResVsP,0.,300.,2);
+  TF1 *fSlopeXResVsP02 = new TF1("fSlopeXResVsP02",SlopeResVsP,0.,1000.,2);
   fSlopeXResVsP02->SetParameters(1.5,-1.);
   fSlopeXResVsP02->SetNpx(10000);
   fSlopeXResVsP02->SetLineColor(15);
-  TF1 *fSlopeXResVsP23 = new TF1("fSlopeXResVsP23",SlopeResVsP,0.,300.,2);
+  TF1 *fSlopeXResVsP23 = new TF1("fSlopeXResVsP23",SlopeResVsP,0.,1000.,2);
   fSlopeXResVsP23->SetParameters(2.5,-1.);
   fSlopeXResVsP23->SetNpx(10000);
   fSlopeXResVsP23->SetLineColor(2);
-  TF1 *fSlopeXResVsP310 = new TF1("fSlopeXResVsP310",SlopeResVsP,0.,300.,2);
+  TF1 *fSlopeXResVsP310 = new TF1("fSlopeXResVsP310",SlopeResVsP,0.,1000.,2);
   fSlopeXResVsP310->SetParameters(6,-1.);
   fSlopeXResVsP310->SetNpx(10000);
   fSlopeXResVsP310->SetLineColor(6);
-  TF1 *fSlopeYResVsP02 = new TF1("fSlopeYResVsP02",SlopeResVsP,0.,300.,2);
+  TF1 *fSlopeYResVsP02 = new TF1("fSlopeYResVsP02",SlopeResVsP,0.,1000.,2);
   fSlopeYResVsP02->SetParameters(1.5,1.);
   fSlopeYResVsP02->SetNpx(10000);
   fSlopeYResVsP02->SetLineColor(15);
-  TF1 *fSlopeYResVsP23 = new TF1("fSlopeYResVsP23",SlopeResVsP,0.,300.,2);
+  TF1 *fSlopeYResVsP23 = new TF1("fSlopeYResVsP23",SlopeResVsP,0.,1000.,2);
   fSlopeYResVsP23->SetParameters(2.5,1.);
   fSlopeYResVsP23->SetNpx(10000);
   fSlopeYResVsP23->SetLineColor(2);
-  TF1 *fSlopeYResVsP310 = new TF1("fSlopeYResVsP310",SlopeResVsP,0.,300.,2);
+  TF1 *fSlopeYResVsP310 = new TF1("fSlopeYResVsP310",SlopeResVsP,0.,1000.,2);
   fSlopeYResVsP310->SetParameters(6,1.);
   fSlopeYResVsP310->SetNpx(10000);
   fSlopeYResVsP310->SetLineColor(6);
@@ -293,46 +302,79 @@ void PropagateResolutionToYield(TString fileResMeas = "results.root",
     if (useBreitWigner) printf("- sigma y = %.6f\n\n", 0.01*GetSigmaBreitWigner(hYRes));
     else printf("- sigma y = %.6f\n\n", 0.01*GetSigma(hYRes));
     
-    if (!atFirstCluster && checkResVsP) {
+    if (checkResVsP) {
       
-      // recompute momentum resolution at vertex versus p
-      TH2F *hResPAtVtxVsPIn02deg = static_cast<TH2F*>(trackerResolutionList->FindObject("hResPAtVtxVsPIn02degMC"));
-      TH2F *hResPAtVtxVsPIn23deg = static_cast<TH2F*>(trackerResolutionList->FindObject("hResPAtVtxVsPIn23deg"));
-      TH2F *hResPAtVtxVsPIn310deg = static_cast<TH2F*>(trackerResolutionList->FindObject("hResPAtVtxVsPIn310deg"));
-      if (!hResPAtVtxVsPIn23deg || !hResPAtVtxVsPIn310deg) return;
-      dummy->cd();
-      Int_t rebinP = 2;
-      gSigmaResPAtVtxVsPIn02deg = new TGraphAsymmErrors(hResPAtVtxVsPIn02deg->GetNbinsX()/rebinP);
-      gSigmaResPAtVtxVsPIn02deg->SetName("gSigmaResPAtVtxVsPIn02deg");
-      gSigmaResPAtVtxVsPIn02deg->SetTitle("#sigma_{p}/p at vertex versus p in [0,2[ deg;p (GeV/c);#sigma_{p}/p (%)");
-      gSigmaResPAtVtxVsPIn02deg->SetLineColor(15);
-      FitLandauGausResVsP(hResPAtVtxVsPIn02deg, gSigmaResPAtVtxVsPIn02deg, rebinP);
-      gSigmaResPAtVtxVsPIn23deg = new TGraphAsymmErrors(hResPAtVtxVsPIn23deg->GetNbinsX()/rebinP);
-      gSigmaResPAtVtxVsPIn23deg->SetName("gSigmaResPAtVtxVsPIn23deg");
-      gSigmaResPAtVtxVsPIn23deg->SetTitle("#sigma_{p}/p at vertex versus p in [2,3[ deg;p (GeV/c);#sigma_{p}/p (%)");
-      gSigmaResPAtVtxVsPIn23deg->SetLineColor(2);
-      FitLandauGausResVsP(hResPAtVtxVsPIn23deg, gSigmaResPAtVtxVsPIn23deg, rebinP);
-      gSigmaResPAtVtxVsPIn310deg = new TGraphAsymmErrors(hResPAtVtxVsPIn310deg->GetNbinsX()/rebinP);
-      gSigmaResPAtVtxVsPIn310deg->SetName("gSigmaResPAtVtxVsPIn310deg");
-      gSigmaResPAtVtxVsPIn310deg->SetTitle("#sigma_{p}/p at vertex versus p in [3,10[ deg;p (GeV/c);#sigma_{p}/p (%)");
-      gSigmaResPAtVtxVsPIn310deg->SetLineColor(6);
-      FitLandauGausResVsP(hResPAtVtxVsPIn310deg, gSigmaResPAtVtxVsPIn310deg, rebinP);
-      
-      // recompute slope resolution at vertex versus p
-      TH2F *hResSlopeXAtVtxVsP = static_cast<TH2F*>(trackerResolutionList->FindObject("hResSlopeXAtVtxVsP"));
-      TH2F *hResSlopeYAtVtxVsP = static_cast<TH2F*>(trackerResolutionList->FindObject("hResSlopeYAtVtxVsP"));
-      if (!hResSlopeXAtVtxVsP || !hResSlopeYAtVtxVsP) return;
-      dummy->cd();
-      gSigmaResSlopeXAtVtxVsP2 = new TGraphAsymmErrors(hResSlopeXAtVtxVsP->GetNbinsX()/rebinP);
-      gSigmaResSlopeXAtVtxVsP2->SetName("gSigmaResSlopeXAtVtxVsP2");
-      gSigmaResSlopeXAtVtxVsP2->SetTitle("#sigma_{slope_{X}} at vertex versus p;p (GeV/c);#sigma_{slope_{X}}");
-      gSigmaResSlopeXAtVtxVsP2->SetLineColor(2);
-      FitGausResVsMom(hResSlopeXAtVtxVsP, gSigmaResSlopeXAtVtxVsP2, rebinP);
-      gSigmaResSlopeYAtVtxVsP2 = new TGraphAsymmErrors(hResSlopeYAtVtxVsP->GetNbinsX()/rebinP);
-      gSigmaResSlopeYAtVtxVsP2->SetName("gSigmaResSlopeYAtVtxVsP2");
-      gSigmaResSlopeYAtVtxVsP2->SetTitle("#sigma_{slope_{Y}} at vertex versus p;p (GeV/c);#sigma_{slope_{Y}}");
-      gSigmaResSlopeYAtVtxVsP2->SetLineColor(2);
-      FitGausResVsMom(hResSlopeYAtVtxVsP, gSigmaResSlopeYAtVtxVsP2, rebinP);
+      if (atFirstCluster) {
+        
+        // recompute momentum resolution at 1st versus p
+        TH2F *hResPAtVtxVsPIn310deg = static_cast<TH2F*>(trackerResolutionList->FindObject("hResPAt1stClVsP"));
+        if (!hResPAtVtxVsPIn310deg) return;
+        dummy->cd();
+        Int_t rebinP = 2;
+        gSigmaResPAtVtxVsPIn310deg = new TGraphAsymmErrors(hResPAtVtxVsPIn310deg->GetNbinsX()/rebinP);
+        gSigmaResPAtVtxVsPIn310deg->SetName("gSigmaResPAt1stClVsP");
+        gSigmaResPAtVtxVsPIn310deg->SetTitle("#sigma_{p}/p at 1st cluster versus p;p (GeV/c);#sigma_{p}/p (%)");
+        gSigmaResPAtVtxVsPIn310deg->SetLineColor(6);
+        FitPResVsP(hResPAtVtxVsPIn310deg, gSigmaResPAtVtxVsPIn310deg, rebinP, -1.);
+        
+        // recompute slope resolution at vertex versus p
+        TH2F *hResSlopeXAtVtxVsP = static_cast<TH2F*>(trackerResolutionList->FindObject("hResSlopeXAt1stClVsP"));
+        TH2F *hResSlopeYAtVtxVsP = static_cast<TH2F*>(trackerResolutionList->FindObject("hResSlopeYAt1stClVsP"));
+        if (!hResSlopeXAtVtxVsP || !hResSlopeYAtVtxVsP) return;
+        dummy->cd();
+        gSigmaResSlopeXAtVtxVsP2 = new TGraphAsymmErrors(hResSlopeXAtVtxVsP->GetNbinsX()/rebinP);
+        gSigmaResSlopeXAtVtxVsP2->SetName("gSigmaResSlopeXAt1stClVsP2");
+        gSigmaResSlopeXAtVtxVsP2->SetTitle("#sigma_{slope_{X}} at 1st cluster versus p;p (GeV/c);#sigma_{slope_{X}}");
+        gSigmaResSlopeXAtVtxVsP2->SetLineColor(2);
+        FitGausResVsMom(hResSlopeXAtVtxVsP, gSigmaResSlopeXAtVtxVsP2, rebinP);
+        gSigmaResSlopeYAtVtxVsP2 = new TGraphAsymmErrors(hResSlopeYAtVtxVsP->GetNbinsX()/rebinP);
+        gSigmaResSlopeYAtVtxVsP2->SetName("gSigmaResSlopeYAt1stClVsP2");
+        gSigmaResSlopeYAtVtxVsP2->SetTitle("#sigma_{slope_{Y}} at 1st cluster versus p;p (GeV/c);#sigma_{slope_{Y}}");
+        gSigmaResSlopeYAtVtxVsP2->SetLineColor(2);
+        FitGausResVsMom(hResSlopeYAtVtxVsP, gSigmaResSlopeYAtVtxVsP2, rebinP);
+        
+      } else {
+        
+        // recompute momentum resolution at vertex versus p
+        TH2F *hResPAtVtxVsPIn02deg = static_cast<TH2F*>(trackerResolutionList->FindObject("hResPAtVtxVsPIn02degMC"));
+        TH2F *hResPAtVtxVsPIn23deg = static_cast<TH2F*>(trackerResolutionList->FindObject("hResPAtVtxVsPIn23deg"));
+        TH2F *hResPAtVtxVsPIn310deg = static_cast<TH2F*>(trackerResolutionList->FindObject("hResPAtVtxVsPIn310deg"));
+        if (!hResPAtVtxVsPIn23deg || !hResPAtVtxVsPIn310deg) return;
+        dummy->cd();
+        Int_t rebinP = 2;
+        gSigmaResPAtVtxVsPIn02deg = new TGraphAsymmErrors(hResPAtVtxVsPIn02deg->GetNbinsX()/rebinP);
+        gSigmaResPAtVtxVsPIn02deg->SetName("gSigmaResPAtVtxVsPIn02deg");
+        gSigmaResPAtVtxVsPIn02deg->SetTitle("#sigma_{p}/p at vertex versus p in [0,2[ deg;p (GeV/c);#sigma_{p}/p (%)");
+        gSigmaResPAtVtxVsPIn02deg->SetLineColor(15);
+        FitPResVsP(hResPAtVtxVsPIn02deg, gSigmaResPAtVtxVsPIn02deg, rebinP, 300.);
+        gSigmaResPAtVtxVsPIn23deg = new TGraphAsymmErrors(hResPAtVtxVsPIn23deg->GetNbinsX()/rebinP);
+        gSigmaResPAtVtxVsPIn23deg->SetName("gSigmaResPAtVtxVsPIn23deg");
+        gSigmaResPAtVtxVsPIn23deg->SetTitle("#sigma_{p}/p at vertex versus p in [2,3[ deg;p (GeV/c);#sigma_{p}/p (%)");
+        gSigmaResPAtVtxVsPIn23deg->SetLineColor(2);
+        FitPResVsP(hResPAtVtxVsPIn23deg, gSigmaResPAtVtxVsPIn23deg, rebinP, 220.);
+        gSigmaResPAtVtxVsPIn310deg = new TGraphAsymmErrors(hResPAtVtxVsPIn310deg->GetNbinsX()/rebinP);
+        gSigmaResPAtVtxVsPIn310deg->SetName("gSigmaResPAtVtxVsPIn310deg");
+        gSigmaResPAtVtxVsPIn310deg->SetTitle("#sigma_{p}/p at vertex versus p in [3,10[ deg;p (GeV/c);#sigma_{p}/p (%)");
+        gSigmaResPAtVtxVsPIn310deg->SetLineColor(6);
+        FitPResVsP(hResPAtVtxVsPIn310deg, gSigmaResPAtVtxVsPIn310deg, rebinP, 160.);
+        
+        // recompute slope resolution at vertex versus p
+        TH2F *hResSlopeXAtVtxVsP = static_cast<TH2F*>(trackerResolutionList->FindObject("hResSlopeXAtVtxVsP"));
+        TH2F *hResSlopeYAtVtxVsP = static_cast<TH2F*>(trackerResolutionList->FindObject("hResSlopeYAtVtxVsP"));
+        if (!hResSlopeXAtVtxVsP || !hResSlopeYAtVtxVsP) return;
+        dummy->cd();
+        gSigmaResSlopeXAtVtxVsP2 = new TGraphAsymmErrors(hResSlopeXAtVtxVsP->GetNbinsX()/rebinP);
+        gSigmaResSlopeXAtVtxVsP2->SetName("gSigmaResSlopeXAtVtxVsP2");
+        gSigmaResSlopeXAtVtxVsP2->SetTitle("#sigma_{slope_{X}} at vertex versus p;p (GeV/c);#sigma_{slope_{X}}");
+        gSigmaResSlopeXAtVtxVsP2->SetLineColor(2);
+        FitGausResVsMom(hResSlopeXAtVtxVsP, gSigmaResSlopeXAtVtxVsP2, rebinP);
+        gSigmaResSlopeYAtVtxVsP2 = new TGraphAsymmErrors(hResSlopeYAtVtxVsP->GetNbinsX()/rebinP);
+        gSigmaResSlopeYAtVtxVsP2->SetName("gSigmaResSlopeYAtVtxVsP2");
+        gSigmaResSlopeYAtVtxVsP2->SetTitle("#sigma_{slope_{Y}} at vertex versus p;p (GeV/c);#sigma_{slope_{Y}}");
+        gSigmaResSlopeYAtVtxVsP2->SetLineColor(2);
+        FitGausResVsMom(hResSlopeYAtVtxVsP, gSigmaResSlopeYAtVtxVsP2, rebinP);
+        
+      }
       
     }
     
@@ -345,8 +387,10 @@ void PropagateResolutionToYield(TString fileResMeas = "results.root",
   gROOT->SetSelectedPad(cRes->cd(1));
   gPad->SetLogz();
   if (hPRes) hPRes->Draw("colz");
-  if (atFirstCluster && gSigmaResPAtVtxVsP) gSigmaResPAtVtxVsP->Draw(hPRes?"p":"ap");
-  else if (!atFirstCluster && gSigmaResPAtVtxVsPIn02deg && gSigmaResPAtVtxVsPIn23deg && gSigmaResPAtVtxVsPIn310deg) {
+  if (atFirstCluster && gSigmaResPAtVtxVsP) {
+    gSigmaResPAtVtxVsP->Draw(hPRes?"p":"ap");
+    if (gSigmaResPAtVtxVsPIn310deg) gSigmaResPAtVtxVsPIn310deg->Draw("p");
+  } else if (!atFirstCluster && gSigmaResPAtVtxVsPIn02deg && gSigmaResPAtVtxVsPIn23deg && gSigmaResPAtVtxVsPIn310deg) {
     gSigmaResPAtVtxVsPIn02deg->Draw(hPRes?"p":"ap");
     gSigmaResPAtVtxVsPIn23deg->Draw("p");
     gSigmaResPAtVtxVsPIn310deg->Draw("p");
@@ -362,8 +406,10 @@ void PropagateResolutionToYield(TString fileResMeas = "results.root",
   gROOT->SetSelectedPad(cRes->cd(2));
   gPad->SetLogz();
   if (hSlopeXRes) hSlopeXRes->Draw("colz");
-  if (atFirstCluster && gSigmaResSlopeXAtVtxVsP) gSigmaResSlopeXAtVtxVsP->Draw(hPRes?"p":"ap");
-  else if (!atFirstCluster && gSigmaResSlopeXAtVtxVsP2) gSigmaResSlopeXAtVtxVsP2->Draw(hPRes?"p":"ap");
+  if (atFirstCluster && gSigmaResSlopeXAtVtxVsP) {
+    gSigmaResSlopeXAtVtxVsP->Draw(hPRes?"p":"ap");
+    if (gSigmaResSlopeXAtVtxVsP2) gSigmaResSlopeXAtVtxVsP2->Draw("p");
+  } else if (!atFirstCluster && gSigmaResSlopeXAtVtxVsP2) gSigmaResSlopeXAtVtxVsP2->Draw(hPRes?"p":"ap");
   if (hSlopeXRes || (atFirstCluster && gSigmaResSlopeXAtVtxVsP) || (!atFirstCluster && gSigmaResSlopeXAtVtxVsP2))
     fSlopeXResVsP02->Draw("same");
   else {
@@ -375,8 +421,10 @@ void PropagateResolutionToYield(TString fileResMeas = "results.root",
   gROOT->SetSelectedPad(cRes->cd(3));
   gPad->SetLogz();
   if (hSlopeYRes) hSlopeYRes->Draw("colz");
-  if (atFirstCluster && gSigmaResSlopeYAtVtxVsP) gSigmaResSlopeYAtVtxVsP->Draw(hPRes?"p":"ap");
-  else if (!atFirstCluster && gSigmaResSlopeYAtVtxVsP2) gSigmaResSlopeYAtVtxVsP2->Draw(hPRes?"p":"ap");
+  if (atFirstCluster && gSigmaResSlopeYAtVtxVsP) {
+    gSigmaResSlopeYAtVtxVsP->Draw(hPRes?"p":"ap");
+    if (gSigmaResSlopeYAtVtxVsP2) gSigmaResSlopeYAtVtxVsP2->Draw("p");
+  } else if (!atFirstCluster && gSigmaResSlopeYAtVtxVsP2) gSigmaResSlopeYAtVtxVsP2->Draw(hPRes?"p":"ap");
   if (hSlopeYRes || (atFirstCluster && gSigmaResSlopeYAtVtxVsP) || (!atFirstCluster && gSigmaResSlopeYAtVtxVsP2))
     fSlopeYResVsP02->Draw("same");
   else {
@@ -474,34 +522,50 @@ void PropagateResolutionToYield(TString fileResMeas = "results.root",
   hphiRec->Sumw2();
   
   // resolution histograms
-  Double_t deltaPAtVtxEdges[2] = {-20. - 0.05 * 50.*pTRange[1], 5. + 0.05 * 50.*pTRange[1]};
+  Double_t deltaPAtVtxEdges[2];
+  if (atFirstCluster) {
+    deltaPAtVtxEdges[0] = -5. - 0.0005*(20.*pTRange[1])*(20.*pTRange[1]);
+    deltaPAtVtxEdges[1] = 5. + 0.0005*(20.*pTRange[1])*(20.*pTRange[1]);
+  } else {
+    deltaPAtVtxEdges[0] = -20. - 0.0005*(20.*pTRange[1])*(20.*pTRange[1]);
+    deltaPAtVtxEdges[1] = 5. + 0.0005*(20.*pTRange[1])*(20.*pTRange[1]);
+  }
   Int_t deltaPAtVtxNBins = (Int_t)(10.*(deltaPAtVtxEdges[1]-deltaPAtVtxEdges[0]));
-  TH2F *hResPAtVtxVsPIn02degMC = new TH2F("hResPAtVtxVsPIn02deg","#Delta_{p} at vertex versus p in [0,2[ deg MC;p (GeV/c);#Delta_{p} (GeV/c)",5*npTBins,0.,50.*pTRange[1],deltaPAtVtxNBins,deltaPAtVtxEdges[0],deltaPAtVtxEdges[1]);
+  if (deltaPAtVtxNBins > 1000) deltaPAtVtxNBins = (deltaPAtVtxNBins+200)/200*200;
+  else if (deltaPAtVtxNBins > 100) deltaPAtVtxNBins = (deltaPAtVtxNBins+20)/20*20;
+  TH2F *hResPAtVtxVsPIn02degMC = new TH2F("hResPAtVtxVsPIn02deg","#Delta_{p} at vertex versus p in [0,2[ deg MC;p (GeV/c);#Delta_{p} (GeV/c)",2*npTBins,0.,20.*pTRange[1],deltaPAtVtxNBins,deltaPAtVtxEdges[0],deltaPAtVtxEdges[1]);
   hResPAtVtxVsPIn02degMC->SetDirectory(0);
   hResPAtVtxVsPIn02degMC->Sumw2();
-  TH2F *hResPAtVtxVsPIn23deg = new TH2F("hResPAtVtxVsPIn23deg","#Delta_{p} at vertex versus p in [2,3[ deg;p (GeV/c);#Delta_{p} (GeV/c)",5*npTBins,0.,50.*pTRange[1],deltaPAtVtxNBins,deltaPAtVtxEdges[0],deltaPAtVtxEdges[1]);
+  TH2F *hResPAtVtxVsPIn23deg = new TH2F("hResPAtVtxVsPIn23deg","#Delta_{p} at vertex versus p in [2,3[ deg;p (GeV/c);#Delta_{p} (GeV/c)",2*npTBins,0.,20.*pTRange[1],deltaPAtVtxNBins,deltaPAtVtxEdges[0],deltaPAtVtxEdges[1]);
   hResPAtVtxVsPIn23deg->SetDirectory(0);
   hResPAtVtxVsPIn23deg->Sumw2();
-  TH2F *hResPAtVtxVsPIn310deg = new TH2F("hResPAtVtxVsPIn310deg","#Delta_{p} at vertex versus p in [3,10[ deg;p (GeV/c);#Delta_{p} (GeV/c)",5*npTBins,0.,50.*pTRange[1],deltaPAtVtxNBins,deltaPAtVtxEdges[0],deltaPAtVtxEdges[1]);
+  TH2F *hResPAtVtxVsPIn310deg = (atFirstCluster) ? new TH2F("hResPAt1stClVsP","#Delta_{p} at 1st cluster versus p;p (GeV/c);#Delta_{p} (GeV/c)",2*npTBins,0.,20.*pTRange[1],deltaPAtVtxNBins,deltaPAtVtxEdges[0],deltaPAtVtxEdges[1]) : new TH2F("hResPAtVtxVsPIn310deg","#Delta_{p} at vertex versus p in [3,10[ deg;p (GeV/c);#Delta_{p} (GeV/c)",2*npTBins,0.,20.*pTRange[1],deltaPAtVtxNBins,deltaPAtVtxEdges[0],deltaPAtVtxEdges[1]);
   hResPAtVtxVsPIn310deg->SetDirectory(0);
   hResPAtVtxVsPIn310deg->Sumw2();
   TH2F *hResPtAtVtxVsPt = new TH2F("hResPtAtVtxVsPt","#Delta_{p_{t}} at vertex versus p_{t};p_{t} (GeV/c);#Delta_{p_{t}} (GeV/c)",npTBins,0.,pTRange[1],deltaPAtVtxNBins,deltaPAtVtxEdges[0]/10.,deltaPAtVtxEdges[1]/10.);
   hResPtAtVtxVsPt->SetDirectory(0);
   hResPtAtVtxVsPt->Sumw2();
-  Double_t deltaSlopeAtVtxEdges[2] = {-0.05, 0.05};
+  Double_t deltaSlopeAtVtxEdges[2];
+  if (atFirstCluster) {
+    deltaSlopeAtVtxEdges[0] = -0.01;
+    deltaSlopeAtVtxEdges[1] = 0.01;
+  } else {
+    deltaSlopeAtVtxEdges[0] = -0.05;
+    deltaSlopeAtVtxEdges[1] = 0.05;
+  }
   Int_t deltaSlopeAtVtxNBins = 1000;
-  TH2F *hResSlopeXAtVtxVsP = new TH2F("hResSlopeXAtVtxVsP","#Delta_{slope_{X}} at vertex versus p;p (GeV/c);#Delta_{slope_{X}}",5*npTBins,0.,50.*pTRange[1], deltaSlopeAtVtxNBins, deltaSlopeAtVtxEdges[0], deltaSlopeAtVtxEdges[1]);
+  TH2F *hResSlopeXAtVtxVsP = (atFirstCluster) ? new TH2F("hResSlopeXAt1stClVsP","#Delta_{slope_{X}} at 1st cluster versus p;p (GeV/c);#Delta_{slope_{X}}",2*npTBins,0.,20.*pTRange[1], deltaSlopeAtVtxNBins, deltaSlopeAtVtxEdges[0], deltaSlopeAtVtxEdges[1]) : new TH2F("hResSlopeXAtVtxVsP","#Delta_{slope_{X}} at vertex versus p;p (GeV/c);#Delta_{slope_{X}}",2*npTBins,0.,20.*pTRange[1], deltaSlopeAtVtxNBins, deltaSlopeAtVtxEdges[0], deltaSlopeAtVtxEdges[1]);
   hResSlopeXAtVtxVsP->SetDirectory(0);
   hResSlopeXAtVtxVsP->Sumw2();
-  TH2F *hResSlopeYAtVtxVsP = new TH2F("hResSlopeYAtVtxVsP","#Delta_{slope_{Y}} at vertex versus p;p (GeV/c);#Delta_{slope_{Y}}",5*npTBins,0.,50.*pTRange[1], deltaSlopeAtVtxNBins, deltaSlopeAtVtxEdges[0], deltaSlopeAtVtxEdges[1]);
+  TH2F *hResSlopeYAtVtxVsP = (atFirstCluster) ? new TH2F("hResSlopeYAt1stVsP","#Delta_{slope_{Y}} at 1st cluster versus p;p (GeV/c);#Delta_{slope_{Y}}",2*npTBins,0.,20.*pTRange[1], deltaSlopeAtVtxNBins, deltaSlopeAtVtxEdges[0], deltaSlopeAtVtxEdges[1]) : new TH2F("hResSlopeYAtVtxVsP","#Delta_{slope_{Y}} at vertex versus p;p (GeV/c);#Delta_{slope_{Y}}",2*npTBins,0.,20.*pTRange[1], deltaSlopeAtVtxNBins, deltaSlopeAtVtxEdges[0], deltaSlopeAtVtxEdges[1]);
   hResSlopeYAtVtxVsP->SetDirectory(0);
   hResSlopeYAtVtxVsP->Sumw2();
   Double_t deltaEtaAtVtxEdges[2] = {-0.5, 0.5};
   Int_t deltaEtaAtVtxNBins = 1000;
-  TH2F *hResEtaAtVtxVsP = new TH2F("hResEtaAtVtxVsP","#Delta_{eta} at vertex versus p;p (GeV/c);#Delta_{eta}",5*npTBins,0.,50.*pTRange[1], deltaEtaAtVtxNBins, deltaEtaAtVtxEdges[0], deltaEtaAtVtxEdges[1]);
+  TH2F *hResEtaAtVtxVsP = new TH2F("hResEtaAtVtxVsP","#Delta_{eta} at vertex versus p;p (GeV/c);#Delta_{eta}",2*npTBins,0.,20.*pTRange[1], deltaEtaAtVtxNBins, deltaEtaAtVtxEdges[0], deltaEtaAtVtxEdges[1]);
   hResEtaAtVtxVsP->SetDirectory(0);
   hResEtaAtVtxVsP->Sumw2();
-  TH2F *hResPhiAtVtxVsP = new TH2F("hResPhiAtVtxVsP","#Delta_{phi} at vertex versus p;p (GeV/c);#Delta_{phi}",5*npTBins,0.,50.*pTRange[1], deltaEtaAtVtxNBins, deltaEtaAtVtxEdges[0], deltaEtaAtVtxEdges[1]);
+  TH2F *hResPhiAtVtxVsP = new TH2F("hResPhiAtVtxVsP","#Delta_{phi} at vertex versus p;p (GeV/c);#Delta_{phi}",2*npTBins,0.,20.*pTRange[1], deltaEtaAtVtxNBins, deltaEtaAtVtxEdges[0], deltaEtaAtVtxEdges[1]);
   hResPhiAtVtxVsP->SetDirectory(0);
   hResPhiAtVtxVsP->Sumw2();
   
@@ -661,8 +725,48 @@ void PropagateResolutionToYield(TString fileResMeas = "results.root",
       slopeXRec = gRandom->Gaus(slopeXMCS,sigmaSlopeX);
       slopeYRec = gRandom->Gaus(slopeYMCS,sigmaSlopeY);
     }
+    /*
+    // track slope dispersion at first cluster
+    Double_t sigmaMCSCh2 = SigmaSlopeFromMCSInCh2(pAbsEnd, kFALSE, zBRec);
+    Double_t sigmaSlopeX2 = SigmaSlopeFromRes2(kFALSE, kFALSE, zBRec);
+    Double_t sigmaSlopeY2 = SigmaSlopeFromRes2(kTRUE, kFALSE, zBRec);
+    Double_t dSlopeX, dSlopeY;
+    if (useBreitWigner) {
+      Double_t sigmaMCSCh = TMath::Sqrt(sigmaMCSCh2);
+      Double_t sigmaSlopeX = TMath::Sqrt(sigmaSlopeX2);
+      Double_t sigmaSlopeY = TMath::Sqrt(sigmaSlopeX2);
+      Double_t dSlopeXMCS = gRandom->Gaus(0.,sigmaMCSCh);
+      Double_t dSlopeYMCS = gRandom->Gaus(0.,sigmaMCSCh);
+      do dSlopeX = gRandom->BreitWigner(dSlopeXMCS,sigmaSlopeX);
+      while (TMath::Abs(dSlopeX-dSlopeXMCS) > sigmaTrkCut * sigmaSlopeX / sigmaxChSt1 * sigmaTrk);
+      do dSlopeY = gRandom->BreitWigner(dSlopeYMCS,sigmaSlopeY);
+      while (TMath::Abs(dSlopeY-dSlopeYMCS) > sigmaTrkCut * sigmaSlopeY / sigmayChSt1 * sigmaTrk);
+    } else {
+      Double_t sigmaSlopeX = TMath::Sqrt(sigmaMCSCh2+sigmaSlopeX2);
+      Double_t sigmaSlopeY = TMath::Sqrt(sigmaMCSCh2+sigmaSlopeY2);
+      dSlopeX = gRandom->Gaus(0.,sigmaSlopeX);
+      dSlopeY = gRandom->Gaus(0.,sigmaSlopeY);
+    }
     
-    // compute reconstructed momentum
+    // track position dispersion at first cluster
+    Double_t sigmaResX = TMath::Sqrt(SigmaPosFromRes2(kFALSE, kFALSE, zBRec));
+    Double_t sigmaResY = TMath::Sqrt(SigmaPosFromRes2(kTRUE, kFALSE, zBRec));
+    Double_t dPosX, dPosY;
+    if (useBreitWigner) {
+      do dPosX = gRandom->BreitWigner(0.,sigmaResX);
+      while (TMath::Abs(dPosX) > sigmaTrkCut * sigmaResX / sigmaxChSt1 * sigmaTrk);
+      do dPosY = gRandom->BreitWigner(0.,sigmaResY);
+      while (TMath::Abs(dPosY) > sigmaTrkCut * sigmaResY / sigmayChSt1 * sigmaTrk);
+    } else {
+      dPosX = gRandom->Gaus(0.,sigmaResX);
+      dPosY = gRandom->Gaus(0.,sigmaResY);
+    }
+    
+    // compute reconstructed slopes at vertex
+    Double_t slopeXRec = slopeXMCS + (dSlopeX*(5.36-zBRec) + dPosX)/zBRec;
+    Double_t slopeYRec = slopeYMCS + (dSlopeY*(5.36-zBRec) + dPosY)/zBRec;
+    */
+    // compute reconstructed momentum at first cluster
     Double_t pAbsEndRec;
     if (useBreitWigner) {
       Double_t thetaDevMCS = gRandom->Gaus(PToThetaDev(pAbsEnd),TMath::Sqrt(SigmaThetaDevFromMCS2(pAbsEnd)));
@@ -687,12 +791,18 @@ void PropagateResolutionToYield(TString fileResMeas = "results.root",
     Double_t yRec = TMath::ASinH(pZRec/mTRec);
     
     // fill resolution histograms
-    if (theta < 2.) hResPAtVtxVsPIn02degMC->Fill(p,pRec-p,w);
-    if (thetaAbs > 2. && thetaAbs < 3.) hResPAtVtxVsPIn23deg->Fill(p,pRec-p,w);
-    else if (thetaAbs >= 3. && thetaAbs < 10.) hResPAtVtxVsPIn310deg->Fill(p,pRec-p,w);
+    if (atFirstCluster) {
+      hResPAtVtxVsPIn310deg->Fill(pAbsEnd,pAbsEndRec-pAbsEnd,w);
+//      hResSlopeXAtVtxVsP->Fill(pAbsEnd,dSlopeX,w);
+//      hResSlopeYAtVtxVsP->Fill(pAbsEnd,dSlopeY,w);
+    } else {
+      if (theta < 2.) hResPAtVtxVsPIn02degMC->Fill(p,pRec-p,w);
+      if (thetaAbs > 2. && thetaAbs < 3.) hResPAtVtxVsPIn23deg->Fill(p,pRec-p,w);
+      else if (thetaAbs >= 3. && thetaAbs < 10.) hResPAtVtxVsPIn310deg->Fill(p,pRec-p,w);
+      hResSlopeXAtVtxVsP->Fill(p,slopeXRec-slopeX,w);
+      hResSlopeYAtVtxVsP->Fill(p,slopeYRec-slopeY,w);
+    }
     hResPtAtVtxVsPt->Fill(pT,pTRec-pT,w);
-    hResSlopeXAtVtxVsP->Fill(p,slopeXRec-slopeX,w);
-    hResSlopeYAtVtxVsP->Fill(p,slopeYRec-slopeY,w);
     hResEtaAtVtxVsP->Fill(p,etaRec-eta,w);
     Double_t dPhi = phiRec-phi;
     if (dPhi < -TMath::Pi()) dPhi += 2.*TMath::Pi();
@@ -806,49 +916,79 @@ void PropagateResolutionToYield(TString fileResMeas = "results.root",
   gPad->SetLogz();
   hResPhiAtVtxVsP->Draw("colz");
   
-  if (!atFirstCluster && checkResVsP) {
+  if (checkResVsP) {
     
-    // compute momentum resolution versus p
-    Int_t rebinP = 2;
-    dummy->cd();
-    TGraphAsymmErrors *gSigmaResPAtVtxVsPIn02degMC2 = new TGraphAsymmErrors(hResPAtVtxVsPIn02degMC->GetNbinsX()/rebinP);
-    gSigmaResPAtVtxVsPIn02degMC2->SetName("gSigmaResPAtVtxVsPIn02degMC2");
-    gSigmaResPAtVtxVsPIn02degMC2->SetTitle("#sigma_{p}/p at vertex versus p in [0,2[ deg MC;p (GeV/c);#sigma_{p}/p (%)");
-    gSigmaResPAtVtxVsPIn02degMC2->SetLineColor(11);
-    FitLandauGausResVsP(hResPAtVtxVsPIn02degMC, gSigmaResPAtVtxVsPIn02degMC2, rebinP);
-    TGraphAsymmErrors *gSigmaResPAtVtxVsPIn23deg2 = new TGraphAsymmErrors(hResPAtVtxVsPIn23deg->GetNbinsX()/rebinP);
-    gSigmaResPAtVtxVsPIn23deg2->SetName("gSigmaResPAtVtxVsPIn23deg2");
-    gSigmaResPAtVtxVsPIn23deg2->SetTitle("#sigma_{p}/p at vertex versus p in [2,3[ deg;p (GeV/c);#sigma_{p}/p (%)");
-    gSigmaResPAtVtxVsPIn23deg2->SetLineColor(4);
-    FitLandauGausResVsP(hResPAtVtxVsPIn23deg, gSigmaResPAtVtxVsPIn23deg2, rebinP);
-    TGraphAsymmErrors *gSigmaResPAtVtxVsPIn310deg2 = new TGraphAsymmErrors(hResPAtVtxVsPIn310deg->GetNbinsX()/rebinP);
-    gSigmaResPAtVtxVsPIn310deg2->SetName("gSigmaResPAtVtxVsPIn310deg2");
-    gSigmaResPAtVtxVsPIn310deg2->SetTitle("#sigma_{p}/p at vertex versus p in [3,10[ deg;p (GeV/c);#sigma_{p}/p (%)");
-    gSigmaResPAtVtxVsPIn310deg2->SetLineColor(9);
-    FitLandauGausResVsP(hResPAtVtxVsPIn310deg, gSigmaResPAtVtxVsPIn310deg2, rebinP);
+    TGraphAsymmErrors *gSigmaResPAtVtxVsPIn02degMC2 = 0x0, *gSigmaResPAtVtxVsPIn23deg2 = 0x0, *gSigmaResPAtVtxVsPIn310deg2 = 0x0, *gSigmaResSlopeXAtVtxVsP3 = 0x0, *gSigmaResSlopeYAtVtxVsP3 = 0x0;
     
-    // compute slope resolution versus p
-    dummy->cd();
-    TGraphAsymmErrors *gSigmaResSlopeXAtVtxVsP3 = new TGraphAsymmErrors(hResSlopeXAtVtxVsP->GetNbinsX()/rebinP);
-    gSigmaResSlopeXAtVtxVsP3->SetName("gSigmaResSlopeXAtVtxVsP3");
-    gSigmaResSlopeXAtVtxVsP3->SetTitle("#sigma_{slope_{X}} at vertex versus p;p (GeV/c);#sigma_{slope_{X}}");
-    gSigmaResSlopeXAtVtxVsP3->SetLineColor(4);
-    FitGausResVsMom(hResSlopeXAtVtxVsP, gSigmaResSlopeXAtVtxVsP3, rebinP);
-    TGraphAsymmErrors *gSigmaResSlopeYAtVtxVsP3 = new TGraphAsymmErrors(hResSlopeYAtVtxVsP->GetNbinsX()/rebinP);
-    gSigmaResSlopeYAtVtxVsP3->SetName("gSigmaResSlopeYAtVtxVsP3");
-    gSigmaResSlopeYAtVtxVsP3->SetTitle("#sigma_{slope_{Y}} at vertex versus p;p (GeV/c);#sigma_{slope_{Y}}");
-    gSigmaResSlopeYAtVtxVsP3->SetLineColor(4);
-    FitGausResVsMom(hResSlopeYAtVtxVsP, gSigmaResSlopeYAtVtxVsP3, rebinP);
+    if (atFirstCluster) {
+      
+      // compute momentum resolution versus p
+      Int_t rebinP = 2;
+      dummy->cd();
+      gSigmaResPAtVtxVsPIn310deg2 = new TGraphAsymmErrors(hResPAtVtxVsPIn310deg->GetNbinsX()/rebinP);
+      gSigmaResPAtVtxVsPIn310deg2->SetName("gSigmaResPAt1stClVsP2");
+      gSigmaResPAtVtxVsPIn310deg2->SetTitle("#sigma_{p}/p at 1st cluster versus p;p (GeV/c);#sigma_{p}/p (%)");
+      gSigmaResPAtVtxVsPIn310deg2->SetLineColor(9);
+      FitPResVsP(hResPAtVtxVsPIn310deg, gSigmaResPAtVtxVsPIn310deg2, rebinP, -1.);
+      
+      // compute slope resolution versus p
+      dummy->cd();
+      gSigmaResSlopeXAtVtxVsP3 = new TGraphAsymmErrors(hResSlopeXAtVtxVsP->GetNbinsX()/rebinP);
+      gSigmaResSlopeXAtVtxVsP3->SetName("gSigmaResSlopeXAt1stClVsP3");
+      gSigmaResSlopeXAtVtxVsP3->SetTitle("#sigma_{slope_{X}} at 1st cluster versus p;p (GeV/c);#sigma_{slope_{X}}");
+      gSigmaResSlopeXAtVtxVsP3->SetLineColor(4);
+      FitGausResVsMom(hResSlopeXAtVtxVsP, gSigmaResSlopeXAtVtxVsP3, rebinP);
+      gSigmaResSlopeYAtVtxVsP3 = new TGraphAsymmErrors(hResSlopeYAtVtxVsP->GetNbinsX()/rebinP);
+      gSigmaResSlopeYAtVtxVsP3->SetName("gSigmaResSlopeYAt1stClVsP3");
+      gSigmaResSlopeYAtVtxVsP3->SetTitle("#sigma_{slope_{Y}} at 1st cluster versus p;p (GeV/c);#sigma_{slope_{Y}}");
+      gSigmaResSlopeYAtVtxVsP3->SetLineColor(4);
+      FitGausResVsMom(hResSlopeYAtVtxVsP, gSigmaResSlopeYAtVtxVsP3, rebinP);
+      
+    } else {
+      
+      // compute momentum resolution versus p
+      Int_t rebinP = 2;
+      dummy->cd();
+      gSigmaResPAtVtxVsPIn02degMC2 = new TGraphAsymmErrors(hResPAtVtxVsPIn02degMC->GetNbinsX()/rebinP);
+      gSigmaResPAtVtxVsPIn02degMC2->SetName("gSigmaResPAtVtxVsPIn02degMC2");
+      gSigmaResPAtVtxVsPIn02degMC2->SetTitle("#sigma_{p}/p at vertex versus p in [0,2[ deg MC;p (GeV/c);#sigma_{p}/p (%)");
+      gSigmaResPAtVtxVsPIn02degMC2->SetLineColor(11);
+      FitPResVsP(hResPAtVtxVsPIn02degMC, gSigmaResPAtVtxVsPIn02degMC2, rebinP, 300.);
+      gSigmaResPAtVtxVsPIn23deg2 = new TGraphAsymmErrors(hResPAtVtxVsPIn23deg->GetNbinsX()/rebinP);
+      gSigmaResPAtVtxVsPIn23deg2->SetName("gSigmaResPAtVtxVsPIn23deg2");
+      gSigmaResPAtVtxVsPIn23deg2->SetTitle("#sigma_{p}/p at vertex versus p in [2,3[ deg;p (GeV/c);#sigma_{p}/p (%)");
+      gSigmaResPAtVtxVsPIn23deg2->SetLineColor(4);
+      FitPResVsP(hResPAtVtxVsPIn23deg, gSigmaResPAtVtxVsPIn23deg2, rebinP, 220.);
+      gSigmaResPAtVtxVsPIn310deg2 = new TGraphAsymmErrors(hResPAtVtxVsPIn310deg->GetNbinsX()/rebinP);
+      gSigmaResPAtVtxVsPIn310deg2->SetName("gSigmaResPAtVtxVsPIn310deg2");
+      gSigmaResPAtVtxVsPIn310deg2->SetTitle("#sigma_{p}/p at vertex versus p in [3,10[ deg;p (GeV/c);#sigma_{p}/p (%)");
+      gSigmaResPAtVtxVsPIn310deg2->SetLineColor(9);
+      FitPResVsP(hResPAtVtxVsPIn310deg, gSigmaResPAtVtxVsPIn310deg2, rebinP, 160.);
+      
+      // compute slope resolution versus p
+      dummy->cd();
+      gSigmaResSlopeXAtVtxVsP3 = new TGraphAsymmErrors(hResSlopeXAtVtxVsP->GetNbinsX()/rebinP);
+      gSigmaResSlopeXAtVtxVsP3->SetName("gSigmaResSlopeXAtVtxVsP3");
+      gSigmaResSlopeXAtVtxVsP3->SetTitle("#sigma_{slope_{X}} at vertex versus p;p (GeV/c);#sigma_{slope_{X}}");
+      gSigmaResSlopeXAtVtxVsP3->SetLineColor(4);
+      FitGausResVsMom(hResSlopeXAtVtxVsP, gSigmaResSlopeXAtVtxVsP3, rebinP);
+      gSigmaResSlopeYAtVtxVsP3 = new TGraphAsymmErrors(hResSlopeYAtVtxVsP->GetNbinsX()/rebinP);
+      gSigmaResSlopeYAtVtxVsP3->SetName("gSigmaResSlopeYAtVtxVsP3");
+      gSigmaResSlopeYAtVtxVsP3->SetTitle("#sigma_{slope_{Y}} at vertex versus p;p (GeV/c);#sigma_{slope_{Y}}");
+      gSigmaResSlopeYAtVtxVsP3->SetLineColor(4);
+      FitGausResVsMom(hResSlopeYAtVtxVsP, gSigmaResSlopeYAtVtxVsP3, rebinP);
+      
+    }
     
     // draw resolution vs p
     gROOT->SetSelectedPad(cRes->cd(1));
-    gSigmaResPAtVtxVsPIn02degMC2->Draw("p");
-    gSigmaResPAtVtxVsPIn23deg2->Draw("p");
+    if (gSigmaResPAtVtxVsPIn02degMC2) gSigmaResPAtVtxVsPIn02degMC2->Draw("p");
+    if (gSigmaResPAtVtxVsPIn23deg2) gSigmaResPAtVtxVsPIn23deg2->Draw("p");
     gSigmaResPAtVtxVsPIn310deg2->Draw("p");
     gROOT->SetSelectedPad(cRes->cd(2));
-    gSigmaResSlopeXAtVtxVsP3->Draw("p");
+    if (gSigmaResSlopeXAtVtxVsP3) gSigmaResSlopeXAtVtxVsP3->Draw("p");
     gROOT->SetSelectedPad(cRes->cd(3));
-    gSigmaResSlopeYAtVtxVsP3->Draw("p");
+    if (gSigmaResSlopeYAtVtxVsP3) gSigmaResSlopeYAtVtxVsP3->Draw("p");
     
   }
   
@@ -1058,7 +1198,14 @@ Double_t SigmaSlopeFromMCSInCh2(Double_t p, Bool_t at1stCl, Double_t zB)
   if (at1stCl) return sigmaMCS2;
   else return sigmaMCS2*(5.36-zB)*(5.36-zB)/zB/zB; // propagate to the Branson plane then to the vertex
 }
-
+/*
+//-----------------------------------------------------------------------
+Double_t SigmaSlopeFromMCSInCh2(Double_t p, Bool_t at1stCl, Double_t zB)
+{
+  /// slope dispersion due to the MCS in chambers
+  return (tuneKalman) ? 2.*MCS2(p, 0.065, 1.) : 2.*MCS2(p, 0.065, 1.) + 2.*MCS2(p, 0.075, 1.);
+}
+*/
 //-----------------------------------------------------------------------
 Double_t SigmaSlopeFromRes2(Bool_t bendingDir, Bool_t at1stCl, Double_t zB)
 {
@@ -1076,7 +1223,25 @@ Double_t SigmaSlopeFromRes2(Bool_t bendingDir, Bool_t at1stCl, Double_t zB)
   if (at1stCl) return sigmaSlope2;
   else return (sigmaSlope2*(5.36-zB)*(5.36-zB) + sigmaSt12)/zB/zB; // propagate to the Branson plane then to the vertex
 }
+/*
+//-----------------------------------------------------------------------
+Double_t SigmaPosFromRes2(Bool_t bendingDir, Bool_t at1stCl, Double_t zB)
+{
+  /// slope dispersion due to chamber resolution
+  if (bendingDir) return sigmayChSt1*sigmayChSt1/2.;
+  else return sigmaxChSt1*sigmaxChSt1/2.;
+}
 
+//-----------------------------------------------------------------------
+Double_t SigmaSlopeFromRes2(Bool_t bendingDir, Bool_t at1stCl, Double_t zB)
+{
+  /// slope dispersion due to chamber resolution
+  static Double_t magicFactorX = 1./23.; // to get angular resolution^2 from station 1 x-resolution^2
+  static Double_t magicFactorY = 1./3.; // to get angular resolution^2 from station 1 y-resolution^2
+  if (bendingDir) return magicFactorY*sigmayChSt1*sigmayChSt1/2.;
+  else return magicFactorX*sigmaxChSt1*sigmaxChSt1/2.;
+}
+*/
 //-----------------------------------------------------------------------
 Double_t ELoss(Double_t p, Double_t theta)
 {
@@ -1265,16 +1430,34 @@ Double_t langaufun(Double_t *x, Double_t *par)
 }
 
 //-----------------------------------------------------------------------
-void FitLandauGausResVsP(TH2 *h, TGraphAsymmErrors *gSigma, Int_t rebinP)
+Double_t GausInvXFun(Double_t *x, Double_t *par)
 {
-  /// generic function to fit residuals versus momentum with a landau convoluted with a gaussian
+  /// norm * k/p/p * gaus(k/p, k/p0, k/p0/p0*sigmap)
+  /// with k = factor to convert momentum into angular deviation
   
-  static TF1 *fGaus2 = new TF1("fGaus2","gaus");
+  Double_t p0 = par[1];
+  Double_t p = x[0] + p0 + par[3];
+  Double_t s0 = PToThetaDev(p0);
+  Double_t s = PToThetaDev(p);
+  Double_t dsdp = s/p;
+  
+  return par[0] * s/p * TMath::Gaus(s, s0, s0/p0*par[2], kTRUE);
+}
+
+//-----------------------------------------------------------------------
+void FitPResVsP(TH2 *h, TGraphAsymmErrors *gSigma, Int_t rebinP, Double_t pSwitch)
+{
+  /// generic function to fit momentum residuals versus momentum
+  /// if p < pSwitch: use a landau convoluted with a gaussian
+  /// if p > pSwitch: use a gaus(k/p) distribution
+  
+  static TF1 *fGaus2 = new TF1("fGaus2","gausn");
   static TF1 *fLandauGaus = 0x0;
   if (!fLandauGaus) {
     fLandauGaus = new TF1("fLandauGaus",langaufun,h->GetYaxis()->GetBinLowEdge(1),h->GetYaxis()->GetBinLowEdge(h->GetNbinsY()+1),4);
     fLandauGaus->SetNpx(10000);
   }
+  static TF1 *fGausInvP = new TF1("fGausInvP",GausInvXFun, h->GetYaxis()->GetBinLowEdge(1),h->GetYaxis()->GetBinLowEdge(h->GetNbinsY()+1),4);
   
   for (Int_t i = rebinP; i <= h->GetNbinsX(); i+=rebinP) {
     
@@ -1283,57 +1466,118 @@ void FitLandauGausResVsP(TH2 *h, TGraphAsymmErrors *gSigma, Int_t rebinP)
     
     TH1D *tmp = h->ProjectionY(Form("%s_%d",h->GetName(),i/rebinP),i-rebinP+1,i,"e");
     tmp->SetDirectory(0);
-    if (tmp->GetEntries() < 50.) {
-      delete tmp;
-      continue;
+    
+    // draw histogram if required
+    TCanvas *c = 0x0;
+    if (drawResPVsP) {
+      
+      TString mc = "";
+      c = static_cast<TCanvas*>(gROOT->GetListOfCanvases()->FindObject(Form("c%s_%d",h->GetName(),i/rebinP)));
+      if (!c) {
+        c = static_cast<TCanvas*>(gROOT->GetListOfCanvases()->FindObject(Form("c%sMC_%d",h->GetName(),i/rebinP)));
+        mc = "MC";
+      }
+      if (c) {
+        TH1D *tmp0 = static_cast<TH1D*>(c->GetListOfPrimitives()->FindObject(Form("%s%s_%d",h->GetName(),mc.Data(),i/rebinP)));
+        tmp->Scale(tmp0->GetSumOfWeights()*tmp0->GetBinWidth(1)/tmp->GetSumOfWeights()/tmp->GetBinWidth(1));
+        c->cd();
+        tmp->SetLineColor(4);
+        fLandauGaus->SetLineColor(4);
+        fGausInvP->SetLineColor(4);
+        tmp->Draw("sames");
+      } else {
+        c = new TCanvas(Form("c%s_%d",h->GetName(),i/rebinP),Form("c%s_%d",h->GetName(),i/rebinP));
+        tmp->SetLineColor(2);
+        fLandauGaus->SetLineColor(2);
+        fGausInvP->SetLineColor(2);
+        tmp->Draw();
+      }
+      
     }
     
-    //TCanvas *c = new TCanvas(Form("c%s_%d",h->GetName(),i/rebinP),Form("c%s_%d",h->GetName(),i/rebinP));
-    //tmp->Draw();
-    
-    // first fit
-    fGaus2->SetParameters(h->GetEntries(), 0., 1.);
-    tmp->Fit("fGaus2", "WWQ");
-    
-    // rebin histo
-    Double_t sigma = fGaus2->GetParameter(2);
-    Int_t rebin = static_cast<Int_t>(TMath::Min(0.1*tmp->GetNbinsX(),TMath::Max(0.5*sigma/tmp->GetBinWidth(1),1.)));
-    while (tmp->GetNbinsX()%rebin!=0) rebin--;
-    tmp->Rebin(rebin);
-    
-    // second fit
-    Double_t mean = fGaus2->GetParameter(1);
-    fLandauGaus->SetParameters(0.25*sigma*TMath::Sqrt(8.*log(2.)), mean, tmp->GetEntries()*tmp->GetXaxis()->GetBinWidth(1), 0.5*sigma);
-    fLandauGaus->SetParLimits(0, 0.0025*sigma*TMath::Sqrt(8.*log(2.)), 1000.);
-    fLandauGaus->SetParLimits(3, 0., 2.*sigma);
-    Double_t xMin = TMath::Max(mean-50.*sigma, tmp->GetXaxis()->GetXmin());
-    Double_t xMax = TMath::Min(mean+10.*sigma, tmp->GetXaxis()->GetXmax());
-    if (xMin < tmp->GetXaxis()->GetXmax() && xMax > tmp->GetXaxis()->GetXmin()) fLandauGaus->SetRange(xMin, xMax);
-    tmp->Fit("fLandauGaus","RQ");
-    
-    // third fit
-    xMin = TMath::Max(mean-4.*sigma, tmp->GetXaxis()->GetXmin());
-    xMax = TMath::Min(mean+3.*sigma, tmp->GetXaxis()->GetXmax());
-    if (xMin < tmp->GetXaxis()->GetXmax() && xMax > tmp->GetXaxis()->GetXmin()) fLandauGaus->SetRange(xMin, xMax);
-    tmp->Fit("fLandauGaus","RQ");
-    
-    // get fit results and fill graph
-    Double_t fwhm = 4.*fLandauGaus->GetParameter(0);
-    sigma = fLandauGaus->GetParameter(3);
-    Double_t sigmaP = TMath::Sqrt(sigma*sigma + fwhm*fwhm/(8.*log(2.)));
-    Double_t fwhmErr = fLandauGaus->GetParError(0);
-    Double_t sigmaErr = fLandauGaus->GetParError(3);
-    Double_t sigmaPErr = TMath::Sqrt(sigma*sigma*sigmaErr*sigmaErr + fwhm*fwhm*fwhmErr*fwhmErr/(64.*log(2.)*log(2.))) / sigmaP;
+    // get mean momentum in this bin
     h->GetXaxis()->SetRange(i-rebinP+1,i);
     Double_t p = (tmp->GetEntries() > 0) ? h->GetMean() : 0.5 * (h->GetXaxis()->GetBinLowEdge(i-rebinP+1) + h->GetXaxis()->GetBinLowEdge(i+1));
     h->GetXaxis()->SetRange();
+    
+    // extract the resolution if enough entries
+    Double_t sigmaP = 0., sigmaPErr = 0.;
+    if (tmp->GetEntries() > 50.) {
+      
+      // rebin histo
+      Double_t sigma = tmp->GetRMS();
+      Int_t rebin = static_cast<Int_t>(TMath::Min(0.1*tmp->GetNbinsX(),TMath::Max(0.1*sigma/tmp->GetBinWidth(1),1.)));
+      while (tmp->GetNbinsX()%rebin!=0) rebin--;
+      tmp->Rebin(rebin);
+      tmp->Scale(1./rebin);
+      
+      // first fit
+      fGaus2->SetParameters(tmp->GetSumOfWeights()*tmp->GetBinWidth(1), 0., tmp->GetRMS());
+      Double_t xMin = TMath::Max(-TMath::Max(sigma,2.*tmp->GetBinWidth(1)), tmp->GetXaxis()->GetXmin());
+      Double_t xMax = TMath::Min(TMath::Max(sigma,2.*tmp->GetBinWidth(1)), tmp->GetXaxis()->GetXmax());
+      if (xMin < tmp->GetXaxis()->GetXmax() && xMax > tmp->GetXaxis()->GetXmin()) fGaus2->SetRange(xMin, xMax);
+      tmp->Fit("fGaus2", "RQ");
+      
+      // rebin histo
+      sigma = fGaus2->GetParameter(2);
+      rebin = static_cast<Int_t>(TMath::Min(0.1*tmp->GetNbinsX(),TMath::Max(0.5*sigma/tmp->GetBinWidth(1),1.)));
+      while (tmp->GetNbinsX()%rebin!=0) rebin--;
+      tmp->Rebin(rebin);
+      tmp->Scale(1./rebin);
+      
+      // switch between fitting functions
+      if (p < pSwitch) {
+        
+        // second fit
+        Double_t mean = fGaus2->GetParameter(1);
+        fLandauGaus->SetParameters(0.25*sigma*TMath::Sqrt(8.*log(2.)), mean, fGaus2->GetParameter(0), 0.5*sigma);
+        fLandauGaus->SetParLimits(0, 0.0025*sigma*TMath::Sqrt(8.*log(2.)), 1000.);
+        fLandauGaus->SetParLimits(3, 0., 2.*sigma);
+        xMin = TMath::Max(mean-50.*sigma, tmp->GetXaxis()->GetXmin());
+        xMax = TMath::Min(mean+10.*sigma, tmp->GetXaxis()->GetXmax());
+        if (xMin < tmp->GetXaxis()->GetXmax() && xMax > tmp->GetXaxis()->GetXmin()) fLandauGaus->SetRange(xMin, xMax);
+        tmp->Fit("fLandauGaus","RQ");
+        
+        // third fit
+        xMin = TMath::Max(mean-4.*sigma, tmp->GetXaxis()->GetXmin());
+        xMax = TMath::Min(mean+3.*sigma, tmp->GetXaxis()->GetXmax());
+        if (xMin < tmp->GetXaxis()->GetXmax() && xMax > tmp->GetXaxis()->GetXmin()) fLandauGaus->SetRange(xMin, xMax);
+        tmp->Fit("fLandauGaus","RQ");
+        
+        // get fit results
+        Double_t fwhm = 4.*fLandauGaus->GetParameter(0);
+        sigma = fLandauGaus->GetParameter(3);
+        sigmaP = TMath::Sqrt(sigma*sigma + fwhm*fwhm/(8.*log(2.)));
+        Double_t fwhmErr = fLandauGaus->GetParError(0);
+        Double_t sigmaErr = fLandauGaus->GetParError(3);
+        sigmaPErr = TMath::Sqrt(sigma*sigma*sigmaErr*sigmaErr + fwhm*fwhm*fwhmErr*fwhmErr/(64.*log(2.)*log(2.))) / sigmaP;
+        
+      } else {
+        
+        // second fit
+        Double_t mean = fGaus2->GetParameter(1);
+        fGausInvP->SetParameters(fGaus2->GetParameter(0), p, sigma, 0.);
+        Double_t xMin = TMath::Max(mean-TMath::Max(2.*sigma,2.*tmp->GetBinWidth(1)), tmp->GetXaxis()->GetXmin());
+        Double_t xMax = TMath::Min(mean+TMath::Max(3.*sigma,2.*tmp->GetBinWidth(1)), tmp->GetXaxis()->GetXmax());
+        if (xMin < tmp->GetXaxis()->GetXmax() && xMax > tmp->GetXaxis()->GetXmin()) fGausInvP->SetRange(xMin, xMax);
+        tmp->Fit("fGausInvP","RIQ");
+        
+        // get fit results
+        sigmaP = fGausInvP->GetParameter(2);
+        sigmaPErr = fGausInvP->GetParError(2);
+        
+      }
+      
+    }
+    
+    // fill graph
     Double_t pErr[2] = {p-h->GetXaxis()->GetBinLowEdge(i-rebinP+1), h->GetXaxis()->GetBinLowEdge(i+1)-p};
     gSigma->SetPoint(i/rebinP-1, p, 100.*sigmaP/p);
     gSigma->SetPointError(i/rebinP-1, pErr[0], pErr[1], 100.*sigmaPErr/p, 100.*sigmaPErr/p);
     
     // clean memory
-    //c->Update();
-    delete tmp;
+    if (drawResPVsP) c->Update();
+    else delete tmp;
     
   }
   
