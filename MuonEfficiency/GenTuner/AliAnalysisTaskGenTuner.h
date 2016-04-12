@@ -43,6 +43,9 @@ public:
   /// set the generated muon low pT cut
   void SetMuonGenPtCut(Double_t cut) {fGenPtCut = cut;}
   
+  /// select muons of given charge (< 0 = mu-, 0 = all, > 0 = mu+)
+  void SelectMuonCharge(Int_t charge) {fCharge = charge;}
+  
   /// weight simulated/reconstructed particles using given functions
   void Weight(Bool_t flag) {fWeight = flag;}
   
@@ -135,6 +138,7 @@ private:
   AliMuonTrackCuts* fMuonTrackCuts; ///< cuts to select tracks to be considered
   Double_t fPtCut;                  ///< muon low pT cut
   Double_t fGenPtCut;               ///< generated muon low pT cut
+  Int_t    fCharge;                 ///< select muons of given charge (< 0 = mu-, 0 = all, > 0 = mu+)
   Bool_t   fWeight;                 ///< weight simulated/reconstructed particles using using given functions
   TString  fDataFile;               ///< data file used in terminate to tune the generated distributions
   TF1     *fPtFuncOld;              ///< original generated pT function with original parameters
@@ -150,7 +154,7 @@ private:
   TCanvas *fcRes;                   //!< generated and reconstructed distributions
   TCanvas *fcRat;                   //!< data/MC ratios
   
-  ClassDef(AliAnalysisTaskGenTuner, 3);
+  ClassDef(AliAnalysisTaskGenTuner, 4);
 };
 
 //________________________________________________________________________

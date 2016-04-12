@@ -62,6 +62,7 @@ fCentMax(FLT_MAX),
 fMuonTrackCuts(0x0),
 fPtCut(-1.),
 fGenPtCut(-1.),
+fCharge(0),
 fWeight(kFALSE),
 fDataFile(""),
 fPtFuncOld(0x0),
@@ -90,6 +91,7 @@ fCentMax(FLT_MAX),
 fMuonTrackCuts(0x0),
 fPtCut(-1.),
 fGenPtCut(-1.),
+fCharge(0),
 fWeight(kFALSE),
 fDataFile(""),
 fPtFuncOld(0x0),
@@ -226,6 +228,8 @@ void AliAnalysisTaskGenTuner::UserExec(Option_t *)
       
       if (!mctrack->IsPrimary()) continue;
       
+      if (fCharge*mctrack->Charge() < 0) continue;
+      
       // compute the weights for all primary particles (other weights are 0)
       Double_t y = mctrack->Y();
       Double_t pT = mctrack->Pt();
@@ -255,7 +259,7 @@ void AliAnalysisTaskGenTuner::UserExec(Option_t *)
     Double_t pT = track->Pt();
     Int_t mcLabel = track->GetLabel();
     if (!fMuonTrackCuts->IsSelected(track) || (fPtCut > 0. && pT < fPtCut) ||
-	(MCEvent() && mcLabel < 0)) continue;
+	fCharge*track->Charge() < 0 || (MCEvent() && mcLabel < 0)) continue;
     
     Double_t w = (weight.GetSize() > 0) ? fRunWeight * weight[mcLabel] : fRunWeight;
     ((TH1*)fList->UncheckedAt(kPtRec))->Fill(pT, w);
