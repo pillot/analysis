@@ -298,7 +298,7 @@ void AliAnalysisTaskGenTuner::Terminate(Option_t *)
   fitRangeMC[2][1] = h[2]->GetXaxis()->GetXmax();
   Double_t fitRange[3][2];
   fitRange[0][0] = (fPtCut > 0.) ? TMath::Max(fitRangeMC[0][0], fPtCut) : fitRangeMC[0][0];
-  fitRange[0][1] = 15.;
+  fitRange[0][1] = h[3]->GetXaxis()->GetXmax();
   fitRange[1][0] = -3.98; // not -4. because of the influence of the eta cut
   fitRange[1][1] = -2.5;
   fitRange[2][0] = h[5]->GetXaxis()->GetXmin();
@@ -429,12 +429,12 @@ void AliAnalysisTaskGenTuner::Terminate(Option_t *)
     if (fPtFuncMC) {
       fPtFuncMC->SetLineColor(3);
       fPtFuncMC->SetLineWidth(3);
-      h[0]->Fit(fPtFuncMC, "IWLMR", "e0sames");
+      h[0]->Fit(fPtFuncMC, "GWLMR", "e0sames");
       lRes->AddEntry(fPtFuncMC,"MC range MC","l");
     } else h[0]->Draw("e0");
     if (fPtFunc) {
       fPtFunc->SetLineColor(4);
-      h[0]->Fit(fPtFunc, "IWLMR+");
+      h[0]->Fit(fPtFunc, "GWLMR+");
       lRes->AddEntry(fPtFunc,"MC range Data","l");
     }
   }
@@ -442,7 +442,7 @@ void AliAnalysisTaskGenTuner::Terminate(Option_t *)
     hRef[0]->SetLineColor(2);
     if (fPtFuncNew) {
       fPtFuncNew->SetLineColor(2);
-      hRef[0]->Fit(fPtFuncNew, "IWLMR", "e0sames");
+      hRef[0]->Fit(fPtFuncNew, "GWLMR", "e0sames");
       lRes->AddEntry(fPtFuncNew,"Data","l");
     } else hRef[0]->Draw("e0sames");
   }
@@ -452,18 +452,18 @@ void AliAnalysisTaskGenTuner::Terminate(Option_t *)
     if (fYFuncMC) {
       fYFuncMC->SetLineColor(3);
       fYFuncMC->SetLineWidth(3);
-      h[1]->Fit(fYFuncMC, "IWLMR", "e0sames");
+      h[1]->Fit(fYFuncMC, "GWLMR", "e0sames");
     } else h[1]->Draw("e0");
     if (fYFunc) {
       fYFunc->SetLineColor(4);
-      h[1]->Fit(fYFunc, "IWLMR+");
+      h[1]->Fit(fYFunc, "GWLMR+");
     }
   }
   if (hRef[1]) {
     hRef[1]->SetLineColor(2);
     if (fYFuncNew) {
       fYFuncNew->SetLineColor(2);
-      hRef[1]->Fit(fYFuncNew, "IWLMR", "e0sames");
+      hRef[1]->Fit(fYFuncNew, "GWLMR", "e0sames");
     } else hRef[1]->Draw("e0sames");
   }
   for (Int_t i = 2; i < 6; i++) {
