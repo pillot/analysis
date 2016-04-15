@@ -57,15 +57,20 @@ Int_t GetMode(TString smode, TString input)
 }
 
 //______________________________________________________________________________
-TString GetDataType(TString input)
+TString GetDataType(Int_t mode, TString input, TString dataPattern)
 {
   // Get the data type (ESD or AOD)
-  if (input.Contains(".root")) {
-    if (input.Contains("AOD")) return "AOD";
-    else if (input.Contains("ESD")) return "ESD";
-  } else if (input.EndsWith(".txt")) {
-    if (gSystem->Exec(Form("grep -q AOD %s", input.Data())) == 0) return "AOD";
-    else if (gSystem->Exec(Form("grep -q ESD %s", input.Data())) == 0) return "ESD";
+  if (mode == kGrid || mode == kTerminate) {
+    if (dataPattern.Contains("AOD")) return "AOD";
+    else return "ESD";
+  } else {
+    if (input.Contains(".root")) {
+      if (input.Contains("AOD")) return "AOD";
+      else if (input.Contains("ESD")) return "ESD";
+    } else if (input.EndsWith(".txt")) {
+      if (gSystem->Exec(Form("grep -q AOD %s", input.Data())) == 0) return "AOD";
+      else if (gSystem->Exec(Form("grep -q ESD %s", input.Data())) == 0) return "ESD";
+    }
   }
   return "unknown";
 }
@@ -221,7 +226,12 @@ void LoadAlirootLocally(TString& extraLibs, TString& extraIncs, TString& extraTa
     delete incs;
   }
   
-  // Optionally add packages
+  // Optionally add packages (need to change DYLD_LIBRARY_PATH on mac to load only the correct library)
+/*  TString dyld_library_path = gSystem->Getenv("DYLD_LIBRARY_PATH");
+  if (!dyld_library_path.BeginsWith(".")) {
+    gSystem->Exec("export DYLD_LIBRARY_PATH=.:$DYLD_LIBRARY_PATH");
+    printf("DYLD_LIBRARY_PATH = %s\n",gSystem->Getenv("DYLD_LIBRARY_PATH"));
+  }*/
   if (!extraPkgs.IsNull()) {
     TObjArray* pkgs = extraPkgs.Tokenize(":");
     for (Int_t i = 0; i < pkgs->GetEntriesFast(); i++)
@@ -294,7 +304,7 @@ void LoadAlirootOnProof(TString& aaf, TString rootVersion, TString aliphysicsVer
   // compile additional tasks on workers
   TObjArray* tasks = extraTasks.Tokenize(":");
   for (Int_t i = 0; i < tasks->GetEntriesFast(); i++)
-    gProof->Load(Form("%s.cxx+g",static_cast<TObjString*>(tasks->UncheckedAt(i))->GetName()), notOnClient);
+    gProof->Load(Form("%s.cxx++g",static_cast<TObjString*>(tasks->UncheckedAt(i))->GetName()), notOnClient);
   delete tasks;
   
 }
@@ -327,7 +337,7 @@ TObject* CreateAlienHandler(TString runMode, TString& alirootVersion, TString& a
 			    TString &dataDir, TString &dataPattern, TString &outDir, TString& extraLibs,
 			    TString& extraIncs, TString& extraTasks, TString& extraPkgs, TString& analysisMacroName,
 			    TString runFormat = "%09d", Int_t ttl = 30000, Int_t maxFilesPerJob = 100,
-			    Int_t maxMergeFiles = 10, Int_t maxMergeStages = 1)
+			    Int_t maxMergeFiles = 10, Int_t maxMergeStages = 1, TString& RegisterExcludes = "")
 {
   // Configure the alien plugin
   AliAnalysisAlien *plugin = new AliAnalysisAlien();
@@ -446,6 +456,9 @@ TObject* CreateAlienHandler(TString runMode, TString& alirootVersion, TString& a
   // Exclude given output file(s) from merging
   plugin->SetMergeExcludes("EventStat_temp.root");
   
+  // Exclude given output file(s) from registration/merging
+  plugin->SetRegisterExcludes(RegisterExcludes.Data());
+  
   // Save the log files
   plugin->SetKeepLogs();
   
@@ -457,7 +470,7 @@ TChain* CreateChainFromFile(const char *file)
 {
   // Create a chain using the root file or txt file containing root file
   
-  TString dataType = GetDataType(file);
+  TString dataType = GetDataType(kLocal, file, "");
   if (dataType == "unknown") return NULL;
   
   TChain* chain = (dataType == "AOD") ? new TChain("aodTree") : new TChain("esdTree");
@@ -585,7 +598,8 @@ void StartAnalysis(Int_t mode, TObject* inputObj)
 Bool_t RunAnalysis(TString smode, TString input, TString& rootVersion, TString& alirootVersion, TString& aliphysicsVersion,
                    TString &extraLibs, TString &extraIncs, TString &extraTasks, TString &extraPkgs,
                    TString &dataDir, TString &dataPattern, TString &outDir, TString &analysisMacroName,
-                   TString runFormat, Int_t ttl, Int_t maxFilesPerJob, Int_t maxMergeFiles, Int_t maxMergeStages)
+                   TString runFormat, Int_t ttl, Int_t maxFilesPerJob, Int_t maxMergeFiles, Int_t maxMergeStages,
+                   TString& RegisterExcludes = "")
 {
   /// Run the analysis locally, on proof or on the grid
   
@@ -596,7 +610,7 @@ Bool_t RunAnalysis(TString smode, TString input, TString& rootVersion, TString& 
   // --- prepare proof or grid environment ---
   if (mode == kProof || mode == kProofLite) LoadAlirootOnProof(smode, rootVersion, aliphysicsVersion, extraLibs, extraIncs, extraTasks, extraPkgs, kTRUE);
   else if (mode == kGrid || mode == kTerminate) {
-    AliAnalysisGrid *alienHandler = static_cast<AliAnalysisGrid*>(CreateAlienHandler(smode, alirootVersion, aliphysicsVersion, input, dataDir, dataPattern, outDir, extraLibs, extraIncs, extraTasks, extraPkgs, analysisMacroName, runFormat, ttl, maxFilesPerJob, maxMergeFiles, maxMergeStages));
+    AliAnalysisGrid *alienHandler = static_cast<AliAnalysisGrid*>(CreateAlienHandler(smode, alirootVersion, aliphysicsVersion, input, dataDir, dataPattern, outDir, extraLibs, extraIncs, extraTasks, extraPkgs, analysisMacroName, runFormat, ttl, maxFilesPerJob, maxMergeFiles, maxMergeStages, RegisterExcludes));
     if (alienHandler) AliAnalysisManager::GetAnalysisManager()->SetGridHandler(alienHandler);
     else return kFALSE;
   }
