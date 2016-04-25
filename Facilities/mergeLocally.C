@@ -42,7 +42,7 @@ TList *CreateFileList(TList &fileNames);
 Bool_t MergeRecursive(TDirectory *target, TList *sourcelist, Int_t type);
 void Merge(TList &files, TString &fileName, Bool_t skipParamContainers);
 
-void mergeLocally(TString fileList = "fileList.txt", Bool_t skipParamContainers = kFALSE)
+void mergeLocally(TString fileList = "fileList.txt", Bool_t skipParamContainers = kFALSE, Bool_t runList = kFALSE)
 {
   /// merge all files in the list
   /// *** to be compiled ***
@@ -64,9 +64,13 @@ void mergeLocally(TString fileList = "fileList.txt", Bool_t skipParamContainers 
   paramContainers.AddLast(new TObjString("general2"));
   
   // load potentially needed libraries
-  gROOT->LoadMacro("$WORK/Macros/Facilities/runTaskFacilities.C");
-  TString extraLibs="CORRFW";
-  gROOT->ProcessLineFast(Form("LoadAlirootLocally\(\"%s\", \"\", \"\"",extraLibs.Data()));
+  gROOT->LoadMacro("$HOME/Work/Alice/Macros/Facilities/runTaskFacilities.C");
+  TString extraLibs="";
+  TString extraPkgs="";
+//  TString extraPkgs="PWGPPMUONdep:PWGPPMUONlite";
+//  TString extraPkgs="PWGPPMUONdep:PWGPPMUONlite:PWGmuondep";
+  gROOT->ProcessLineFast(Form("LoadAlirootLocally\(\"%s\", \"\", \"\", \"%s\"",extraLibs.Data(),extraPkgs.Data()));
+//  gROOT->ProcessLineFast(Form("LoadAlirootLocally\(\"%s\", \"include\", \"AliAnalysisTaskJPsi:AliAnalysisTaskMTRSign\"",extraLibs.Data()));
   
   // open the file list
   ifstream inFile(fileList.Data());
@@ -86,6 +90,12 @@ void mergeLocally(TString fileList = "fileList.txt", Bool_t skipParamContainers 
     TString currFile;
     currFile.ReadLine(inFile, kTRUE);
     if (currFile.IsNull()) continue;
+    
+    // in case the file list is in fact a run list
+    if (runList) {
+      currFile.Prepend("./runs/");
+      currFile += "/AnalysisResults.root";
+    }
     
     // pick up the fileName if not already done
     if (fileName.IsNull()) {
