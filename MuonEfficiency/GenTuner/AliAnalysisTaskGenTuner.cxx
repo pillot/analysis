@@ -73,6 +73,9 @@ fYFuncOld(0x0),
 fYFuncNew(0x0),
 fYFunc(0x0),
 fYFuncMC(0x0),
+fMuPlusFracOld(-1.),
+fMuPlusFracNew(-1.),
+fMuPlusFrac(-1.),
 fRunWeights(0x0),
 fRunWeight(1.),
 fcRes(0x0),
@@ -102,6 +105,9 @@ fYFuncOld(0x0),
 fYFuncNew(0x0),
 fYFunc(0x0),
 fYFuncMC(0x0),
+fMuPlusFracOld(-1.),
+fMuPlusFracNew(-1.),
+fMuPlusFrac(-1.),
 fRunWeights(0x0),
 fRunWeight(1.),
 fcRes(0x0),
@@ -169,6 +175,13 @@ void AliAnalysisTaskGenTuner::UserCreateOutputObjects()
   hPhiRec->Sumw2();
   fList->AddAtAndExpand(hPhiRec, kPhiRec);
   
+  TH1* hSignGen = new TH1D("hSignGen","generated sign distribution;sign;dN/dsign", 2, -2., 2.);
+  hSignGen->Sumw2();
+  fList->AddAtAndExpand(hSignGen, kSignGen);
+  TH1* hSignRec = new TH1D("hSignRec","reconstructed sign distribution;sign;dN/dsign", 2, -2., 2.);
+  hSignRec->Sumw2();
+  fList->AddAtAndExpand(hSignRec, kSignRec);
+  
   // initialize event counters
   fEventCounters = new AliCounterCollection(GetOutputSlot(2)->GetContainer()->GetName());
   fEventCounters->AddRubric("run", 100000);
@@ -225,6 +238,7 @@ void AliAnalysisTaskGenTuner::UserExec(Option_t *)
     for (Int_t i = 0; i < MCEvent()->GetNumberOfTracks(); i++) {
       
       AliAODMCParticle *mctrack = static_cast<AliAODMCParticle*>(MCEvent()->GetTrack(i));
+      weight[i] = 0.;
       
       if (!mctrack->IsPrimary()) continue;
       
@@ -236,6 +250,9 @@ void AliAnalysisTaskGenTuner::UserExec(Option_t *)
       if (fGenPtCut > 0. && pT < fGenPtCut) weight[i] = 0.;
       else if (fWeight && fPtFuncOld && fPtFuncNew && fYFuncOld && fYFuncNew) {
 	weight[i] = fPtFuncNew->Eval(pT) / fPtFuncOld->Eval(pT) * fYFuncNew->Eval(y) / fYFuncOld->Eval(y);
+        if (fMuPlusFracOld > 0. && fMuPlusFracOld < 1. && fMuPlusFracNew >= 0. && fMuPlusFracNew <= 1.) {
+          weight[i] *= (mctrack->Charge() > 0.) ? fMuPlusFracNew / fMuPlusFracOld : (1.-fMuPlusFracNew) / (1.-fMuPlusFracOld);
+        }
 	if (weight[i] < 0.) {
 	  AliError(Form("negative weight: y = %g, pT = %g: w = %g", y, pT, weight[i]));
 	  weight[i] = 0.;
@@ -246,6 +263,7 @@ void AliAnalysisTaskGenTuner::UserExec(Option_t *)
       ((TH1*)fList->UncheckedAt(kPtGen))->Fill(pT, w);
       ((TH1*)fList->UncheckedAt(kYGen))->Fill(y, w);
       ((TH1*)fList->UncheckedAt(kPhiGen))->Fill(mctrack->Phi()*TMath::RadToDeg(), w);
+      ((TH1*)fList->UncheckedAt(kSignGen))->Fill((mctrack->Charge() < 0.) ? -1. : 1., w);
       
     }
     
@@ -265,6 +283,7 @@ void AliAnalysisTaskGenTuner::UserExec(Option_t *)
     ((TH1*)fList->UncheckedAt(kPtRec))->Fill(pT, w);
     ((TH1*)fList->UncheckedAt(kYRec))->Fill(track->Y(), w);
     ((TH1*)fList->UncheckedAt(kPhiRec))->Fill(track->Phi()*TMath::RadToDeg(), w);
+    ((TH1*)fList->UncheckedAt(kSignRec))->Fill(track->Charge(), w);
     
   }
   
@@ -280,77 +299,93 @@ void AliAnalysisTaskGenTuner::Terminate(Option_t *)
   /// post-processing
   
   // get current results
-  Int_t hIndex[6] = {kPtGen, kYGen, kPhiGen, kPtRec, kYRec, kPhiRec};
+  Int_t hIndex[8] = {kPtGen, kYGen, kPhiGen, kSignGen, kPtRec, kYRec, kPhiRec, kSignRec};
   fList = static_cast<TObjArray*>(GetOutputData(1));
-  TH1 *h[6];
-  for (Int_t i = 0; i < 6; i++) {
+  TH1 *h[8];
+  for (Int_t i = 0; i < 8; i++) {
     h[i] = static_cast<TH1*>(fList->UncheckedAt(hIndex[i])->Clone());
     h[i]->SetDirectory(0);
   }
   
   // get the fit ranges
-  Double_t fitRangeMC[3][2];
+  Double_t fitRangeMC[4][2];
   fitRangeMC[0][0] = GetFitLowEdge(*(h[0]));
   fitRangeMC[0][1] = 999.;
   fitRangeMC[1][0] = GetFitLowEdge(*(h[1]));
   fitRangeMC[1][1] = GetFitUpEdge(*(h[1]));
   fitRangeMC[2][0] = h[2]->GetXaxis()->GetXmin();
   fitRangeMC[2][1] = h[2]->GetXaxis()->GetXmax();
-  Double_t fitRange[3][2];
+  fitRangeMC[3][0] = h[3]->GetXaxis()->GetXmin();
+  fitRangeMC[3][1] = h[3]->GetXaxis()->GetXmax();
+  Double_t fitRange[4][2];
   fitRange[0][0] = (fPtCut > 0.) ? TMath::Max(fitRangeMC[0][0], fPtCut) : fitRangeMC[0][0];
-  fitRange[0][1] = h[3]->GetXaxis()->GetXmax();
+  fitRange[0][1] = h[4]->GetXaxis()->GetXmax();
   fitRange[1][0] = -3.98; // not -4. because of the influence of the eta cut
-  fitRange[1][1] = -2.5;
-  fitRange[2][0] = h[5]->GetXaxis()->GetXmin();
-  fitRange[2][1] = h[5]->GetXaxis()->GetXmax();
+  fitRange[1][1] = -2.51;
+  fitRange[2][0] = h[6]->GetXaxis()->GetXmin();
+  fitRange[2][1] = h[6]->GetXaxis()->GetXmax();
+  fitRange[3][0] = h[7]->GetXaxis()->GetXmin();
+  fitRange[3][1] = h[7]->GetXaxis()->GetXmax();
   
   // compute acc*eff corrections if it is simulated data
-  TH1 *hAccEff[3] = {0x0, 0x0, 0x0};
-  for (Int_t i = 0; i < 3 && h[i]->GetEntries() > 0; i++) {
-    hAccEff[i] = ComputeAccEff(*(h[i]), *(h[i+3]), Form("%sOverGen",h[i+3]->GetName()), "Acc#{times}Eff");
+  TH1 *hAccEff[4] = {0x0, 0x0, 0x0, 0x0};
+  for (Int_t i = 0; i < 4 && h[i]->GetEntries() > 0; i++) {
+    hAccEff[i] = ComputeAccEff(*(h[i]), *(h[i+4]), Form("%sOverGen",h[i+4]->GetName()), "Acc#{times}Eff");
   }
   
   // get reference data if provided
-  TH1 *hRef[6] = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
+  TH1 *hRef[8] = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
   if (!fDataFile.IsNull()) {
     TFile* dataFile = TFile::Open(fDataFile.Data(),"READ");
     if (!dataFile || !dataFile->IsOpen()) return;
     TObjArray* data = static_cast<TObjArray*>(dataFile->FindObjectAny("Histograms"));
     if (!data) return;
-    for (Int_t i = 3; i < 6; i++) {
-      hRef[i] = static_cast<TH1*>(data->UncheckedAt(hIndex[i])->Clone());
-      hRef[i]->SetDirectory(0);
+    for (Int_t i = 4; i < 8; i++) {
+      if (hIndex[i] < data->GetEntries()) {
+        hRef[i] = static_cast<TH1*>(data->UncheckedAt(hIndex[i])->Clone());
+        hRef[i]->SetDirectory(0);
+      }
     }
     dataFile->Close();
   }
   
   // compute corrected data
-  for (Int_t i = 0; i < 3 && hRef[i+3] && hAccEff[i]; i++) {
-    hRef[i] = static_cast<TH1*>(hRef[i+3]->Clone(Form("%sCorr",hRef[i+3]->GetName())));
+  for (Int_t i = 0; i < 4 && hRef[i+4] && hAccEff[i]; i++) {
+    hRef[i] = static_cast<TH1*>(hRef[i+4]->Clone(Form("%sCorr",hRef[i+4]->GetName())));
     hRef[i]->SetTitle("corrected data");
     hRef[i]->Divide(hAccEff[i]);
   }
   
+  // get the (weighted) number of generated(corrected)/reconstructed muons
+  Double_t nMu[2] = {0., 0.};
+  nMu[0] = h[3]->Integral();
+  nMu[1] = h[7]->Integral();
+  Double_t nMuRef[2] = {0., 0.};
+  if (hRef[3]) nMuRef[0] = hRef[3]->Integral();
+  if (hRef[7]) nMuRef[1] = hRef[7]->Integral();
+  
   // normalize histograms
   Bool_t normalized = kFALSE;
-  for (Int_t i = 0; i < 3 && hRef[i]; i++) {
+  for (Int_t i = 0; i < 4 && hRef[i]; i++) {
     Double_t integral = h[i]->Integral(h[i]->FindBin(fitRange[i][0]), h[i]->FindBin(fitRange[i][1]), "width");
     Double_t norm = (integral != 0.) ? 1./integral : 1.;
     h[i]->Scale(norm);
-    h[i+3]->Scale(norm);
+    h[i+4]->Scale(norm);
     integral = hRef[i]->Integral(hRef[i]->FindBin(fitRange[i][0]), hRef[i]->FindBin(fitRange[i][1]), "width");
     norm = (integral != 0.) ? 1./integral : 1.;
     hRef[i]->Scale(norm);
-    hRef[i+3]->Scale(norm);
+    hRef[i+4]->Scale(norm);
     normalized = kTRUE;
   }
   
   // compute data/MC ratios
-  TH1 *hRat[6] = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
-  for (Int_t i = 0; i < 6 && hRef[i]; i++) {
-    hRat[i] = static_cast<TH1*>(hRef[i]->Clone(Form("%sDataOverMC",hRef[i]->GetName())));
-    hRat[i]->SetTitle("data / MC");
-    hRat[i]->Divide(h[i]);
+  TH1 *hRat[8] = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
+  for (Int_t i = 0; i < 8; i++) {
+    if (hRef[i]) {
+      hRat[i] = static_cast<TH1*>(hRef[i]->Clone(Form("%sDataOverMC",hRef[i]->GetName())));
+      hRat[i]->SetTitle("data / MC");
+      hRat[i]->Divide(h[i]);
+    }
   }
   
   // prepare fitting functions depending whether the original distributions are weighted or not
@@ -419,10 +454,10 @@ void AliAnalysisTaskGenTuner::Terminate(Option_t *)
     }
   }
   
-  // plot results
+  // plot and fit results
   TLegend *lRes = new TLegend(0.5,0.55,0.85,0.75);
-  fcRes = new TCanvas("cRes", "results", 900, 600);
-  fcRes->Divide(3,2);
+  fcRes = new TCanvas("cRes", "results", 1200, 600);
+  fcRes->Divide(4,2);
   fcRes->cd(1);
   gPad->SetLogy();
   if (hAccEff[0]) {
@@ -466,9 +501,9 @@ void AliAnalysisTaskGenTuner::Terminate(Option_t *)
       hRef[1]->Fit(fYFuncNew, "GWLMR", "e0sames");
     } else hRef[1]->Draw("e0sames");
   }
-  for (Int_t i = 2; i < 6; i++) {
+  for (Int_t i = 2; i < 8; i++) {
     fcRes->cd(i+1);
-    if (i == 3) gPad->SetLogy();
+    if (i == 4) gPad->SetLogy();
     h[i]->Draw("e0");
     if (hRef[i]) {
       hRef[i]->SetLineColor(2);
@@ -500,18 +535,30 @@ void AliAnalysisTaskGenTuner::Terminate(Option_t *)
     NormFunc(fYFuncNew, fitRangeMC[1][0], fitRangeMC[1][1]);
   }
   
+  // Get fractions of mu+
+  if (hAccEff[3]) {
+    Double_t sum  = h[3]->GetBinContent(1) + h[3]->GetBinContent(2);
+    if (sum > 0.) fMuPlusFrac = h[3]->GetBinContent(2) / sum;
+  }
+  if (hRef[3]) {
+    Double_t sum  = hRef[3]->GetBinContent(1) + hRef[3]->GetBinContent(2);
+    if (sum > 0.) fMuPlusFracNew = hRef[3]->GetBinContent(2) / sum;
+  }
+  
   // prepare data/MC function ratios
   TF1 *ptRat = (hRat[0] && fPtFunc && fPtFuncNew) ? new TF1("ptRat", this, &AliAnalysisTaskGenTuner::PtRat, fitRangeMC[0][0], hRat[0]->GetXaxis()->GetXmax(), 0, "AliAnalysisTaskGenTuner", "PtRat") : 0x0;
   TF1 *yRat = (hRat[1] && fYFunc && fYFuncNew) ? new TF1("yRat", this, &AliAnalysisTaskGenTuner::YRat, fitRangeMC[1][0], fitRangeMC[1][1], 0, "AliAnalysisTaskGenTuner", "YRat") : 0x0;
   
   // plot ratios
-  fcRat = new TCanvas("cRat", "ratios", 900, 600);
-  fcRat->Divide(3,2);
-  for (Int_t i = 0; i < 6 && hRat[i]; i++) {
-    fcRat->cd(i+1);
-    hRat[i]->Draw("e0");
-    if (i == 0 && ptRat) ptRat->Draw("sames");
-    else if (i == 1 && yRat) yRat->Draw("sames");
+  fcRat = new TCanvas("cRat", "ratios", 1200, 600);
+  fcRat->Divide(4,2);
+  for (Int_t i = 0; i < 8; i++) {
+    if (hRat[i]) {
+      fcRat->cd(i+1);
+      hRat[i]->Draw("e0");
+      if (i == 0 && ptRat) ptRat->Draw("sames");
+      else if (i == 1 && yRat) yRat->Draw("sames");
+    }
   }
   
   // print fitting ranges
@@ -555,6 +602,10 @@ void AliAnalysisTaskGenTuner::Terminate(Option_t *)
     for (Int_t i = 0; i < fYFuncNew->GetNpar()-1; i++) printf("%g, ", fYFuncNew->GetParameter(i));
     printf("%g};\n\n", fYFuncNew->GetParameter(fYFuncNew->GetNpar()-1));
   }
+  if (hAccEff[3]) printf("Double_t oldMuPlusFrac = %f\n", fMuPlusFrac);
+  if (hRef[3]) printf("Double_t newMuPlusFrac = %f\n\n", fMuPlusFracNew);
+  if (hAccEff[3]) printf("MC  muons: generated (MC range): %g ; reconstructed (reco range): %g --> ratio = %g\n", nMu[0], nMu[1], (nMu[0]>0.) ? nMu[1]/nMu[0] : 0.);
+  if (hRef[7]) printf("Ref muons: corrected (MC range): %g ; reconstructed (reco range): %g\n\n", nMuRef[0], nMuRef[1]);
   
 }
 

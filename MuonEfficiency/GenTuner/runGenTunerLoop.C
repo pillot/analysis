@@ -8,9 +8,6 @@
  */
 
 
-TString referenceDataFile = "/Users/pillot/Work/Alice/Data/2015/LHC15n/muon_calo_pass1/AODs/GenTuner/CMUS7/AnalysisResults.root";
-
-
 //______________________________________________________________________________
 void runGenTunerLoop(TString smode = "local", TString inputFileName = "AliAOD.root", Int_t nStep)
 {
@@ -18,8 +15,9 @@ void runGenTunerLoop(TString smode = "local", TString inputFileName = "AliAOD.ro
   
   if (nStep <= 0) return;
   
-  // --- general analysis setup ---
-  TString aliphysicsVersion = "vAN-20160112-1";
+  gROOT->LoadMacro("$HOME/Work/Alice/Macros/Facilities/runTaskFacilities.C");
+  
+  // --- copy files needed for this analysis ---
   TList pathList; pathList.SetOwner();
   pathList.Add(new TObjString("$WORK/Macros/MuonEfficiency/GenTuner"));
   TList fileList; fileList.SetOwner();
@@ -28,18 +26,19 @@ void runGenTunerLoop(TString smode = "local", TString inputFileName = "AliAOD.ro
   fileList.Add(new TObjString("AddTaskGenTuner.C"));
   fileList.Add(new TObjString("AliAnalysisTaskGenTuner.cxx"));
   fileList.Add(new TObjString("AliAnalysisTaskGenTuner.h"));
+  CopyFileLocally(pathList, fileList);
+  TString referenceDataFile = gSystem->GetFromPipe("egrep '^[ ]*TString referenceDataFile' runGenTuner.C | cut -d'\"' -f2");
+  CopyInputFileLocally(referenceDataFile.Data(), "ReferenceResults.root");
+  fileList.Add(new TObjString("ReferenceResults.root"));
+  TString runWeight = gSystem->GetFromPipe("egrep '^[ ]*TString runWeight' runGenTuner.C | cut -d'\"' -f2");
+  if (!runWeight.IsNull()) fileList.Add(new TObjString("runWeight.txt"));
+  
+  // --- general analysis setup ---
+  TString aliphysicsVersion = gSystem->GetFromPipe("egrep '^[ ]*TString aliphysicsVersion' runGenTuner.C | cut -d'\"' -f2");
   
   // --- saf3 specific setup ---
   Bool_t splitDataset = kFALSE;
   Bool_t overwriteDataset = kTRUE;
-  
-  gROOT->LoadMacro("$HOME/Work/Alice/Macros/Facilities/runTaskFacilities.C");
-  
-  // --- copy files needed for this analysis ---
-  CopyFileLocally(pathList, fileList);
-  CopyInputFileLocally(referenceDataFile.Data(), "ReferenceResults.root");
-  fileList.Add(new TObjString("ReferenceResults.root"));
-//  fileList.Add(new TObjString("runWeight.txt"));
   
   // --- Check runing mode ---
   Int_t mode = GetMode(smode, inputFileName);
@@ -58,6 +57,7 @@ void runGenTunerLoop(TString smode = "local", TString inputFileName = "AliAOD.ro
     TString resume = "";
     TGraphErrors *gOldPtParam[100], *gOldPtParamMC[100], *gNewPtParam[100];
     TGraphErrors *gOldYParam[100], *gOldYParamMC[100], *gNewYParam[100];
+    TGraphErrors *gOldMuPlusFrac, *gNewMuPlusFrac;
     Int_t nPtParam = 0, nYParam = 0;
     for (Int_t iStep = 0; iStep < nStep; iStep++) {
       
@@ -153,6 +153,24 @@ void runGenTunerLoop(TString smode = "local", TString inputFileName = "AliAOD.ro
           }
         }
         
+        // prepare trending plots for mu+ fraction
+        TParameter<Double_t> *newMuPlusFrac = static_cast<TParameter<Double_t>*>(inFile->FindObjectAny("newMuPlusFrac"));
+        if (iStep == 0 && newMuPlusFrac) {
+          gOldMuPlusFrac = new TGraphErrors(nStep-1);
+          gOldMuPlusFrac->SetNameTitle("gOldMuPlusFrac", "mu+ fraction");
+          gNewMuPlusFrac = new TGraphErrors(nStep);
+          gNewMuPlusFrac->SetNameTitle("gNewMuPlusFrac", "mu+ fraction");
+        }
+        
+        // fill trending plots with mu+ fractions
+        TParameter<Double_t> *oldMuPlusFrac = static_cast<TParameter<Double_t>*>(inFile->FindObjectAny("currentMuPlusFrac"));
+        if (iStep > 0 && oldMuPlusFrac) {
+          gOldMuPlusFrac->SetPoint(iStep-1, iStep-1, oldMuPlusFrac->GetVal());
+        }
+        if (newMuPlusFrac) {
+          gNewMuPlusFrac->SetPoint(iStep, iStep, newMuPlusFrac->GetVal());
+        }
+        
         inFile->Close();
         
       }
@@ -208,6 +226,22 @@ void runGenTunerLoop(TString smode = "local", TString inputFileName = "AliAOD.ro
         gNewYParam[i]->GetXaxis()->SetLimits(-1., nStep+1.);
       }
     }
+    TCanvas *cMuPlusFrac = new TCanvas("cMuPlusFrac", "cMuPlusFrac", 200, 200);
+    cMuPlusFrac->cd();
+    gNewMuPlusFrac->SetMarkerStyle(kFullDotMedium);
+    gNewMuPlusFrac->SetMarkerColor(2);
+    gNewMuPlusFrac->SetLineColor(2);
+    if (nStep > 1) {
+      gOldMuPlusFrac->SetMarkerStyle(kFullDotMedium);
+      gOldMuPlusFrac->SetMarkerColor(4);
+      gOldMuPlusFrac->SetLineColor(4);
+      gOldMuPlusFrac->Draw("ap");
+      gOldMuPlusFrac->GetXaxis()->SetLimits(-1., nStep+1.);
+      gNewMuPlusFrac->Draw("p");
+    } else {
+      gNewMuPlusFrac->Draw("ap");
+      gNewMuPlusFrac->GetXaxis()->SetLimits(-1., nStep+1.);
+    }
     
     // save trending plots
     TString inFileName = Form("Results_step%d.root",nStep-1);
@@ -215,6 +249,7 @@ void runGenTunerLoop(TString smode = "local", TString inputFileName = "AliAOD.ro
     if (inFile && inFile->IsOpen()) {
       cPtParams->Write(0x0, TObject::kOverwrite);
       cYParams->Write(0x0, TObject::kOverwrite);
+      cMuPlusFrac->Write(0x0, TObject::kOverwrite);
     }
     inFile->Close();
     
@@ -244,7 +279,13 @@ void ShowResults(Int_t nStep)
       printf("\ny parameters for single muon generator:\n");
       printf("Double_t p[%d] = {", fYFuncNew->GetNpar());
       for (Int_t i = 0; i < fYFuncNew->GetNpar()-1; i++) printf("%g, ", fYFuncNew->GetParameter(i));
-      printf("%g};\n\n", fYFuncNew->GetParameter(fYFuncNew->GetNpar()-1));
+      printf("%g};\n", fYFuncNew->GetParameter(fYFuncNew->GetNpar()-1));
+    }
+    
+    TParameter<Double_t> *newMuPlusFrac = static_cast<TParameter<Double_t>*>(inFile->FindObjectAny("newMuPlusFrac"));
+    if (newMuPlusFrac) {
+      printf("\nfraction of mu+ for single muon generator:\n");
+      printf("Double_t newMuPlusFrac = %f\n\n", newMuPlusFrac->GetVal());
     }
     
     TCanvas *cRes = static_cast<TCanvas*>(inFile->FindObjectAny("cRes"));
@@ -258,6 +299,9 @@ void ShowResults(Int_t nStep)
     
     TCanvas *cYParams = static_cast<TCanvas*>(inFile->FindObjectAny("cYParams"));
     if (cYParams) cYParams->Draw();
+    
+    TCanvas *cMuPlusFrac = static_cast<TCanvas*>(inFile->FindObjectAny("cMuPlusFrac"));
+    if (cMuPlusFrac) cMuPlusFrac->Draw();
     
   }
   inFile->Close();

@@ -68,6 +68,11 @@ public:
   // create the new function with its initial parameters to fit the generated/weighted y distribution
   void SetNewYFunc(TString formula, const Double_t *param, const Bool_t *fixParam, Double_t xMin, Double_t xMax);
  
+  /// set the original fraction of mu+
+  void SetOriginMuPlusFrac(Double_t frac) {fMuPlusFracOld = frac;}
+  /// set the new fraction of mu+
+  void SetNewMuPlusFrac(Double_t frac) {fMuPlusFracNew = frac;}
+  
   /// get the generated pT fit function with current parameters
   TF1* GetCurrentPtFunc() {return fPtFunc;}
   /// get the generated pT fit function with current parameters fitted in the MC range
@@ -81,6 +86,11 @@ public:
   TF1* GetCurrentYFuncMC() {return fYFuncMC;}
   /// get the generated y fit function with new parameters
   TF1* GetNewYFunc() {return fYFuncNew;}
+  
+  /// get the current fraction of mu+
+  Double_t GetCurrentMuPlusFrac() {return fMuPlusFrac;}
+  /// get the new fraction of mu+
+  Double_t GetNewMuPlusFrac() {return fMuPlusFracNew;}
   
   // get canvas containing generated and reconstructed distributions
   TCanvas* GetResults() {return fcRes;}
@@ -127,7 +137,9 @@ private:
     kYGen    = 2, ///< y distribution of generated particle
     kYRec    = 3,  ///< y distribution of reconstructed particle
     kPhiGen  = 4, ///< phi distribution of generated particle
-    kPhiRec  = 5  ///< phi distribution of reconstructed particle
+    kPhiRec  = 5, ///< phi distribution of reconstructed particle
+    kSignGen = 6, ///< sign distribution of generated particle
+    kSignRec = 7  ///< sign distribution of reconstructed particle
   };
   
   TObjArray*  fList; //!< List of output object
@@ -149,12 +161,15 @@ private:
   TF1     *fYFuncNew;               ///< new generated y fit function with new parameters
   TF1     *fYFunc;                  //!< current generated y fit function with current parameters
   TF1     *fYFuncMC;                //!< current generated y fit function with current parameters in MC range
+  Double_t fMuPlusFracOld;          ///< original fraction of mu+
+  Double_t fMuPlusFracNew;          ///< new fraction of mu+
+  Double_t fMuPlusFrac;             //!< current fraction of mu+
   THashList *fRunWeights;           ///< list of weights for every runs
   Double_t fRunWeight;              //!< weight of the current run
   TCanvas *fcRes;                   //!< generated and reconstructed distributions
   TCanvas *fcRat;                   //!< data/MC ratios
   
-  ClassDef(AliAnalysisTaskGenTuner, 4);
+  ClassDef(AliAnalysisTaskGenTuner, 5);
 };
 
 //________________________________________________________________________
