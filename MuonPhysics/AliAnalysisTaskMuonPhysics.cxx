@@ -69,7 +69,9 @@ fUseMCLabel(kFALSE),
 fSelectBadTracks(kFALSE),
 fCentMin(-FLT_MAX),
 fCentMax(FLT_MAX),
-fVsRun(kFALSE)
+fEvVsRun(kFALSE),
+fTrkVsRun(kFALSE),
+fTrgVsRun(kFALSE)
 {
   // Dummy constructor
 }
@@ -88,7 +90,9 @@ fUseMCLabel(kFALSE),
 fSelectBadTracks(kFALSE),
 fCentMin(-FLT_MAX),
 fCentMax(FLT_MAX),
-fVsRun(kFALSE)
+fEvVsRun(kFALSE),
+fTrkVsRun(kFALSE),
+fTrgVsRun(kFALSE)
 {
   /// Constructor
   
@@ -153,10 +157,10 @@ void AliAnalysisTaskMuonPhysics::UserCreateOutputObjects()
   TH1F* hRAbs = new TH1F("hRAbs", "track position at the end of the absorber;R_{abs} (cm)", 1000, 0., 100.);
   fList->AddAtAndExpand(hRAbs, kRAbs);
   
-  TH1F* hDCAX = new TH1F("hDCAX", "DCA distribution in x direction;DCA-X (cm)", 2000, -500., 500.);
+  TH1F* hDCAX = new TH1F("hDCAX", "DCA distribution in x direction;DCA-X (cm)", 4000, -500., 500.);
   fList->AddAtAndExpand(hDCAX, kDCAX);
   
-  TH1F* hDCAY = new TH1F("hDCAY", "DCA distribution in y direction;DCA-Y (cm)", 2000, -500., 500.);
+  TH1F* hDCAY = new TH1F("hDCAY", "DCA distribution in y direction;DCA-Y (cm)", 4000, -500., 500.);
   fList->AddAtAndExpand(hDCAY, kDCAY);
   
   TH1F* hNTracks = new TH1F("hNTracks", "number of tracker tracks;n_{tracks}", 50, 0., 50.);
@@ -221,6 +225,15 @@ void AliAnalysisTaskMuonPhysics::UserCreateOutputObjects()
   
   TH1F* hMultSelect = new TH1F("hMultSelect", "tracklet multiplicity for events with selected tracks; n tracklets", 10000, 0., 10000.);
   fList->AddAtAndExpand(hMultSelect, kMultSelect);
+  
+  TH1F* hPosX = new TH1F("hPosX", "track x position at vertex;x (cm)", 500, -0.5, 0.5);
+  fList->AddAtAndExpand(hPosX, kPosX);
+  
+  TH1F* hPosY = new TH1F("hPosY", "track y position at vertex;y (cm)", 500, -0.5, 0.5);
+  fList->AddAtAndExpand(hPosY, kPosY);
+  
+  TH1F* hPosZ = new TH1F("hPosZ", "track z position at vertex;z (cm)", 500, -25., 25.);
+  fList->AddAtAndExpand(hPosZ, kPosZ);
   
   // centrality binning
   TString centbins = "any";
@@ -375,9 +388,9 @@ void AliAnalysisTaskMuonPhysics::UserExec(Option_t *)
   if (TMath::Abs(zVtxT0) > 98.) vtxT0 = "t0vtx:no";
   
   // total number of events
-  TString runKey = fVsRun ? Form("run:%d", fCurrentRunNumber) : "run:any";
-  fEventCounters->Count(Form("%s/event:all/cent:any/%s/%s",runKey.Data(),vtxSPD.Data(),vtxT0.Data()));
-  if (!centKey.IsNull()) fEventCounters->Count(Form("%s/event:all/cent:%s/%s/%s",runKey.Data(),centKey.Data(),vtxSPD.Data(),vtxT0.Data()));
+  TString runKeyForEv = fEvVsRun ? Form("run:%d", fCurrentRunNumber) : "run:any";
+  fEventCounters->Count(Form("%s/event:all/cent:any/%s/%s",runKeyForEv.Data(),vtxSPD.Data(),vtxT0.Data()));
+  if (!centKey.IsNull()) fEventCounters->Count(Form("%s/event:all/cent:%s/%s/%s",runKeyForEv.Data(),centKey.Data(),vtxSPD.Data(),vtxT0.Data()));
   
   // first loop over tracks
   Int_t nTracks = AliAnalysisMuonUtility::GetNTracks(evt);
@@ -473,8 +486,16 @@ void AliAnalysisTaskMuonPhysics::UserExec(Option_t *)
       if (track1->Charge() > 0) ((TH1F*)fList->UncheckedAt(kPtMuPlus))->Fill(pT);
       else ((TH1F*)fList->UncheckedAt(kPtMuMinus))->Fill(pT);
       ((TH1F*)fList->UncheckedAt(kRapidity))->Fill(track1->Y());
-      Double_t dcaX = AliAnalysisMuonUtility::GetXatDCA(track1) - AliAnalysisMuonUtility::GetXatVertex(track1);
-      Double_t dcaY = AliAnalysisMuonUtility::GetYatDCA(track1) - AliAnalysisMuonUtility::GetYatVertex(track1);
+      Double_t posX = AliAnalysisMuonUtility::GetXatVertex(track1);
+      Double_t posY = AliAnalysisMuonUtility::GetYatVertex(track1);
+      Double_t posZ = AliAnalysisMuonUtility::GetZatVertex(track1);
+      if (posX != 0. || posY != 0. || posZ != 0.) {
+        ((TH1F*)fList->UncheckedAt(kPosX))->Fill(posX);
+        ((TH1F*)fList->UncheckedAt(kPosY))->Fill(posY);
+        ((TH1F*)fList->UncheckedAt(kPosZ))->Fill(posZ);
+      }
+      Double_t dcaX = AliAnalysisMuonUtility::GetXatDCA(track1) - posX;
+      Double_t dcaY = AliAnalysisMuonUtility::GetYatDCA(track1) - posY;
       ((TH1F*)fList->UncheckedAt(kDCA))->Fill(TMath::Sqrt(dcaX*dcaX + dcaY*dcaY));
       ((TH1F*)fList->UncheckedAt(kChi2))->Fill(AliAnalysisMuonUtility::GetChi2perNDFtracker(track1));
       ((TH1F*)fList->UncheckedAt(kNClustersPerTrack))->Fill(isESD ? static_cast<AliESDMuonTrack*>(track1)->GetNHit() : 0.);
@@ -543,10 +564,11 @@ void AliAnalysisTaskMuonPhysics::UserExec(Option_t *)
   }
   
   // fill trigger track counters
+  TString runKeyForTrg = fTrgVsRun ? Form("run:%d", fCurrentRunNumber) : "run:any";
   for (Int_t i = 0; i < nTrgTracks; i++) {
-    fTrigCounters->Count(Form("%s/board:%d/match:%d/ntrig:%d/cent:any",runKey.Data(),loCircuit[i][0],loCircuit[i][1],nTrgTracks));
+    fTrigCounters->Count(Form("%s/board:%d/match:%d/ntrig:%d/cent:any",runKeyForTrg.Data(),loCircuit[i][0],loCircuit[i][1],nTrgTracks));
     if (!centKey.IsNull())
-      fTrigCounters->Count(Form("%s/board:%d/match:%d/ntrig:%d/cent:%s",runKey.Data(),loCircuit[i][0],loCircuit[i][1],nTrgTracks,centKey.Data()));
+      fTrigCounters->Count(Form("%s/board:%d/match:%d/ntrig:%d/cent:%s",runKeyForTrg.Data(),loCircuit[i][0],loCircuit[i][1],nTrgTracks,centKey.Data()));
   }
   
   // clean memory
@@ -573,14 +595,14 @@ void AliAnalysisTaskMuonPhysics::UserExec(Option_t *)
   
   // number of events with at least one trigger track
   if (containTriggerTrack) {
-    fEventCounters->Count(Form("%s/event:trigger/cent:any/%s/%s",runKey.Data(),vtxSPD.Data(),vtxT0.Data()));
-    if (!centKey.IsNull()) fEventCounters->Count(Form("%s/event:trigger/cent:%s/%s/%s",runKey.Data(),centKey.Data(),vtxSPD.Data(),vtxT0.Data()));
+    fEventCounters->Count(Form("%s/event:trigger/cent:any/%s/%s",runKeyForEv.Data(),vtxSPD.Data(),vtxT0.Data()));
+    if (!centKey.IsNull()) fEventCounters->Count(Form("%s/event:trigger/cent:%s/%s/%s",runKeyForEv.Data(),centKey.Data(),vtxSPD.Data(),vtxT0.Data()));
   }
   
   // number of events with at least one selected track
   if (containSelectedTrack) {
-    fEventCounters->Count(Form("%s/event:selected/cent:any/%s/%s",runKey.Data(),vtxSPD.Data(),vtxT0.Data()));
-    if (!centKey.IsNull()) fEventCounters->Count(Form("%s/event:selected/cent:%s/%s/%s",runKey.Data(),centKey.Data(),vtxSPD.Data(),vtxT0.Data()));
+    fEventCounters->Count(Form("%s/event:selected/cent:any/%s/%s",runKeyForEv.Data(),vtxSPD.Data(),vtxT0.Data()));
+    if (!centKey.IsNull()) fEventCounters->Count(Form("%s/event:selected/cent:%s/%s/%s",runKeyForEv.Data(),centKey.Data(),vtxSPD.Data(),vtxT0.Data()));
   }
   
   // Post final data. It will be written to a file with option "RECREATE"
@@ -709,7 +731,7 @@ Bool_t AliAnalysisTaskMuonPhysics::IsSelected(AliVParticle& track, Bool_t isESD,
   if (fillCounters) {
     
     // run
-    TString runKey = fVsRun ? Form("run:%d", fCurrentRunNumber) : "run:any";
+    TString runKeyForTrk = fTrkVsRun ? Form("run:%d", fCurrentRunNumber) : "run:any";
     
     // list of trigger types
     TList listOfTrigKeys;
@@ -741,24 +763,24 @@ Bool_t AliAnalysisTaskMuonPhysics::IsSelected(AliVParticle& track, Bool_t isESD,
     TIter nextTrigKey(&listOfTrigKeys);
     TObjString *trigKey = 0x0;
     while ((trigKey = static_cast<TObjString*>(nextTrigKey()))) {
-      fTrackCounters->Count(Form("%s/%s/%s/%s/%s/%s/%s/pt:any/cent:any", runKey.Data(), trackKey.Data(), trigKey->GetName(), rabsKey.Data(), etaKey.Data(), pdcaKey.Data(), chi2Key.Data()));
-      if (!centKey.IsNull()) fTrackCounters->Count(Form("%s/%s/%s/%s/%s/%s/%s/pt:any/cent:%s", runKey.Data(), trackKey.Data(), trigKey->GetName(), rabsKey.Data(), etaKey.Data(), pdcaKey.Data(), chi2Key.Data(), centKey.Data()));
+      fTrackCounters->Count(Form("%s/%s/%s/%s/%s/%s/%s/pt:any/cent:any", runKeyForTrk.Data(), trackKey.Data(), trigKey->GetName(), rabsKey.Data(), etaKey.Data(), pdcaKey.Data(), chi2Key.Data()));
+      if (!centKey.IsNull()) fTrackCounters->Count(Form("%s/%s/%s/%s/%s/%s/%s/pt:any/cent:%s", runKeyForTrk.Data(), trackKey.Data(), trigKey->GetName(), rabsKey.Data(), etaKey.Data(), pdcaKey.Data(), chi2Key.Data(), centKey.Data()));
       Double_t pt = track.Pt();
       if (pt > 0.5) {
-	fTrackCounters->Count(Form("%s/%s/%s/%s/%s/%s/%s/pt:0.5GeV/cent:any", runKey.Data(), trackKey.Data(), trigKey->GetName(), rabsKey.Data(), etaKey.Data(), pdcaKey.Data(), chi2Key.Data()));
-	if (!centKey.IsNull()) fTrackCounters->Count(Form("%s/%s/%s/%s/%s/%s/%s/pt:0.5GeV/cent:%s", runKey.Data(), trackKey.Data(), trigKey->GetName(), rabsKey.Data(), etaKey.Data(), pdcaKey.Data(), chi2Key.Data(), centKey.Data()));
+	fTrackCounters->Count(Form("%s/%s/%s/%s/%s/%s/%s/pt:0.5GeV/cent:any", runKeyForTrk.Data(), trackKey.Data(), trigKey->GetName(), rabsKey.Data(), etaKey.Data(), pdcaKey.Data(), chi2Key.Data()));
+	if (!centKey.IsNull()) fTrackCounters->Count(Form("%s/%s/%s/%s/%s/%s/%s/pt:0.5GeV/cent:%s", runKeyForTrk.Data(), trackKey.Data(), trigKey->GetName(), rabsKey.Data(), etaKey.Data(), pdcaKey.Data(), chi2Key.Data(), centKey.Data()));
       }
       if (pt > 1.) {
-	fTrackCounters->Count(Form("%s/%s/%s/%s/%s/%s/%s/pt:1GeV/cent:any", runKey.Data(), trackKey.Data(), trigKey->GetName(), rabsKey.Data(), etaKey.Data(), pdcaKey.Data(), chi2Key.Data()));
-	if (!centKey.IsNull()) fTrackCounters->Count(Form("%s/%s/%s/%s/%s/%s/%s/pt:1GeV/cent:%s", runKey.Data(), trackKey.Data(), trigKey->GetName(), rabsKey.Data(), etaKey.Data(), pdcaKey.Data(), chi2Key.Data(), centKey.Data()));
+	fTrackCounters->Count(Form("%s/%s/%s/%s/%s/%s/%s/pt:1GeV/cent:any", runKeyForTrk.Data(), trackKey.Data(), trigKey->GetName(), rabsKey.Data(), etaKey.Data(), pdcaKey.Data(), chi2Key.Data()));
+	if (!centKey.IsNull()) fTrackCounters->Count(Form("%s/%s/%s/%s/%s/%s/%s/pt:1GeV/cent:%s", runKeyForTrk.Data(), trackKey.Data(), trigKey->GetName(), rabsKey.Data(), etaKey.Data(), pdcaKey.Data(), chi2Key.Data(), centKey.Data()));
       }
       if (pt > 2.) {
-	fTrackCounters->Count(Form("%s/%s/%s/%s/%s/%s/%s/pt:2GeV/cent:any", runKey.Data(), trackKey.Data(), trigKey->GetName(), rabsKey.Data(), etaKey.Data(), pdcaKey.Data(), chi2Key.Data()));
-	if (!centKey.IsNull()) fTrackCounters->Count(Form("%s/%s/%s/%s/%s/%s/%s/pt:2GeV/cent:%s", runKey.Data(), trackKey.Data(), trigKey->GetName(), rabsKey.Data(), etaKey.Data(), pdcaKey.Data(), chi2Key.Data(), centKey.Data()));
+	fTrackCounters->Count(Form("%s/%s/%s/%s/%s/%s/%s/pt:2GeV/cent:any", runKeyForTrk.Data(), trackKey.Data(), trigKey->GetName(), rabsKey.Data(), etaKey.Data(), pdcaKey.Data(), chi2Key.Data()));
+	if (!centKey.IsNull()) fTrackCounters->Count(Form("%s/%s/%s/%s/%s/%s/%s/pt:2GeV/cent:%s", runKeyForTrk.Data(), trackKey.Data(), trigKey->GetName(), rabsKey.Data(), etaKey.Data(), pdcaKey.Data(), chi2Key.Data(), centKey.Data()));
       }
       if (pt > 4.) {
-	fTrackCounters->Count(Form("%s/%s/%s/%s/%s/%s/%s/pt:4GeV/cent:any", runKey.Data(), trackKey.Data(), trigKey->GetName(), rabsKey.Data(), etaKey.Data(), pdcaKey.Data(), chi2Key.Data()));
-	if (!centKey.IsNull()) fTrackCounters->Count(Form("%s/%s/%s/%s/%s/%s/%s/pt:4GeV/cent:%s", runKey.Data(), trackKey.Data(), trigKey->GetName(), rabsKey.Data(), etaKey.Data(), pdcaKey.Data(), chi2Key.Data(), centKey.Data()));
+	fTrackCounters->Count(Form("%s/%s/%s/%s/%s/%s/%s/pt:4GeV/cent:any", runKeyForTrk.Data(), trackKey.Data(), trigKey->GetName(), rabsKey.Data(), etaKey.Data(), pdcaKey.Data(), chi2Key.Data()));
+	if (!centKey.IsNull()) fTrackCounters->Count(Form("%s/%s/%s/%s/%s/%s/%s/pt:4GeV/cent:%s", runKeyForTrk.Data(), trackKey.Data(), trigKey->GetName(), rabsKey.Data(), etaKey.Data(), pdcaKey.Data(), chi2Key.Data(), centKey.Data()));
       }
     }
   }

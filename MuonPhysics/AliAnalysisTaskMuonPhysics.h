@@ -47,7 +47,7 @@ public:
   void SelectCentrality(Double_t min, Double_t max) {fCentMin = min; fCentMax = max;}
   
   /// Fill counters versus run (the size of the counters may explode!)
-  void VersusRun(Bool_t flag) {fVsRun = flag;}
+  void VersusRun(Bool_t ev, Bool_t trk, Bool_t trg) {fEvVsRun = ev; fTrkVsRun = trk; fTrgVsRun = trg;}
   
 private:
   
@@ -94,7 +94,10 @@ private:
     kDCA310VsP           = 28, ///< DCA distribution of single muons versus p in ]3,10] deg
     kCent                = 29, ///< centrality distribution
     kMult                = 30, ///< tracklet multiplicity
-    kMultSelect          = 31  ///< tracklet multiplicity for events with selected tracks
+    kMultSelect          = 31, ///< tracklet multiplicity for events with selected tracks
+    kPosX                = 32, ///< track x position at vertex
+    kPosY                = 33, ///< track y position at vertex
+    kPosZ                = 34  ///< track z position at vertex
   };
   
   TObjArray*  fList; //!< List of output object
@@ -110,9 +113,11 @@ private:
   Bool_t   fSelectBadTracks;        ///< Select bad (or no longer matched) tracks
   Double_t fCentMin;                ///< Select centrality > fCentMin
   Double_t fCentMax;                ///< Select centrality <= fCentMax
-  Bool_t   fVsRun;                  ///< Fill counters versus run
+  Bool_t   fEvVsRun;                ///< Fill event counters versus run
+  Bool_t   fTrkVsRun;               ///< Fill track counters versus run
+  Bool_t   fTrgVsRun;               ///< Fill trigger counters versus run
   
-  ClassDef(AliAnalysisTaskMuonPhysics, 2);
+  ClassDef(AliAnalysisTaskMuonPhysics, 3);
 };
 
 //________________________________________________________________________
