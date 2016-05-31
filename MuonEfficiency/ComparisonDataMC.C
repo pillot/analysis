@@ -293,16 +293,16 @@ void ComparisonDataMC(TString fileNameData, TString fileNameSim, Bool_t integrat
   
   // Get Global Data and Sim graphs
   
-//  TGraphAsymmErrors *effVScentData = static_cast<TGraphAsymmErrors*>(fileData->FindObjectAny("trackingEffVscentrality"));
-//  if (!effVScentData) {
-//    printf("Efficiency vs centrality from data not found\n");
-//    return;
-//  }
-//  TGraphAsymmErrors *effVScentSim = static_cast<TGraphAsymmErrors*>(fileSim->FindObjectAny("trackingEffVscentrality"));
-//  if (!effVScentSim) {
-//    printf("Efficiency vs centrality from sim not found\n");
-//    return;
-//  }
+  TGraphAsymmErrors *effVScentData = static_cast<TGraphAsymmErrors*>(fileData->FindObjectAny(Form("%sEffVscentrality",hname.Data())));
+  if (!effVScentData) {
+    printf("Efficiency vs centrality from data not found\n");
+    return;
+  }
+  TGraphAsymmErrors *effVScentSim = static_cast<TGraphAsymmErrors*>(fileSim->FindObjectAny(Form("%sEffVscentrality",hname.Data())));
+  if (!effVScentSim) {
+    printf("Efficiency vs centrality from sim not found\n");
+    return;
+  }
   
   TGraphAsymmErrors *effVSrunData = static_cast<TGraphAsymmErrors*>(fileData->FindObjectAny("trackingEffVsRun"));
   if (!effVSrunData) {
@@ -315,7 +315,6 @@ void ComparisonDataMC(TString fileNameData, TString fileNameSim, Bool_t integrat
     return;
   }
   
-  
   TGraphAsymmErrors *effVSyData = static_cast<TGraphAsymmErrors*>(fileData->FindObjectAny(Form("%sEffVsy",hname.Data())));
   if (!effVSyData) {
     printf("Efficiency vs rapidity from data not found\n");
@@ -326,7 +325,6 @@ void ComparisonDataMC(TString fileNameData, TString fileNameSim, Bool_t integrat
     printf("Efficiency vs rapidity from sim not found\n");
     return;
   }
-
   
   TGraphAsymmErrors *effVSptData = static_cast<TGraphAsymmErrors*>(fileData->FindObjectAny(Form("%sEffVspt",hname.Data())));
   if (!effVSptData) {
@@ -356,7 +354,17 @@ void ComparisonDataMC(TString fileNameData, TString fileNameSim, Bool_t integrat
   // Create an array with the global plots of the individual efficencies and the ratios
   TObjArray globalRatiosAndEff;
   
-//  globalRatios.Add(CreateRatioGraph("RatioEffVsCent","data/sim tracking efficiency versus centrality",effVScentData,effVScentSim));
+  //---- Eff vs centrality
+  TGraphAsymmErrors* effVScentDataCopy = static_cast<TGraphAsymmErrors*>(effVScentData->Clone()); // We make clones to do not modify them
+  TGraphAsymmErrors* effVScentSimCopy = static_cast<TGraphAsymmErrors*>(effVScentSim->Clone());
+  
+  TGraphAsymmErrors *ratioCent = CreateRatioGraph("RatioEffVsCent","data/sim tracking efficiency versus centrality",*effVScentData,*effVScentSim);
+  globalRatios.Add(ratioCent);
+  
+  TGraphAsymmErrors* ratioCentCopy = static_cast<TGraphAsymmErrors*>(ratioCent->Clone());
+  
+  globalRatiosAndEff.Add(DrawRatio("RatioEffVSCentAndEff","Comparison Data&MC tracking efficiency versus centrality", effVScentDataCopy,effVScentSimCopy,ratioCentCopy));
+  //-----
   
   //---- Eff vs run
   TGraphAsymmErrors* effVSrunDataCopy = static_cast<TGraphAsymmErrors*>(effVSrunData->Clone()); // We make clones to do not modify them
