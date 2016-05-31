@@ -17,6 +17,7 @@
 #include <THashList.h>
 #include <TParameter.h>
 #include <TLegend.h>
+#include "AliCounterCollection.h"
 
 // kinematics range for histogram projection (pT, y, phi, charge)
 const Float_t kineRange[4][2] = {{-999., 999.}, {-999., 999.}, {-999., 999.}, {-999., 999.}};
@@ -25,7 +26,10 @@ const Float_t kineRange[4][2] = {{-999., 999.}, {-999., 999.}, {-999., 999.}, {-
 const Float_t centRange[2][2] = {{-999., 999.}, {-999., 999.}};
 
 // in case the ouput containers of the efficiency task have an extension in their name (like in the train)
-TString extension[2] = {"","_2"};
+TString extension[2] = {"",""};
+
+// normalize to the total number of events instead of to the number of entries in the histograms
+Bool_t eventNorm = kFALSE;
 
 const Int_t nHist = 3;
 TString sRes[nHist] = {"fHistPt", "fHistY", "fHistPhi"};
@@ -41,6 +45,10 @@ void SetCentRange(THnSparse& hKine, const Float_t centRange[2]);
 void CompareMuonDistributions(TString dir1, TString dir2, TString fileNameWeights = "")
 {
   /// compare reconstructed muon distributions used for efficiency measurements
+  /*
+   .include $ALICE_ROOT/include
+   .x $WORK/Macros/MuonEfficiency/CompareMuonDistributions.C+(...)
+  */
   
   // load run weights
   if (!fileNameWeights.IsNull()) {
@@ -60,6 +68,7 @@ void CompareMuonDistributions(TString dir1, TString dir2, TString fileNameWeight
     while ((weight = static_cast<TParameter<Double_t>*>(next()))) {
       TString sfile[2];
       sfile[0] = Form("%s/runs/%s/AnalysisResults.root", dir1.Data(), weight->GetName());
+//      sfile[0] = Form("%s/runs/%s/QAresults.root", dir1.Data(), weight->GetName());
       sfile[1] = Form("%s/runs/%s/AnalysisResults.root", dir2.Data(), weight->GetName());
       AddHisto(sfile, hRes, weight->GetVal());
       AddHistoProj(sfile, hProj, weight->GetVal());
@@ -68,6 +77,7 @@ void CompareMuonDistributions(TString dir1, TString dir2, TString fileNameWeight
     TString sfile[2];
     sfile[0] = Form("%s/AnalysisResults.root", dir1.Data());
     sfile[1] = Form("%s/AnalysisResults.root", dir2.Data());
+//    sfile[1] = Form("%s/QAresults.root", dir2.Data());
     AddHisto(sfile, hRes, 1.);
     AddHistoProj(sfile, hProj, 1.);
   }
@@ -139,19 +149,26 @@ void AddHisto(TString sfile[2], TH1 *hRes[nHist][3], Double_t weight)
         printf("cannot find histograms\n");
         return;
       }
+      AliCounterCollection *eventCounters = static_cast<AliCounterCollection*>(file->FindObjectAny(Form("EventsCounters%s",extension[j].Data())));
+      if (!eventCounters) {
+        printf("cannot find event counters\n");
+        return;
+      }
+      Double_t norm = eventCounters->GetSum();
+//      if (j == 1) norm *= 5./2.;
       for (Int_t i = 0; i < nHist; i++) {
         if (!hRes[i][j]) {
           hRes[i][j] = static_cast<TH1*>(list->FindObject(sRes[i].Data())->Clone(Form("%s%d",sRes[i].Data(),j+1)));
           if (hRes[i][j]) {
             hRes[i][j]->SetDirectory(0);
             hRes[i][j]->Sumw2();
-            Double_t nEntries = static_cast<Double_t>(hRes[i][j]->GetEntries());
-            if (nEntries > 0.) hRes[i][j]->Scale(weight/nEntries);
+            if (!eventNorm) norm = static_cast<Double_t>(hRes[i][j]->GetEntries());
+            if (norm > 0.) hRes[i][j]->Scale(weight/norm);
           }
         } else {
           TH1* h = static_cast<TH1*>(list->FindObject(sRes[i].Data()));
-          Double_t nEntries = static_cast<Double_t>(h->GetEntries());
-          hRes[i][j]->Add(h, weight/nEntries);
+          if (!eventNorm) norm = static_cast<Double_t>(h->GetEntries());
+          if (norm > 0.) hRes[i][j]->Add(h, weight/norm);
         }
       }
     }
@@ -179,20 +196,34 @@ void AddHistoProj(TString sfile[2], TH1 *hProj[4][3], Double_t weight)
       }
       THnSparse *hKine = static_cast<THnSparse*>(list->FindObject("hKine"));
       if (!hKine) return;
-      SetKineRange(*hKine);
+/*      if (j == 0) {
+        kineRange[3][0] = 1.;
+        kineRange[3][1] = 1.;
+      } else {
+        kineRange[3][0] = -1.;
+        kineRange[3][1] = -1.;
+      }
+*/      SetKineRange(*hKine);
       SetCentRange(*hKine, centRange[j]);
+      AliCounterCollection *eventCounters = static_cast<AliCounterCollection*>(file->FindObjectAny(Form("EventsCounters%s",extension[j].Data())));
+      if (!eventCounters) {
+        printf("cannot find event counters\n");
+        return;
+      }
+      Double_t norm = eventCounters->GetSum();
+//      if (j == 1) norm *= 5./2.;
       for (Int_t i = 0; i < 4; i++) {
         if (!hProj[i][j]) {
           hProj[i][j] = hKine->Projection(i+1,"eo");
           if (hProj[i][j]) {
             hProj[i][j]->SetDirectory(0);
-            Double_t nEntries = static_cast<Double_t>(hProj[i][j]->GetEntries());
-            if (nEntries > 0.) hProj[i][j]->Scale(weight/nEntries);
+            if (!eventNorm) norm = static_cast<Double_t>(hProj[i][j]->GetEntries());
+            if (norm > 0.) hProj[i][j]->Scale(weight/norm);
           }
         } else {
           TH1* h = hKine->Projection(i+1,"eo");
-          Double_t nEntries = static_cast<Double_t>(hProj[i][j]->GetEntries());
-          hProj[i][j]->Add(h, weight/nEntries);
+          if (!eventNorm) norm = static_cast<Double_t>(h->GetEntries());
+          if (norm > 0.) hProj[i][j]->Add(h, weight/norm);
           delete h;
         }
       }
