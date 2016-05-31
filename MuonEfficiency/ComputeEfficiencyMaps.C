@@ -28,12 +28,12 @@
 #include "AliMUONRejectList.h"
 #include "AliMUONTrackerData.h"
 
-#include "mapping/AliMpSegmentation.h"
-#include "mapping/AliMpDDLStore.h"
-#include "mapping/AliMpDEIterator.h"
-#include "mapping/AliMpBusPatch.h"
-#include "mapping/AliMpManuIterator.h"
-#include "mapping/AliMpConstants.h"
+#include "AliMpSegmentation.h"
+#include "AliMpDDLStore.h"
+#include "AliMpDEIterator.h"
+#include "AliMpBusPatch.h"
+#include "AliMpManuIterator.h"
+#include "AliMpConstants.h"
 
 
 void ResetEfficiencies(Float_t chamberEff[10][2], AliMUONRejectList effMaps[2]);
@@ -68,9 +68,9 @@ void ComputeEfficiencyMaps()
     printf("cannot open the file AnalysisResults.root\n");
     return;
   }
-  AliCounterCollection *nClusters = static_cast<AliCounterCollection*>(inFile->FindObjectAny("Clusters"));
+  AliCounterCollection *nClusters = static_cast<AliCounterCollection*>(inFile->FindObjectAny("ClustersCounters"));
   if (!nClusters) {
-    printf("cannot find the counter collection \"Clusters\"\n");
+    printf("cannot find the counter collection \"ClustersCounters\"\n");
     return;
   }
   
