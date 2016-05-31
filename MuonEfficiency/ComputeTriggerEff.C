@@ -30,13 +30,14 @@ void controlPlots(AliCounterCollection *eventCounters, AliCounterCollection *tri
 		  TString data, TH2D *&hOccVsCentPerEvent, TH1D *&hOccPerNTrig);
 void efficiencyPlots(TH2D *hOccVsCentPerEvent, TH1D *hOccPerNTrig);
 
-void ComputeTriggerEff(TString fileNameMB = "AnalysisResults.root", TString fileNameJPsi = "AnalysisResults.root")
+void ComputeTriggerEff(TString fileNameMB = "AnalysisResults.root", TString fileNameJPsi = "AnalysisResults.root",
+                       TString extensionMB = "_phys", TString extensionJPsi = "_phys")
 {
   /// compute the trigger efficiency from the local board occupancies
   /// to be compiled --> you must load the environment before:
   /*
-  gROOT->LoadMacro("$WORK/Macros/Facilities/runTaskFacilities.C");
-  LoadAlirootLocally("PWG3base", "", "");
+   .include $ALICE_ROOT/include
+   .include $ALICE_PHYSICS/include
   */
   
   gStyle->SetOptStat(0);
@@ -49,7 +50,7 @@ void ComputeTriggerEff(TString fileNameMB = "AnalysisResults.root", TString file
   }
   
   // event counters in MB data
-  AliCounterCollection *eventCountersMB = static_cast<AliCounterCollection*>(fileMB->FindObjectAny("eventCounters"));
+  AliCounterCollection *eventCountersMB = static_cast<AliCounterCollection*>(fileMB->FindObjectAny(Form("eventCounters%s",extensionMB.Data())));
   if (!eventCountersMB) {
     Error("ComputeTriggerEff", "cannot find eventCounters object for MB");
     return;
@@ -57,7 +58,7 @@ void ComputeTriggerEff(TString fileNameMB = "AnalysisResults.root", TString file
   printf("\n# MB events = %d\n",(Int_t)eventCountersMB->GetSum("event:all"));
   
   // trigger counters in MB data
-  AliCounterCollection *trigCountersMB = static_cast<AliCounterCollection*>(fileMB->FindObjectAny("trigCounters"));
+  AliCounterCollection *trigCountersMB = static_cast<AliCounterCollection*>(fileMB->FindObjectAny(Form("trigCounters%s",extensionMB.Data())));
   if (!trigCountersMB) {
     Error("ComputeTriggerEff", "cannot find trigCounters object for MB");
     return;
@@ -79,7 +80,7 @@ void ComputeTriggerEff(TString fileNameMB = "AnalysisResults.root", TString file
   }
   
   // event counters in JPsi data
-  AliCounterCollection *eventCountersJPsi = static_cast<AliCounterCollection*>(fileJPsi->FindObjectAny("eventCounters"));
+  AliCounterCollection *eventCountersJPsi = static_cast<AliCounterCollection*>(fileJPsi->FindObjectAny(Form("eventCounters%s",extensionJPsi.Data())));
   if (!eventCountersJPsi) {
     Error("ComputeTriggerEff", "cannot find eventCounters object for JPsi");
     return;
@@ -87,7 +88,7 @@ void ComputeTriggerEff(TString fileNameMB = "AnalysisResults.root", TString file
   printf("\n# JPsi events = %d\n",(Int_t)eventCountersJPsi->GetSum("event:all"));
   
   // trigger counters in JPsi data
-  AliCounterCollection *trigCountersJPsi = static_cast<AliCounterCollection*>(fileJPsi->FindObjectAny("trigCounters"));
+  AliCounterCollection *trigCountersJPsi = static_cast<AliCounterCollection*>(fileJPsi->FindObjectAny(Form("trigCounters%s",extensionJPsi.Data())));
   if (!trigCountersJPsi) {
     Error("ComputeTriggerEff", "cannot find trigCounters object for JPsi");
     return;
