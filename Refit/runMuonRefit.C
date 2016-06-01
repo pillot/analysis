@@ -8,75 +8,72 @@
  */
 
 
-TString rootVersion = "v5-34-05";
-TString alirootVersion = "v5-04-58-AN";
-TString dataDir = "/alice/data/2013/LHC13f";
-TString dataPattern = "muon_pass2/*AliESDs.root";
-TString runFormat = "%09d";
-TString outDir = "Data/LHC13f/muon_pass2/Refit/trg6sigma";
-Int_t ttl = 30000;
-Int_t maxFilesPerJob = 100;
-Int_t maxMergeFiles = 10;
-Int_t maxMergeStages = 1;
-
 //______________________________________________________________________________
 void runMuonRefit(TString smode = "local", TString inputFileName = "AliESDs.root",
 		  Double_t resNB = -1., Double_t resB = -1., Double_t sigmaCut = -1.,
-		  Double_t sigmaCutTrig = 6, Bool_t selectPhysics = kTRUE, Bool_t selectCentrality = kFALSE)
+		  Double_t sigmaCutTrig = -1., Bool_t selectPhysics = kTRUE, Bool_t selectCentrality = kFALSE)
 {
   /// Refit the tracks with new recoParam and/or new alignment
   /// check the effect on track quality, efficiency and physical quantities
   
-  gROOT->LoadMacro("$WORK/Macros/Facilities/runTaskFacilities.C");
-  
-  // --- Check runing mode ---
-  Int_t mode = GetMode(smode, inputFileName);
-  if(mode < 0){
-    Error("runMuonRefit","Please provide either an ESD root file a collection of ESDs or a dataset.");
-    return;
-  }
-  
-  // --- copy files needed for this analysis ---
+  // --- general analysis setup ---
+  TString rootVersion = "";
+  TString alirootVersion = "";
+  TString aliphysicsVersion = "vAN-20160524-1";
+  TString extraLibs="";
+  TString extraIncs="include";
+  TString extraTasks="AliAnalysisTaskMuonPhysics";
+  TString extraPkgs="PWGmuondep";
   TList pathList; pathList.SetOwner();
   pathList.Add(new TObjString("$WORK/Macros/MuonPhysics"));
   pathList.Add(new TObjString("$WORK/Macros/Refit"));
-  pathList.Add(new TObjString("$ALICE_ROOT/PWG/muondep"));
+  pathList.Add(new TObjString("$ALICE_PHYSICS/PARfiles"));
   TList fileList; fileList.SetOwner();
   fileList.Add(new TObjString("runMuonRefit.C"));
+  fileList.Add(new TObjString("PWGmuondep.par"));
   fileList.Add(new TObjString("AddTaskMuonPhysics.C"));
   fileList.Add(new TObjString("AliAnalysisTaskMuonPhysics.cxx"));
   fileList.Add(new TObjString("AliAnalysisTaskMuonPhysics.h"));
-  fileList.Add(new TObjString("AliAnalysisTaskMuonRefit.cxx"));
-  fileList.Add(new TObjString("AliAnalysisTaskMuonRefit.h"));
-  CopyFileLocally(pathList, fileList);
   
-  // --- prepare environment ---
-  TString extraLibs="RAWDatabase:CDB:STEER:MUONcore:MUONmapping:MUONcalib:MUONgeometry:MUONtrigger:MUONraw:MUONbase:MUONrec:CORRFW:PWGmuon";
-  TString extraIncs="include:MUON:MUON/mapping:PWG/muon";
-  TString extraTasks="AliAnalysisTaskMuonPhysics:AliAnalysisTaskMuonRefit";
-  LoadAlirootLocally(extraLibs, extraIncs, extraTasks);
-  AliAnalysisGrid *alienHandler = 0x0;
-  if (mode == kProof || mode == kProofLite) LoadAlirootOnProof(smode, rootVersion, alirootVersion, extraLibs, extraIncs, extraTasks, kTRUE);
-  else if (mode == kGrid || mode == kTerminate) {
-    TString analysisMacroName = "Refit";
-    alienHandler = static_cast<AliAnalysisGrid*>(CreateAlienHandler(smode, rootVersion, alirootVersion, inputFileName, dataDir, dataPattern, outDir, extraLibs, extraIncs, extraTasks, analysisMacroName, runFormat, ttl, maxFilesPerJob, maxMergeFiles, maxMergeStages));
-    if (!alienHandler) return;
+  // --- grid specific setup ---
+  TString dataDir = "/alice/data/2015/LHC15j";
+  TString dataPattern = "muon_calo_pass2/*AliESDs.root";
+  TString runFormat = "%09d";
+  TString outDir = "Data/LHC15j/muon_calo_pass2/Refit_AlignV6/CMUU7CINT7";
+  TString analysisMacroName = "Refit";
+  Int_t ttl = 30000;
+  Int_t maxFilesPerJob = 100;
+  Int_t maxMergeFiles = 10;
+  Int_t maxMergeStages = 2;
+  
+  // --- saf3 specific setup ---
+  Bool_t splitDataset = kFALSE;
+  
+  gROOT->LoadMacro("$HOME/Work/Alice/Macros/Facilities/runTaskFacilities.C");
+  
+  // --- prepare the analysis environment ---
+  Int_t mode = PrepareAnalysis(smode, inputFileName, extraLibs, extraIncs, extraTasks, extraPkgs, pathList, fileList);
+  
+  // --- run the analysis (saf3 is a special case as the analysis is launched on the server) ---
+  if (mode == kSAF3Connect) {
+    
+    RunAnalysisOnSAF3(fileList, aliphysicsVersion, inputFileName, splitDataset);
+    
+  } else {
+    
+    if (!CreateAnalysisTrain(resNB, resB, sigmaCut, sigmaCutTrig, selectPhysics, selectCentrality)) return;
+    
+    if (smode == "saf3" && splitDataset) AliAnalysisManager::GetAnalysisManager()->SetSkipTerminate(kTRUE);
+    
+    RunAnalysis(smode, inputFileName, rootVersion, alirootVersion, aliphysicsVersion, extraLibs, extraIncs, extraTasks, extraPkgs, dataDir, dataPattern, outDir, analysisMacroName, runFormat, ttl, maxFilesPerJob, maxMergeFiles, maxMergeStages);
+    
   }
-  
-  // --- Create the analysis train ---
-  if (!CreateAnalysisTrain(resNB, resB, sigmaCut, sigmaCutTrig, selectPhysics, selectCentrality, alienHandler)) return;
-  
-  // --- Create input object ---
-  TObject* inputObj = CreateInputObject(mode, inputFileName);
-  
-  // --- start analysis ---
-  StartAnalysis(mode, inputObj);
   
 }
 
 //______________________________________________________________________________
 Bool_t CreateAnalysisTrain(Double_t resNB, Double_t resB, Double_t sigmaCut, Double_t sigmaCutTrig,
-			   Bool_t selectPhysics, Bool_t selectCentrality, TObject* alienHandler = 0x0)
+			   Bool_t selectPhysics, Bool_t selectCentrality)
 {
   /// create the analysis train and configure it
   
@@ -84,9 +81,7 @@ Bool_t CreateAnalysisTrain(Double_t resNB, Double_t resB, Double_t sigmaCut, Dou
   AliAnalysisManager *mgr = new AliAnalysisManager("MuonRefitAnalysis");
   //mgr->SetAutoBranchLoading(kFALSE);
   //mgr->SetCacheSize(0);
-  
-  // Connect plugin to the analysis manager if any
-  if (alienHandler) mgr->SetGridHandler(static_cast<AliAnalysisGrid*>(alienHandler));
+  //mgr->SetDebugLevel(3);
   
   // ESD input
   AliESDInputHandler* esdH = new AliESDInputHandler();
@@ -95,31 +90,42 @@ Bool_t CreateAnalysisTrain(Double_t resNB, Double_t resB, Double_t sigmaCut, Dou
   esdH->SetActiveBranches("MuonTracks MuonClusters MuonPads AliESDRun. AliESDHeader. AliMultiplicity. AliESDFMD. AliESDVZERO. SPDVertex. PrimaryVertex. AliESDZDC. AliESDTZERO.");
   mgr->SetInputEventHandler(esdH);
   
+  // CDB connection
+  gROOT->LoadMacro("$ALICE_PHYSICS/PWG/muondep/AddTaskMuonCDBConnect.C");
+  AliAnalysisTaskMuonCDBConnect *taskCDBConnect = AddTaskMuonCDBConnect();
+  if(!taskCDBConnect) {
+    Error("CreateAnalysisTrain","AliAnalysisTaskMuonCDBConnect not created!");
+    return;
+  }
+//  taskCDBConnect->SetDefaultStorage("local:///cvmfs/alice-ocdb.cern.ch/calibration/data/2015/OCDB");
+//  taskCDBConnect->SetRecoParamStorage("alien://folder=/alice/cern.ch/user/p/ppillot/OCDB2015_PbPb");
+//  taskCDBConnect->SetAlignStorage("", 6);
+  taskCDBConnect->LoadGeometry();
+  taskCDBConnect->LoadMagField();
+  
   // event selection
   if (selectPhysics) {
-    gROOT->LoadMacro("$ALICE_ROOT/ANALYSIS/macros/AddTaskPhysicsSelection.C");
+    gROOT->LoadMacro("$ALICE_PHYSICS/OADB/macros/AddTaskPhysicsSelection.C");
     AliPhysicsSelectionTask* physicsSelection = AddTaskPhysicsSelection();
     if(!physicsSelection) {
       Error("CreateAnalysisTrain","AliPhysicsSelectionTask not created!");
       return kFALSE;
     }
   }
+//  UInt_t offlineTriggerMask = AliVEvent::kMUU7 | AliVEvent::kMUSPB;
+  UInt_t offlineTriggerMask = AliVEvent::kMUU7;
+//  UInt_t offlineTriggerMask = AliVEvent::kAny;
   
-  // centrality selection
+  // multiplicity/centrality selection
   if (selectCentrality) {
-    gROOT->LoadMacro("$ALICE_ROOT/ANALYSIS/macros/AddTaskCentrality.C");
-    AliCentralitySelectionTask *taskCentrality = AddTaskCentrality();
+    gROOT->LoadMacro("$ALICE_PHYSICS/OADB/COMMON/MULTIPLICITY/macros/AddTaskMultSelection.C");
+    AliMultSelectionTask *taskCentrality = AddTaskMultSelection(kFALSE);
     if(!taskCentrality) {
-      Error("CreateAnalysisTrain","AliCentralitySelectionTask not created!");
-      return kFALSE;
+      Error("CreateAnalysisTrain","AliMultSelectionTask not created!");
+      return;
     }
-//    if (selectPhysics) taskCentrality->SelectCollisionCandidates(AliVEvent::kMUL7 | AliVEvent::kMUU7 |
-//								 AliVEvent::kMuonLikeLowPt8 | AliVEvent::kMuonUnlikeLowPt8 |
-//								 AliVEvent::kMUS7 | AliVEvent::kMuonSingleLowPt8);
-//      if (selectPhysics) taskCentrality->SelectCollisionCandidates(AliVEvent::kMUS7 | AliVEvent::kMuonSingleLowPt8);
-//      if (selectPhysics) taskCentrality->SelectCollisionCandidates(AliVEvent::kMUSH7 | AliVEvent::kMUSHPB | AliVEvent::kMuonSingleHighPt8);
-//    if (selectPhysics) taskCentrality->SelectCollisionCandidates(AliVEvent::kAny);
-    if (selectPhysics) taskCentrality->SelectCollisionCandidates(AliVEvent::kMUU7);
+    //taskCentrality->SetAlternateOADBforEstimators("LHC15o");
+    if (selectPhysics) taskCentrality->SelectCollisionCandidates(offlineTriggerMask);
   }
   
   // track selection
@@ -127,6 +133,7 @@ Bool_t CreateAnalysisTrain(Double_t resNB, Double_t resB, Double_t sigmaCut, Dou
   trackCuts.SetAllowDefaultParams();
   trackCuts.SetFilterMask(AliMuonTrackCuts::kMuMatchLpt | AliMuonTrackCuts::kMuEta |
 			  AliMuonTrackCuts::kMuThetaAbs | AliMuonTrackCuts::kMuPdca);
+//  trackCuts.SetFilterMask(0);
   //trackCuts.SetIsMC();
   
   // first task (physics before refit)
@@ -136,56 +143,42 @@ Bool_t CreateAnalysisTrain(Double_t resNB, Double_t resB, Double_t sigmaCut, Dou
     Error("CreateAnalysisTrain","AliAnalysisTaskMuonPhysics not created!");
     return kFALSE;
   }
-//  if (selectPhysics) physics1->SelectCollisionCandidates(AliVEvent::kCMUS5 | AliVEvent::kMUL7 | AliVEvent::kMUU7 | AliVEvent::kMUS7);
-//  if (selectPhysics) physics1->SelectCollisionCandidates(AliVEvent::kMUL7 | AliVEvent::kMUU7 |
-//							 AliVEvent::kMuonLikeLowPt8 | AliVEvent::kMuonUnlikeLowPt8 |
-//							 AliVEvent::kMUS7 | AliVEvent::kMuonSingleLowPt8);
-//  if (selectPhysics) physics1->SelectCollisionCandidates(AliVEvent::kMUS7 | AliVEvent::kMuonSingleLowPt8);
-//  if (selectPhysics) physics1->SelectCollisionCandidates(AliVEvent::kMUSH7 | AliVEvent::kMUSHPB | AliVEvent::kMuonSingleHighPt8);
-//  if (selectPhysics) physics1->SelectCollisionCandidates(AliVEvent::kCMUS5 | AliVEvent::kMUS7);
+  if (selectPhysics) physics1->SelectCollisionCandidates(offlineTriggerMask);
 //  if (selectPhysics) physics1->SelectCollisionCandidates(AliVEvent::kMUU7);
-//  if (selectPhysics) physics1->SelectCollisionCandidates(AliVEvent::kAny);
-  if (selectPhysics) physics1->SelectCollisionCandidates(AliVEvent::kMUU7);
   if (selectCentrality) physics1->SelectCentrality(0., 90.);
   physics1->SetMuonTrackCuts(trackCuts);
-  
+  /*
+  // first task (physics before refit)
+  AliAnalysisTaskMuonPhysics* physics12 = AddTaskMuonPhysics("before_LowPt7");
+  if(!physics12) {
+    Error("CreateAnalysisTrain","AliAnalysisTaskMuonPhysics not created!");
+    return kFALSE;
+  }
+//  if (selectPhysics) physics12->SelectCollisionCandidates(offlineTriggerMask);
+  if (selectPhysics) physics12->SelectCollisionCandidates(AliVEvent::kMuonLikeLowPt7 | AliVEvent::kMuonUnlikeLowPt7 | AliVEvent::kMuonSingleLowPt7);
+  if (selectCentrality) physics12->SelectCentrality(0., 90.);
+  physics12->SetMuonTrackCuts(trackCuts);
+  */
   // second task (refit)
-  gROOT->LoadMacro("$ALICE_ROOT/PWG/muondep/AddTaskMuonRefit.C");
+  gROOT->LoadMacro("$ALICE_PHYSICS/PWG/muondep/AddTaskMuonRefit.C");
   AliAnalysisTaskMuonRefit* refit = AddTaskMuonRefit(resNB, resB, kTRUE, sigmaCut, sigmaCutTrig);
   if(!refit) {
     Error("CreateAnalysisTrain","AliAnalysisTaskMuonRefit not created!");
     return kFALSE;
   }
-//  if (selectPhysics) refit->SelectCollisionCandidates(AliVEvent::kCMUS5 | AliVEvent::kMUL7 | AliVEvent::kMUU7 | AliVEvent::kMUS7);
-//  if (selectPhysics) refit->SelectCollisionCandidates(AliVEvent::kMUL7 | AliVEvent::kMUU7 |
-//						      AliVEvent::kMuonLikeLowPt8 | AliVEvent::kMuonUnlikeLowPt8 |
-//						      AliVEvent::kMUS7 | AliVEvent::kMuonSingleLowPt8);
-//  if (selectPhysics) refit->SelectCollisionCandidates(AliVEvent::kMUS7 | AliVEvent::kMuonSingleLowPt8);
-//  if (selectPhysics) refit->SelectCollisionCandidates(AliVEvent::kMUSH7 | AliVEvent::kMUSHPB | AliVEvent::kMuonSingleHighPt8);
-//  if (selectPhysics) refit->SelectCollisionCandidates(AliVEvent::kCMUS5 | AliVEvent::kMUS7);
-//  if (selectPhysics) refit->SelectCollisionCandidates(AliVEvent::kMUU7);
-//  if (selectPhysics) refit->SelectCollisionCandidates(AliVEvent::kAny);
-  if (selectPhysics) refit->SelectCollisionCandidates(AliVEvent::kMUU7);
-  if (selectCentrality) refit->SelectCentrality(0., 90.);
+  if (selectPhysics) refit->SelectCollisionCandidates(offlineTriggerMask);
   //refit->SetDefaultStorage("local://$ALICE_ROOT/OCDB");
 //  refit->SetFieldPath("$(ALICE_ROOT)/data/maps/mfchebKGI_sym.root");
 //  refit->SetFieldPath("alien:///alice/cern.ch/user/p/ppillot/FieldRS/mfchebKGI_symMW.root");
-//  refit->ReAlign("alien://folder=/alice/cern.ch/user/p/ppillot/OCDB2011_Align1", "alien://folder=/alice/cern.ch/user/p/ppillot/OCDB2011_Align2");
-//  refit->ReAlign("alien://folder=/alice/cern.ch/user/p/ppillot/OCDB2011_Align1", "alien://folder=/alice/cern.ch/user/s/shahoian/CorG4Fresmx05y015");
-//  refit->ReAlign("alien://folder=/alice/cern.ch/user/p/ppillot/OCDB2011_Align1", "alien://folder=/alice/cern.ch/user/s/shahoian/CorG4Gresmx05y015");
-//  refit->ReAlign("alien://folder=/alice/cern.ch/user/p/ppillot/OCDB2011_Align1", "alien://folder=/alice/cern.ch/user/j/jcastill/CorG4Fresmx05y015");
-//  refit->ReAlign("alien://folder=/alice/cern.ch/user/p/ppillot/OCDB2011_Align1", "alien://folder=/alice/cern.ch/user/j/jcastill/pbpb11wrk/CorG4Fresmx05y015_pp2PbPb");
-//  refit->ReAlign("", "alien://folder=/alice/cern.ch/user/h/hupereir/CDB/LHC12_ReAlign_new_0");
-//  refit->ReAlign("alien://folder=/alice/cern.ch/user/p/ppillot/OCDB2012", "alien://folder=/alice/cern.ch/user/h/hupereir/CDB/LHC12_ReAlign_new_1");
-//  refit->ReAlign("alien://folder=/alice/cern.ch/user/p/ppillot/OCDB2012", "");
-//  refit->ReAlign("alien://folder=/alice/simulation/2008/v4-15-Release/Residual", "alien://folder=/alice/simulation/2008/v4-15-Release/Residual");
-//    refit->SetAlignStorage("alien://folder=/alice/simulation/2008/v4-15-Release/Residual");
 //  Double_t valNB[10] = {0.45, 0.45, 0.65, 0.65, 0.65, 0.65, 0.55, 0.55, 0.55, 0.55};
 //  Double_t valB[10] = {0.15, 0.15, 0.3, 0.3, 0.3, 0.3, 0.15, 0.15, 0.15, 0.15};
 //  Double_t valNB[10] = {0.14, 0.14, 0.2, 0.2, 0.2, 0.2, 0.17, 0.17, 0.17, 0.17};
 //  Double_t valB[10] = {0.1, 0.1, 0.2, 0.2, 0.2, 0.2, 0.1, 0.1, 0.1, 0.1};
 //  refit->ResetClusterResolution(valNB, valB);
-//  refit->RemoveMonoCathodClusters(kTRUE, kFALSE);
+//  refit->SetAlignStorage("", 5);
+//  refit->ReAlign("", 6, -1, "");
+//  refit->ReAlign("", -1, -1, "alien://folder=/alice/cern.ch/user/h/hupereir/CDB/LHC15_realign_all_4_dca");
+  refit->RemoveMonoCathodClusters(kTRUE, kFALSE);
   refit->TagBadTracks();
   
   // third task (physics after refit)
@@ -194,39 +187,46 @@ Bool_t CreateAnalysisTrain(Double_t resNB, Double_t resB, Double_t sigmaCut, Dou
     Error("CreateAnalysisTrain","AliAnalysisTaskMuonPhysics not created!");
     return kFALSE;
   }
-//  if (selectPhysics) physics2->SelectCollisionCandidates(AliVEvent::kCMUS5 | AliVEvent::kMUL7 | AliVEvent::kMUU7 | AliVEvent::kMUS7);
-//  if (selectPhysics) physics2->SelectCollisionCandidates(AliVEvent::kMUL7 | AliVEvent::kMUU7 |
-//							 AliVEvent::kMuonLikeLowPt8 | AliVEvent::kMuonUnlikeLowPt8 |
-//							 AliVEvent::kMUS7 | AliVEvent::kMuonSingleLowPt8);
-//  if (selectPhysics) physics2->SelectCollisionCandidates(AliVEvent::kMUS7 | AliVEvent::kMuonSingleLowPt8);
-//  if (selectPhysics) physics2->SelectCollisionCandidates(AliVEvent::kMUSH7 | AliVEvent::kMUSHPB | AliVEvent::kMuonSingleHighPt8);
-//  if (selectPhysics) physics2->SelectCollisionCandidates(AliVEvent::kCMUS5 | AliVEvent::kMUS7);
+  if (selectPhysics) physics2->SelectCollisionCandidates(offlineTriggerMask);
 //  if (selectPhysics) physics2->SelectCollisionCandidates(AliVEvent::kMUU7);
-//  if (selectPhysics) physics2->SelectCollisionCandidates(AliVEvent::kAny);
-  if (selectPhysics) physics2->SelectCollisionCandidates(AliVEvent::kMUU7);
   if (selectCentrality) physics2->SelectCentrality(0., 90.);
   physics2->SetMuonTrackCuts(trackCuts);
-  
+  /*
   // third task (physics after refit)
+  AliAnalysisTaskMuonPhysics* physics22 = AddTaskMuonPhysics("after_LowPt7");
+  if(!physics22) {
+    Error("CreateAnalysisTrain","AliAnalysisTaskMuonPhysics not created!");
+    return kFALSE;
+  }
+//  if (selectPhysics) physics22->SelectCollisionCandidates(offlineTriggerMask);
+  if (selectPhysics) physics22->SelectCollisionCandidates(AliVEvent::kMuonLikeLowPt7 | AliVEvent::kMuonUnlikeLowPt7 | AliVEvent::kMuonSingleLowPt7);
+  if (selectCentrality) physics22->SelectCentrality(0., 90.);
+  physics22->SetMuonTrackCuts(trackCuts);
+  */
+  // fourth task (physics after refit)
   AliAnalysisTaskMuonPhysics* physics3 = AddTaskMuonPhysics("bad");
   if(!physics3) {
     Error("CreateAnalysisTrain","AliAnalysisTaskMuonPhysics not created!");
     return kFALSE;
   }
-//  if (selectPhysics) physics3->SelectCollisionCandidates(AliVEvent::kCMUS5 | AliVEvent::kMUL7 | AliVEvent::kMUU7 | AliVEvent::kMUS7);
-//  if (selectPhysics) physics3->SelectCollisionCandidates(AliVEvent::kMUL7 | AliVEvent::kMUU7 |
-//							 AliVEvent::kMuonLikeLowPt8 | AliVEvent::kMuonUnlikeLowPt8 |
-//							 AliVEvent::kMUS7 | AliVEvent::kMuonSingleLowPt8);
-//  if (selectPhysics) physics3->SelectCollisionCandidates(AliVEvent::kMUS7 | AliVEvent::kMuonSingleLowPt8);
-//  if (selectPhysics) physics3->SelectCollisionCandidates(AliVEvent::kMUSH7 | AliVEvent::kMUSHPB | AliVEvent::kMuonSingleHighPt8);
-//  if (selectPhysics) physics3->SelectCollisionCandidates(AliVEvent::kCMUS5 | AliVEvent::kMUS7);
+  if (selectPhysics) physics3->SelectCollisionCandidates(offlineTriggerMask);
 //  if (selectPhysics) physics3->SelectCollisionCandidates(AliVEvent::kMUU7);
-//  if (selectPhysics) physics3->SelectCollisionCandidates(AliVEvent::kAny);
-  if (selectPhysics) physics3->SelectCollisionCandidates(AliVEvent::kMUU7);
   if (selectCentrality) physics3->SelectCentrality(0., 90.);
   physics3->SetMuonTrackCuts(trackCuts);
   physics3->SelectBadTracks();
-  
+  /*
+  // fourth task (physics after refit)
+  AliAnalysisTaskMuonPhysics* physics32 = AddTaskMuonPhysics("bad_LowPt7");
+  if(!physics32) {
+    Error("CreateAnalysisTrain","AliAnalysisTaskMuonPhysics not created!");
+    return kFALSE;
+  }
+  //  if (selectPhysics) physics32->SelectCollisionCandidates(offlineTriggerMask);
+  if (selectPhysics) physics32->SelectCollisionCandidates(AliVEvent::kMuonLikeLowPt7 | AliVEvent::kMuonUnlikeLowPt7 | AliVEvent::kMuonSingleLowPt7);
+  if (selectCentrality) physics32->SelectCentrality(0., 90.);
+  physics32->SetMuonTrackCuts(trackCuts);
+  physics32->SelectBadTracks();
+  */
   return kTRUE;
 }
 

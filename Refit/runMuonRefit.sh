@@ -1,10 +1,25 @@
 #!/bin/sh
 
 # usage:
-# $1 = dataset
-# $2 = tracker or trigger
+# $1 = mode
+# $2 = dataset
+# $3 = tracker or trigger
 
-if [ "$2" = "tracker" ]; then
+runonsaf3="no";
+
+if [ "$1" = "saf3" ] && [ `hostname` = "nansafmaster3.in2p3.fr" ]; then
+
+    vafctl start
+    nWorkers=88
+    let "nWorkers -= `pod-info -n`"
+    echo "requesting $nWorkers additional workers"
+    vafreq $nWorkers
+    vafwait 88
+    runonsaf3="yes"
+
+fi
+
+if [ "$3" = "tracker" ]; then
     
     sigmaTrg=4
     
@@ -36,18 +51,26 @@ if [ "$2" = "tracker" ]; then
 	    fi
 	    
 	    mkdir $dirname
-	    
+
+	    if [ "$runonsaf3" = "yes" ]; then
+                cp *.C *.cxx *.h *.par *.txt *.root $dirname
+	    fi
+
 	    cd $dirname
 	    
-	    root -q -l /Users/pillot/Work/Alice/Work/Macros/Refit/runMuonRefit.C\(\""saf"\",\"$1\",$errNB,$errB,$sigma,$sigmaTrg\) >& run.log
-	    
+	    if [ "$runonsaf3" = "yes" ]; then
+                root -q -b runMuonRefit.C\(\"$1\",\"$2\",$errNB,$errB,$sigma,$sigmaTrg\) 2>&1 | tee run.log
+	    else
+                root -q -l $WORK/Macros/Refit/runMuonRefit.C\(\"$1\",\"$2\",$errNB,$errB,$sigma,$sigmaTrg\) >& run.log
+	    fi
+
 	    cd ..
 	    
 	done
 	
     done
     
-elif [ "$2" = "trigger" ]; then
+elif [ "$3" = "trigger" ]; then
     
     resoNB=2
     resoB=2
@@ -72,18 +95,30 @@ elif [ "$2" = "trigger" ]; then
 	
 	mkdir $dirname
 	
+	if [ "$runonsaf3" = "yes" ]; then
+            cp *.C *.cxx *.h *.par *.txt *.root $dirname
+	fi
+
 	cd $dirname
-	
-	root -q -l /Users/pillot/Work/Alice/Work/Macros/Refit/runMuonRefit.C\(\""saf"\",\"$1\",$errNB,$errB,$sigmaTrk,$sigma\) >& run.log
-#	root -q -l /Users/pillot/Work/Alice/Work/Macros/Refit/runMuonRefit.C\(\""local"\",\"$1\",$errNB,$errB,$sigmaTrk,$sigma\) >& run.log
-	
+
+	if [ "$runonsaf3" = "yes" ]; then
+            root -q -b runMuonRefit.C\(\"$1\",\"$2\",$errNB,$errB,$sigmaTrk,$sigma\) 2>&1 | tee run.log
+	else
+            root -q -l $WORK/Macros/Refit/runMuonRefit.C\(\"$1\",\"$2\",$errNB,$errB,$sigmaTrk,$sigma\) >& run.log
+	fi
+
 	cd ..
-	
+
     done
-    
+
 else
-    
-    echo "usage: \$1=dataset; \$2=\"tracker\" or \"trigger\""
+
+    echo "usage: \$1=\"local\", \"saf\" or \"saf3\"; \$2=dataset; \$3=\"tracker\" or \"trigger\""
     
 fi
 
+if [ "$runonsaf3" = "yes" ]; then
+
+    vafctl stop
+
+fi
