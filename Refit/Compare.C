@@ -7,6 +7,23 @@
  *
  */
 
+#if !defined(__CINT__) || defined(__MAKECINT__)
+
+#include <Riostream.h>
+#include "TROOT.h"
+#include "TStyle.h"
+#include "TFile.h"
+#include "TObjArray.h"
+#include "TList.h"
+#include "TCanvas.h"
+#include "TLegend.h"
+#include "TMath.h"
+#include "TGraphErrors.h"
+#include "TH1F.h"
+#include "AliCounterCollection.h"
+
+#endif
+
 TString trigType = "trig:any";
 
 //------------------------------------------------------------------------------
@@ -44,11 +61,6 @@ void Compare(TString fileName_before = "AnalysisResults.root", TString fileName_
   gROOT->ForceStyle();
   gStyle->SetOptFit(1);
   
-  // prepare environment
-  gROOT->LoadMacro("$WORK/Macros/Facilities/runTaskFacilities.C");
-  TString extraLibs = "RAWDatabase:CDB:STEER:MUONcore:MUONmapping:MUONcalib:MUONgeometry:MUONtrigger:MUONraw:MUONbase:MUONrec";
-  LoadAlirootLocally(extraLibs,"","");
-  
   Bool_t sameFile = (fileName_before==fileName_after);
   
   // open files
@@ -60,11 +72,12 @@ void Compare(TString fileName_before = "AnalysisResults.root", TString fileName_
     if (!file_after || !file_after->IsOpen()) return;
   }
   
+  TString beforeSuf = "before";
   TString afterSuf = showBadTracks ? "bad" : "after";
   
   // histo before
   TObjArray* histo_before;
-  if (sameFile && !file1AsRef) histo_before = static_cast<TObjArray*>(file_before->FindObjectAny("Histograms_before"));
+  if (sameFile && !file1AsRef) histo_before = static_cast<TObjArray*>(file_before->FindObjectAny(Form("Histograms_%s",beforeSuf.Data())));
   else histo_before = static_cast<TObjArray*>(file_before->FindObjectAny(Form("Histograms_%s",afterSuf.Data())));
   if (!histo_before) return;
   
@@ -74,7 +87,7 @@ void Compare(TString fileName_before = "AnalysisResults.root", TString fileName_
   
   // counters before
   AliCounterCollection* counters_before;
-  if (sameFile && !file1AsRef) counters_before = static_cast<AliCounterCollection*>(file_before->FindObjectAny("trackCounters_before"));
+  if (sameFile && !file1AsRef) counters_before = static_cast<AliCounterCollection*>(file_before->FindObjectAny(Form("trackCounters_%s",beforeSuf.Data())));
   else counters_before = static_cast<AliCounterCollection*>(file_before->FindObjectAny(Form("trackCounters_%s",afterSuf.Data())));
   if (!counters_before) return;
   
@@ -104,7 +117,8 @@ void Compare(TString fileName_before = "AnalysisResults.root", TString fileName_
     gPad->SetLogy();
     TH1F* h_before = static_cast<TH1F*>(histo_before->FindObject(sHist[i].Data()));
     if (!h_before) continue;
-    TH1F* h_after = static_cast<TH1F*>(histo_after->FindObject(sHist[i].Data())));
+    TH1F* h_after = static_cast<TH1F*>(histo_after->FindObject(sHist[i].Data()));
+    if (!h_after) continue;
     h_before->Draw();
     h_after->Draw("sames");
     h_after->SetLineColor(2);
@@ -114,7 +128,7 @@ void Compare(TString fileName_before = "AnalysisResults.root", TString fileName_
       lHist->Draw("same");
     }
     cDiff->cd(i+1);
-    TH1F* h_diff = h_before->Clone();
+    TH1F* h_diff = static_cast<TH1F*>(h_before->Clone());
     h_diff->Add(h_after, -1.);
     h_diff->Draw();
     h_diff->SetLineColor(4);
@@ -123,7 +137,7 @@ void Compare(TString fileName_before = "AnalysisResults.root", TString fileName_
       lDiff->Draw("same");
     }
     cRatio->cd(i+1);
-    TH1F* h_ratio = h_after->Clone();
+    TH1F* h_ratio = static_cast<TH1F*>(h_after->Clone());
     h_ratio->Divide(h_before);
     h_ratio->Draw();
     h_ratio->SetLineColor(4);
@@ -142,14 +156,14 @@ void Compare(TString fileName_before = "AnalysisResults.root", TString fileName_
     gPad->SetLogy();
     TH1F* h_before = static_cast<TH1F*>(histo_before->FindObject(sDCA[i].Data()));
     if (!h_before) continue;
-    TH1F* h_after = static_cast<TH1F*>(histo_after->FindObject(sDCA[i].Data())));
+    TH1F* h_after = static_cast<TH1F*>(histo_after->FindObject(sDCA[i].Data()));
     h_before->Draw();
     h_before->GetXaxis()->SetRangeUser(-10.,10.);
     h_before->Fit("gaus","","same",-5.,5.);
     h_after->Draw("sames");
     h_after->SetLineColor(2);
     h_after->Fit("gaus","","same",-5.,5.);
-    lHist->DrawClone("same");
+    lHist->Clone()->Draw("same");
   }
   
   // print statistic
@@ -259,8 +273,8 @@ void Compare(TString fileName_before = "AnalysisResults.root", TString fileName_
 	countersRef[i][j] = counters_before;
 	hPUncorrectedRef[i][j] = static_cast<TH1F*>(histo_before->FindObject("hPUncorrected"));
       } else {
-	countersRef[i][j] = static_cast<AliCounterCollection*>(file->FindObjectAny("trackCounters_before"));
-	hPUncorrectedRef[i][j] = static_cast<TH1F*>(static_cast<TObjArray*>(file->FindObjectAny("Histograms_before"))->FindObject("hPUncorrected"));
+	countersRef[i][j] = static_cast<AliCounterCollection*>(file->FindObjectAny(Form("trackCounters_%s",beforeSuf.Data())));
+	hPUncorrectedRef[i][j] = static_cast<TH1F*>(static_cast<TObjArray*>(file->FindObjectAny(Form("Histograms_%s",beforeSuf.Data())))->FindObject("hPUncorrected"));
       }
       counters[i][j] = static_cast<AliCounterCollection*>(file->FindObjectAny(Form("trackCounters_%s",afterSuf.Data())));
       hPUncorrected[i][j] = static_cast<TH1F*>(static_cast<TObjArray*>(file->FindObjectAny(Form("Histograms_%s",afterSuf.Data())))->FindObject("hPUncorrected"));
@@ -270,15 +284,16 @@ void Compare(TString fileName_before = "AnalysisResults.root", TString fileName_
   // Draw efficiency versus chamber resolution for different track selection and sigma cut
   TCanvas* cEffVsSigmaCut = new TCanvas("cEffVsSigmaCut", "cEffVsSigmaCut", 300.*nPadXRes, 600);
   cEffVsSigmaCut->Divide(nPadXRes,2);
+  TGraphErrors *g1, *g2, *g3, *g4, *g5;
   TLegend *lEff = new TLegend(0.6,0.4,1.,0.6);
   lEff->SetFillStyle(0);
   lEff->SetBorderSize(0);
   for (Int_t i=0; i<nTestRes; i++) {
     cEffVsSigmaCut->cd(i+1);
-    TGraphErrors* g1 = new TGraphErrors(nTestSigTrk);
-    TGraphErrors* g2 = new TGraphErrors(nTestSigTrk);
-    TGraphErrors* g3 = new TGraphErrors(nTestSigTrk);
-    TGraphErrors* g4 = new TGraphErrors(nTestSigTrk);
+    g1 = new TGraphErrors(nTestSigTrk);
+    g2 = new TGraphErrors(nTestSigTrk);
+    g3 = new TGraphErrors(nTestSigTrk);
+    g4 = new TGraphErrors(nTestSigTrk);
     for (Int_t j=0; j<nTestSigTrk; j++) {
       if (!counters[i][j]) continue;
       Double_t nAllRef = countersRef[i][j]->GetSum();
@@ -325,10 +340,10 @@ void Compare(TString fileName_before = "AnalysisResults.root", TString fileName_
   cEffVsChRes->Divide(nPadXSigTrk,2);
   for (Int_t j=0; j<nTestSigTrk; j++) {
     cEffVsChRes->cd(j+1);
-    TGraphErrors* g1 = new TGraphErrors(nTestRes);
-    TGraphErrors* g2 = new TGraphErrors(nTestRes);
-    TGraphErrors* g3 = new TGraphErrors(nTestRes);
-    TGraphErrors* g4 = new TGraphErrors(nTestRes);
+    g1 = new TGraphErrors(nTestRes);
+    g2 = new TGraphErrors(nTestRes);
+    g3 = new TGraphErrors(nTestRes);
+    g4 = new TGraphErrors(nTestRes);
     for (Int_t i=0; i<nTestRes; i++) {
       if (!counters[i][j]) continue;
       Double_t nAllRef = countersRef[i][j]->GetSum();
@@ -363,7 +378,7 @@ void Compare(TString fileName_before = "AnalysisResults.root", TString fileName_
     g4->SetLineColor(8);
   }
   cEffVsChRes->cd(2*nPadXSigTrk-1);
-  lEff->DrawClone("same");
+  lEff->Clone()->Draw("same");
   
   // Draw efficiency versus chamber resolution for different pt range and sigma cut
   TCanvas* cEffptVsSigmaCut = new TCanvas("cEffptVsSigmaCut", "cEffptVsSigmaCut", 300.*nPadXRes, 600);
@@ -373,11 +388,11 @@ void Compare(TString fileName_before = "AnalysisResults.root", TString fileName_
   lEffpt->SetBorderSize(0);
   for (Int_t i=0; i<nTestRes; i++) {
     cEffptVsSigmaCut->cd(i+1);
-    TGraphErrors* g1 = new TGraphErrors(nTestSigTrk);
-    TGraphErrors* g2 = new TGraphErrors(nTestSigTrk);
-    TGraphErrors* g3 = new TGraphErrors(nTestSigTrk);
-    TGraphErrors* g4 = new TGraphErrors(nTestSigTrk);
-    TGraphErrors* g5 = new TGraphErrors(nTestSigTrk);
+    g1 = new TGraphErrors(nTestSigTrk);
+    g2 = new TGraphErrors(nTestSigTrk);
+    g3 = new TGraphErrors(nTestSigTrk);
+    g4 = new TGraphErrors(nTestSigTrk);
+    g5 = new TGraphErrors(nTestSigTrk);
     for (Int_t j=0; j<nTestSigTrk; j++) {
       if (!counters[i][j]) continue;
       Double_t nPt0Ref = countersRef[i][j]->GetSum(Form("track:matched/%s/rabs:yes/eta:yes/pdca:yes",trigType.Data()));
@@ -430,11 +445,11 @@ void Compare(TString fileName_before = "AnalysisResults.root", TString fileName_
   cEffptVsChRes->Divide(nPadXSigTrk,2);
   for (Int_t j=0; j<nTestSigTrk; j++) {
     cEffptVsChRes->cd(j+1);
-    TGraphErrors* g1 = new TGraphErrors(nTestRes);
-    TGraphErrors* g2 = new TGraphErrors(nTestRes);
-    TGraphErrors* g3 = new TGraphErrors(nTestRes);
-    TGraphErrors* g4 = new TGraphErrors(nTestRes);
-    TGraphErrors* g5 = new TGraphErrors(nTestRes);
+    g1 = new TGraphErrors(nTestRes);
+    g2 = new TGraphErrors(nTestRes);
+    g3 = new TGraphErrors(nTestRes);
+    g4 = new TGraphErrors(nTestRes);
+    g5 = new TGraphErrors(nTestRes);
     for (Int_t i=0; i<nTestRes; i++) {
       if (!counters[i][j]) continue;
       Double_t nPt0Ref = countersRef[i][j]->GetSum(Form("track:matched/%s/rabs:yes/eta:yes/pdca:yes",trigType.Data()));
@@ -475,7 +490,7 @@ void Compare(TString fileName_before = "AnalysisResults.root", TString fileName_
     g5->SetLineColor(8);
   }
   cEffptVsChRes->cd(2*nPadXSigTrk-1);
-  lEffpt->DrawClone("same");
+  lEffpt->Clone()->Draw("same");
   
   // Draw efficiency versus chamber resolution for different uncorrected-p range and sigma cut
   TCanvas* cEffpVsSigmaCut = new TCanvas("cEffpVsSigmaCut", "cEffpVsSigmaCut", 300.*nPadXRes, 600);
@@ -485,11 +500,11 @@ void Compare(TString fileName_before = "AnalysisResults.root", TString fileName_
   lEffp->SetBorderSize(0);
   for (Int_t i=0; i<nTestRes; i++) {
     cEffpVsSigmaCut->cd(i+1);
-    TGraphErrors* g1 = new TGraphErrors(nTestSigTrk);
-    TGraphErrors* g2 = new TGraphErrors(nTestSigTrk);
-    TGraphErrors* g3 = new TGraphErrors(nTestSigTrk);
-    TGraphErrors* g4 = new TGraphErrors(nTestSigTrk);
-    TGraphErrors* g5 = new TGraphErrors(nTestSigTrk);
+    g1 = new TGraphErrors(nTestSigTrk);
+    g2 = new TGraphErrors(nTestSigTrk);
+    g3 = new TGraphErrors(nTestSigTrk);
+    g4 = new TGraphErrors(nTestSigTrk);
+    g5 = new TGraphErrors(nTestSigTrk);
     for (Int_t j=0; j<nTestSigTrk; j++) {
       if (!hPUncorrected[i][j]) continue;
       Double_t nP0Ref = hPUncorrectedRef[i][j]->Integral(1,5);
@@ -542,11 +557,11 @@ void Compare(TString fileName_before = "AnalysisResults.root", TString fileName_
   cEffpVsChRes->Divide(nPadXSigTrk,2);
   for (Int_t j=0; j<nTestSigTrk; j++) {
     cEffpVsChRes->cd(j+1);
-    TGraphErrors* g1 = new TGraphErrors(nTestRes);
-    TGraphErrors* g2 = new TGraphErrors(nTestRes);
-    TGraphErrors* g3 = new TGraphErrors(nTestRes);
-    TGraphErrors* g4 = new TGraphErrors(nTestRes);
-    TGraphErrors* g5 = new TGraphErrors(nTestRes);
+    g1 = new TGraphErrors(nTestRes);
+    g2 = new TGraphErrors(nTestRes);
+    g3 = new TGraphErrors(nTestRes);
+    g4 = new TGraphErrors(nTestRes);
+    g5 = new TGraphErrors(nTestRes);
     for (Int_t i=0; i<nTestRes; i++) {
       if (!hPUncorrected[i][j]) continue;
       Double_t nP0Ref = hPUncorrectedRef[i][j]->Integral(1,5);
@@ -587,7 +602,7 @@ void Compare(TString fileName_before = "AnalysisResults.root", TString fileName_
     g5->SetLineColor(8);
   }
   cEffpVsChRes->cd(2*nPadXSigTrk-1);
-  lEffp->DrawClone("same");
+  lEffp->Clone()->Draw("same");
   
   const Int_t nTestSigTrg = 5;
   Double_t sigmaCutTrig[nTestSigTrg] = {2., 3., 4., 5., 6.};
@@ -620,8 +635,8 @@ void Compare(TString fileName_before = "AnalysisResults.root", TString fileName_
       countersRefTrig[i] = counters_before;
       hPUncorrectedRefTrig[i] = static_cast<TH1F*>(histo_before->FindObject("hPUncorrected"));
     } else {
-      countersRefTrig[i] = static_cast<AliCounterCollection*>(file->FindObjectAny("trackCounters_before"));
-      hPUncorrectedRefTrig[i] = static_cast<TH1F*>(static_cast<TObjArray*>(file->FindObjectAny("Histograms_before"))->FindObject("hPUncorrected"));
+      countersRefTrig[i] = static_cast<AliCounterCollection*>(file->FindObjectAny(Form("trackCounters_%s",beforeSuf.Data())));
+      hPUncorrectedRefTrig[i] = static_cast<TH1F*>(static_cast<TObjArray*>(file->FindObjectAny(Form("Histograms_%s",beforeSuf.Data())))->FindObject("hPUncorrected"));
     }
     countersTrig[i] = static_cast<AliCounterCollection*>(file->FindObjectAny(Form("trackCounters_%s",afterSuf.Data())));
     hPUncorrectedTrig[i] = static_cast<TH1F*>(static_cast<TObjArray*>(file->FindObjectAny(Form("Histograms_%s",afterSuf.Data())))->FindObject("hPUncorrected"));
@@ -631,9 +646,9 @@ void Compare(TString fileName_before = "AnalysisResults.root", TString fileName_
   cEffVsSigmaCutTrig->Divide(2,2);
   
   cEffVsSigmaCutTrig->cd(1);
-  TGraphErrors* g2 = new TGraphErrors(nTestSigTrg);
-  TGraphErrors* g3 = new TGraphErrors(nTestSigTrg);
-  TGraphErrors* g4 = new TGraphErrors(nTestSigTrg);
+  g2 = new TGraphErrors(nTestSigTrg);
+  g3 = new TGraphErrors(nTestSigTrg);
+  g4 = new TGraphErrors(nTestSigTrg);
   TLegend *lEffTrig = new TLegend(0.6,0.42,1.,0.58);
   lEffTrig->SetFillStyle(0);
   lEffTrig->SetBorderSize(0);
@@ -671,11 +686,11 @@ void Compare(TString fileName_before = "AnalysisResults.root", TString fileName_
   lEffTrig->Draw("same");
   
   cEffVsSigmaCutTrig->cd(2);
-  TGraphErrors* g1 = new TGraphErrors(nTestSigTrg);
-  TGraphErrors* g2 = new TGraphErrors(nTestSigTrg);
-  TGraphErrors* g3 = new TGraphErrors(nTestSigTrg);
-  TGraphErrors* g4 = new TGraphErrors(nTestSigTrg);
-  TGraphErrors* g5 = new TGraphErrors(nTestSigTrg);
+  g1 = new TGraphErrors(nTestSigTrg);
+  g2 = new TGraphErrors(nTestSigTrg);
+  g3 = new TGraphErrors(nTestSigTrg);
+  g4 = new TGraphErrors(nTestSigTrg);
+  g5 = new TGraphErrors(nTestSigTrg);
   for (Int_t i=0; i<nTestSigTrg; i++) {
     if (!countersTrig[i]) continue;
     Double_t nPt0RefTrig = countersRefTrig[i]->GetSum(Form("track:matched/%s/rabs:yes/eta:yes/pdca:yes",trigType.Data()));
@@ -714,14 +729,14 @@ void Compare(TString fileName_before = "AnalysisResults.root", TString fileName_
   g5->Draw("samepl*");
   g5->SetMarkerColor(8);
   g5->SetLineColor(8);
-  lEffpt->DrawClone("same");
+  lEffpt->Clone()->Draw("same");
   
   cEffVsSigmaCutTrig->cd(3);
-  TGraphErrors* g1 = new TGraphErrors(nTestSigTrg);
-  TGraphErrors* g2 = new TGraphErrors(nTestSigTrg);
-  TGraphErrors* g3 = new TGraphErrors(nTestSigTrg);
-  TGraphErrors* g4 = new TGraphErrors(nTestSigTrg);
-  TGraphErrors* g5 = new TGraphErrors(nTestSigTrg);
+  g1 = new TGraphErrors(nTestSigTrg);
+  g2 = new TGraphErrors(nTestSigTrg);
+  g3 = new TGraphErrors(nTestSigTrg);
+  g4 = new TGraphErrors(nTestSigTrg);
+  g5 = new TGraphErrors(nTestSigTrg);
   for (Int_t i=0; i<nTestSigTrg; i++) {
     if (!hPUncorrectedTrig[i]) continue;
     Double_t nP0RefTrig = hPUncorrectedRefTrig[i]->Integral(1,5);
@@ -760,12 +775,12 @@ void Compare(TString fileName_before = "AnalysisResults.root", TString fileName_
   g5->Draw("samepl*");
   g5->SetMarkerColor(8);
   g5->SetLineColor(8);
-  lEffp->DrawClone("same");
+  lEffp->Clone()->Draw("same");
   
   cEffVsSigmaCutTrig->cd(4);
-  TGraphErrors* g2 = new TGraphErrors(nTestSigTrg);
-  TGraphErrors* g3 = new TGraphErrors(nTestSigTrg);
-  TGraphErrors* g4 = new TGraphErrors(nTestSigTrg);
+  g2 = new TGraphErrors(nTestSigTrg);
+  g3 = new TGraphErrors(nTestSigTrg);
+  g4 = new TGraphErrors(nTestSigTrg);
   TLegend *lEffTrigTrig = new TLegend(0.6,0.42,1.,0.58);
   lEffTrigTrig->SetFillStyle(0);
   lEffTrigTrig->SetBorderSize(0);
