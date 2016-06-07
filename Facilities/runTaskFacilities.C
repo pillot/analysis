@@ -16,11 +16,13 @@
 #include <TChain.h>
 #include <TProof.h>
 #include <TList.h>
+#include <THashList.h>
 #include <TGrid.h>
 #include <TEnv.h>
 #include <TROOT.h>
 #include <TList.h>
 #include <TFile.h>
+#include <TFileInfo.h>
 #include <TFileCollection.h>
 #include "AliAnalysisManager.h"
 #include "AliAnalysisAlien.h"
@@ -65,7 +67,24 @@ TString GetDataType(Int_t mode, TString input, TString dataPattern)
     else return "ESD";
   } else {
     if (input.Contains(".root")) {
-      if (input.Contains("AOD")) return "AOD";
+      if (mode == kProof) {
+        TString dataType = "unknown";
+        TFile *inFile = TFile::Open(input.Data(),"READ");
+        if (inFile && inFile->IsOpen()) {
+          TFileCollection *coll = dynamic_cast<TFileCollection*>(inFile->FindObjectAny("dataset"));
+          if (coll && coll->GetList()) {
+            TFileInfo *fileInfo = static_cast<TFileInfo*>(coll->GetList()->At(0));
+            if (fileInfo) {
+              TString fileName = fileInfo->GetCurrentUrl()->GetFile();
+              if (fileName.Contains("AOD")) dataType = "AOD";
+              else if (fileName.Contains("ESD")) dataType = "ESD";
+            }
+            delete coll;
+          }
+          inFile->Close();
+        }
+        return dataType.Data();
+      } else if (input.Contains("AOD")) return "AOD";
       else if (input.Contains("ESD")) return "ESD";
     } else if (input.EndsWith(".txt")) {
       if (gSystem->Exec(Form("grep -q AOD %s", input.Data())) == 0) return "AOD";
@@ -337,7 +356,7 @@ TObject* CreateAlienHandler(TString runMode, TString& alirootVersion, TString& a
 			    TString &dataDir, TString &dataPattern, TString &outDir, TString& extraLibs,
 			    TString& extraIncs, TString& extraTasks, TString& extraPkgs, TString& analysisMacroName,
 			    TString runFormat = "%09d", Int_t ttl = 30000, Int_t maxFilesPerJob = 100,
-			    Int_t maxMergeFiles = 10, Int_t maxMergeStages = 1, TString& RegisterExcludes = "")
+			    Int_t maxMergeFiles = 10, Int_t maxMergeStages = 1, TString RegisterExcludes = "")
 {
   // Configure the alien plugin
   AliAnalysisAlien *plugin = new AliAnalysisAlien();
@@ -352,7 +371,7 @@ TObject* CreateAlienHandler(TString runMode, TString& alirootVersion, TString& a
   plugin->SetRunMode(runMode.Data());
   
   // Set the number of input files in test mode
-  plugin->SetNtestFiles(1);
+  plugin->SetNtestFiles(2);
   
   // Set versions of used packages
   plugin->SetAPIVersion("V1.1x");
@@ -599,7 +618,7 @@ Bool_t RunAnalysis(TString smode, TString input, TString& rootVersion, TString& 
                    TString &extraLibs, TString &extraIncs, TString &extraTasks, TString &extraPkgs,
                    TString &dataDir, TString &dataPattern, TString &outDir, TString &analysisMacroName,
                    TString runFormat, Int_t ttl, Int_t maxFilesPerJob, Int_t maxMergeFiles, Int_t maxMergeStages,
-                   TString& RegisterExcludes = "")
+                   TString RegisterExcludes = "")
 {
   /// Run the analysis locally, on proof or on the grid
   
