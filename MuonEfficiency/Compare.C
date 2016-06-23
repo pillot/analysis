@@ -7,22 +7,45 @@
  *
  */
 
-void Compare(TString fileName1, TString fileName2, TString fileName3 = "", TString fileName4 = "", TString fileName5 = "")
+void Compare(TString fileName0, TString fileNames)
 {
-  /// compare Acc*Eff results between file1 and file2
+  /// compare Acc*Eff results between fileO and other(s)
+  /// in case of file list, histos in files preceded by '*' will be drawn in blue
   
   gStyle->SetOptStat(11);
   gStyle->SetFillColor(0);
   
-  TString fileName[5] = {fileName1.Data(), fileName2.Data(), fileName3.Data(), fileName4.Data(), fileName5.Data()};
-  Int_t nFiles = 2;
-  if (!fileName3.IsNull()) {
-    nFiles++;
-    if (!fileName4.IsNull()) {
-      nFiles++;
-      if (!fileName5.IsNull()) {
-	nFiles++;
+  Int_t color[1000];
+  Double_t markerSize[1000];
+  TString fileName[1000];
+  color[0] = 1;
+  markerSize[0] = 0.2;
+  fileName[0] = fileName0;
+  Int_t nFiles = 1;
+  if (fileNames.EndsWith(".root")) {
+    color[nFiles] = 2;
+    markerSize[nFiles] = 0.2;
+    fileName[nFiles++] = fileNames;
+  }
+  else {
+    ifstream inFile(fileNames.Data());
+    if (!inFile.is_open()) {
+      printf("cannot open file %s\n", fileNames.Data());
+      return;
+    }
+    while (!inFile.eof()) {
+      TString fName;
+      fName.ReadLine(inFile,kTRUE);
+      if (fName.IsNull() || fName.BeginsWith("#") || !fName.EndsWith(".root")) continue;
+      if (fName.BeginsWith("*")) {
+        color[nFiles] = 4;
+        markerSize[nFiles] = 0.4;
+        fName.Remove(TString::kLeading,'*');
+      } else {
+        color[nFiles] = 2;
+        markerSize[nFiles] = 0.2;
       }
+      fileName[nFiles++] = fName;
     }
   }
   
@@ -35,34 +58,34 @@ void Compare(TString fileName1, TString fileName2, TString fileName3 = "", TStri
     "versus y (single-mu)", "summary versus pt", "summary versus y", "summary versus pt/y"};
   
   // get results
-  TFile* outFile[5];
-  TH1F* hDataGen[5][nData];
-  TH1F* hDataRec[5][nData];
-  TH1F* hDataAcc[5][nData];
+  TFile* outFile[1000];
+  TH1F* hDataGen[1000][nData];
+  TH1F* hDataRec[1000][nData];
+  TH1F* hDataAcc[1000][nData];
   for (Int_t i = 0; i < nFiles; i++) {
     outFile[i] = TFile::Open(fileName[i].Data(),"READ");
     if (!outFile[i] || !outFile[i]->IsOpen()) return;
     for (Int_t j = 0; j < nData; j++) {
       hDataGen[i][j] = static_cast<TH1F*>(outFile[i]->FindObjectAny(dataGen[j].Data()));
+      if (j < 4) hDataGen[i][j]->Sumw2();
       hDataRec[i][j] = static_cast<TH1F*>(outFile[i]->FindObjectAny(dataRec[j].Data()));
+      if (j < 4) hDataRec[i][j]->Sumw2();
       hDataAcc[i][j] = static_cast<TH1F*>(outFile[i]->FindObjectAny(dataAcc[j].Data()));
     }
   }
   
   // compute ratio
-  TH1F* hGenRat[4][nData];
-  TH1F* hRecRat[4][nData];
-  TH1F* hAccRat[4][nData];
+  TH1F* hGenRat[1000][nData];
+  TH1F* hRecRat[1000][nData];
+  TH1F* hAccRat[1000][nData];
   for (Int_t i = 1; i < nFiles; i++) {
     for (Int_t j = 0; j < nData; j++) {
       if (!hDataGen[i][j]) continue;
       hGenRat[i-1][j] = (TH1F*) hDataGen[i][j]->Clone(Form("%sRat",dataGen[j].Data()));
       hGenRat[i-1][j]->SetTitle("ratio");
-      hGenRat[i-1][j]->Sumw2();
       hGenRat[i-1][j]->Divide(hDataGen[0][j]);
       hRecRat[i-1][j] = (TH1F*) hDataRec[i][j]->Clone(Form("%sRat",dataRec[j].Data()));
       hRecRat[i-1][j]->SetTitle("ratio");
-      hRecRat[i-1][j]->Sumw2();
       hRecRat[i-1][j]->Divide(hDataRec[0][j]);
       hAccRat[i-1][j] = (TH1F*) hDataAcc[i][j]->Clone(Form("%sRat",dataAcc[j].Data()));
       hAccRat[i-1][j]->SetTitle("ratio");
@@ -92,73 +115,182 @@ void Compare(TString fileName1, TString fileName2, TString fileName3 = "", TStri
   */
   
   // draw histos
-  Double_t scale[4] = {1., 1., 1., 1.};
-  Int_t color[4] = {2, 4, 3, 6};
+  Int_t markerStyle = 21;
+  Double_t scale[1000];
   for (Int_t j = 0; j < nData; j++) {
     TCanvas* c = new TCanvas(cName[j].Data(), cTitle[j].Data(), 900, 600);
     c->Divide(3,2);
     c->cd(1);
     gPad->SetLogy();
     if (!hDataGen[0][j]) continue;
-    hDataGen[0][j]->SetLineColor(1);
-    hDataGen[0][j]->Draw();
+    hDataGen[0][j]->SetLineColor(color[0]);
+    hDataGen[0][j]->SetMarkerStyle(markerStyle);
+    hDataGen[0][j]->SetMarkerSize(markerSize[0]);
+    hDataGen[0][j]->SetMarkerColor(color[0]);
+    hDataGen[0][j]->Draw("e0");
     for (Int_t i = 1; i < nFiles; i++) {
-      hDataGen[i][j]->Sumw2();
       if (j < 4) scale[i-1] = ((Double_t)hDataGen[0][j]->GetEntries())/((Double_t)hDataGen[i][j]->GetEntries());
       else scale[i-1] = ((Double_t)hDataGen[0][j]->GetBinContent(1))/((Double_t)hDataGen[i][j]->GetBinContent(1));
       hDataGen[i][j]->Scale(scale[i-1]);
-      hDataGen[i][j]->SetLineColor(color[i-1]);
-      hDataGen[i][j]->Draw("histsame");
+      hDataGen[i][j]->SetLineColor(color[i]);
+      hDataGen[i][j]->SetMarkerStyle(markerStyle);
+      hDataGen[i][j]->SetMarkerSize(markerSize[i]);
+      hDataGen[i][j]->SetMarkerColor(color[i]);
+      hDataGen[i][j]->Draw("e0same");
     }
     c->cd(2);
     gPad->SetLogy();
-    hDataRec[0][j]->SetLineColor(1);
-    hDataRec[0][j]->Draw();
+    hDataRec[0][j]->SetLineColor(color[0]);
+    hDataRec[0][j]->SetMarkerStyle(markerStyle);
+    hDataRec[0][j]->SetMarkerSize(markerSize[0]);
+    hDataRec[0][j]->SetMarkerColor(color[0]);
+    hDataRec[0][j]->Draw("e0");
     for (Int_t i = 1; i < nFiles; i++) {
-      hDataRec[i][j]->Sumw2();
       hDataRec[i][j]->Scale(scale[i-1]);
-      hDataRec[i][j]->SetLineColor(color[i-1]);
-      hDataRec[i][j]->Draw("histsame");
+      hDataRec[i][j]->SetLineColor(color[i]);
+      hDataRec[i][j]->SetMarkerStyle(markerStyle);
+      hDataRec[i][j]->SetMarkerSize(markerSize[i]);
+      hDataRec[i][j]->SetMarkerColor(color[i]);
+      hDataRec[i][j]->Draw("e0same");
     }
     c->cd(3);
-    hDataAcc[0][j]->SetLineColor(1);
-    hDataAcc[0][j]->SetMarkerColor(1);
+    hDataAcc[0][j]->SetLineColor(color[0]);
+    hDataAcc[0][j]->SetMarkerStyle(markerStyle);
+    hDataAcc[0][j]->SetMarkerSize(markerSize[0]);
+    hDataAcc[0][j]->SetMarkerColor(color[0]);
     hDataAcc[0][j]->Draw("e0");
     for (Int_t i = 1; i < nFiles; i++) {
-      hDataAcc[i][j]->SetLineColor(color[i-1]);
-      hDataAcc[i][j]->SetMarkerColor(color[i-1]);
+      hDataAcc[i][j]->SetLineColor(color[i]);
+      hDataAcc[i][j]->SetMarkerStyle(markerStyle);
+      hDataAcc[i][j]->SetMarkerSize(markerSize[i]);
+      hDataAcc[i][j]->SetMarkerColor(color[i]);
       hDataAcc[i][j]->Draw("e0same");
     }
     c->cd(4);
     for (Int_t i = 0; i < nFiles-1; i++) {
-      hGenRat[i][j]->SetLineColor(color[i]);
-      hGenRat[i][j]->SetMarkerStyle(21);
-      hGenRat[i][j]->SetMarkerSize(0.6);
-      hGenRat[i][j]->SetMarkerColor(color[i]);
+      hGenRat[i][j]->SetLineColor(color[i+1]);
+      hGenRat[i][j]->SetMarkerStyle(markerStyle);
+      hGenRat[i][j]->SetMarkerSize(markerSize[i+1]);
+      hGenRat[i][j]->SetMarkerColor(color[i+1]);
       hGenRat[i][j]->Scale(scale[i]);
-      if (i == 0) hGenRat[i][j]->Draw("e0");
-      else hGenRat[i][j]->Draw("e0same");
+      if (i == 0) hGenRat[i][j]->Draw((j<4)?"e0":"histpx0");
+      else hGenRat[i][j]->Draw((j<4)?"e0same":"histpx0same");
     }
     c->cd(5);
     for (Int_t i = 0; i < nFiles-1; i++) {
-      hRecRat[i][j]->SetLineColor(color[i]);
-      hRecRat[i][j]->SetMarkerStyle(21);
-      hRecRat[i][j]->SetMarkerSize(0.6);
-      hRecRat[i][j]->SetMarkerColor(color[i]);
+      hRecRat[i][j]->SetLineColor(color[i+1]);
+      hRecRat[i][j]->SetMarkerStyle(markerStyle);
+      hRecRat[i][j]->SetMarkerSize(markerSize[i+1]);
+      hRecRat[i][j]->SetMarkerColor(color[i+1]);
       hRecRat[i][j]->Scale(scale[i]);
-      if (i == 0) hRecRat[i][j]->Draw("e0");
-      else hRecRat[i][j]->Draw("e0same");
+      if (i == 0) hRecRat[i][j]->Draw((j<4)?"e0":"histpx0");
+      else hRecRat[i][j]->Draw((j<4)?"e0same":"histpx0same");
     }
     c->cd(6);
     for (Int_t i = 0; i < nFiles-1; i++) {
-      hAccRat[i][j]->SetLineColor(color[i]);
-      hAccRat[i][j]->SetMarkerStyle(21);
-      hAccRat[i][j]->SetMarkerSize(0.6);
-      hAccRat[i][j]->SetMarkerColor(color[i]);
-      if (i == 0) hAccRat[i][j]->Draw("e0");
-      else hAccRat[i][j]->Draw("e0same");
+      hAccRat[i][j]->SetLineColor(color[i+1]);
+      hAccRat[i][j]->SetMarkerStyle(markerStyle);
+      hAccRat[i][j]->SetMarkerSize(markerSize[i+1]);
+      hAccRat[i][j]->SetMarkerColor(color[i+1]);
+      if (i == 0) hAccRat[i][j]->Draw((j<4)?"e0":"histpx0");
+      else hAccRat[i][j]->Draw((j<4)?"e0same":"histpx0same");
     }
   }
+  
+  // draw histos vs pT differently for the note
+  TCanvas* cpT = new TCanvas("CompareAccEffVspT", "CompareAccEffVspT", 900, 600);
+  cpT->Divide(2,2);
+  cpT->cd(1);
+  gPad->SetLogy();
+  if (!hDataGen[0][0]) continue;
+  TH1 *h = static_cast<TH1*>(hDataGen[0][0]->Clone());
+  h->SetStats(0);
+  h->GetXaxis()->SetTitleSize(0.05);
+  h->GetXaxis()->SetLabelSize(0.05);
+  h->GetYaxis()->SetTitleSize(0.05);
+  h->GetYaxis()->SetTitleOffset(0.8);
+  h->GetYaxis()->SetLabelSize(0.05);
+  h->Draw("e0");
+  for (Int_t i = 1; i < nFiles; i++) hDataGen[i][0]->Draw("e0same");
+  cpT->cd(2);
+  if (!hDataAcc[0][4]) continue;
+  h = static_cast<TH1*>(hDataAcc[0][4]->Clone());
+  h->GetXaxis()->SetTitleSize(0.05);
+  h->GetXaxis()->SetTitleOffset(0.);
+  h->GetXaxis()->SetLabelSize(0.05);
+  h->GetYaxis()->SetTitleSize(0.05);
+  h->GetYaxis()->SetLabelSize(0.05);
+  h->Draw("e0");
+  for (Int_t i = 1; i < nFiles; i++) hDataAcc[i][4]->Draw("e0same");
+  cpT->cd(3);
+  if (!hGenRat[0][0]) continue;
+  h = static_cast<TH1*>(hGenRat[0][0]->Clone());
+  h->SetStats(0);
+  h->GetXaxis()->SetTitleSize(0.05);
+  h->GetXaxis()->SetLabelSize(0.05);
+  h->GetYaxis()->SetTitleSize(0.05);
+  h->GetYaxis()->SetTitleOffset(0.8);
+  h->GetYaxis()->SetLabelSize(0.05);
+  h->Draw("e0");
+  for (Int_t i = 1; i < nFiles-1; i++) hGenRat[i][0]->Draw("e0same");
+  cpT->cd(4);
+  gPad->SetGridy();
+  if (!hAccRat[0][4]) continue;
+  h = static_cast<TH1*>(hAccRat[0][4]->Clone());
+  h->GetXaxis()->SetTitleSize(0.05);
+  h->GetXaxis()->SetTitleOffset(0.);
+  h->GetXaxis()->SetLabelSize(0.05);
+  h->GetYaxis()->SetTitleSize(0.05);
+  h->GetYaxis()->SetLabelSize(0.05);
+  h->Draw("histpx0");
+  for (Int_t i = 1; i < nFiles-1; i++) hAccRat[i][4]->Draw("histpx0same");
+  
+  // draw histos vs y differently for the note
+  TCanvas* cy = new TCanvas("CompareAccEffVsy", "CompareAccEffVsy", 900, 600);
+  cy->Divide(2,2);
+  cy->cd(1);
+  if (!hDataGen[0][1]) continue;
+  TH1 *h = static_cast<TH1*>(hDataGen[0][1]->Clone());
+  h->SetStats(0);
+  h->GetXaxis()->SetTitleSize(0.05);
+  h->GetXaxis()->SetLabelSize(0.05);
+  h->GetYaxis()->SetTitleSize(0.05);
+  h->GetYaxis()->SetTitleOffset(0.8);
+  h->GetYaxis()->SetLabelSize(0.05);
+  h->Draw("e0");
+  for (Int_t i = 1; i < nFiles; i++) hDataGen[i][1]->Draw("e0same");
+  cy->cd(2);
+  if (!hDataAcc[0][5]) continue;
+  h = static_cast<TH1*>(hDataAcc[0][5]->Clone());
+  h->GetXaxis()->SetTitleSize(0.05);
+  h->GetXaxis()->SetTitleOffset(0.);
+  h->GetXaxis()->SetLabelSize(0.05);
+  h->GetYaxis()->SetTitleSize(0.05);
+  h->GetYaxis()->SetLabelSize(0.05);
+  h->Draw("e0");
+  for (Int_t i = 1; i < nFiles; i++) hDataAcc[i][5]->Draw("e0same");
+  cy->cd(3);
+  if (!hGenRat[0][1]) continue;
+  h = static_cast<TH1*>(hGenRat[0][1]->Clone());
+  h->SetStats(0);
+  h->GetXaxis()->SetTitleSize(0.05);
+  h->GetXaxis()->SetLabelSize(0.05);
+  h->GetYaxis()->SetTitleSize(0.05);
+  h->GetYaxis()->SetTitleOffset(0.8);
+  h->GetYaxis()->SetLabelSize(0.05);
+  h->Draw("e0");
+  for (Int_t i = 1; i < nFiles-1; i++) hGenRat[i][1]->Draw("e0same");
+  cy->cd(4);
+  gPad->SetGridy();
+  if (!hAccRat[0][5]) continue;
+  h = static_cast<TH1*>(hAccRat[0][5]->Clone());
+  h->GetXaxis()->SetTitleSize(0.05);
+  h->GetXaxis()->SetTitleOffset(0.);
+  h->GetXaxis()->SetLabelSize(0.05);
+  h->GetYaxis()->SetTitleSize(0.05);
+  h->GetYaxis()->SetLabelSize(0.05);
+  h->Draw("histpx0");
+  for (Int_t i = 1; i < nFiles-1; i++) hAccRat[i][5]->Draw("histpx0same");
   
 }
 
