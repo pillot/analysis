@@ -13,8 +13,10 @@
 #include <TArrayD.h>
 #include <THashList.h>
 #include "AliAnalysisTaskSE.h"
+#include "AliMuonTrackCuts.h"
 
 class TH1F;
+class TF1;
 class TObjArray;
 class TList;
 class THashList;
@@ -98,6 +100,7 @@ public:
   virtual ~AliAnalysisTaskJPsiAccEffCorr2();
   
   virtual void   UserCreateOutputObjects();
+  virtual void   NotifyRun();
   virtual void   UserExec(Option_t *);
   virtual void   Terminate(Option_t *);
   
@@ -109,9 +112,6 @@ public:
   
   /// set y binning
   void SetYBins(Int_t nBins, Float_t *binLowEdge) {fYBinLowEdge.Set(nBins+1, binLowEdge);}
-  
-  /// set the trigger level to be matched with (0=no, 1=all, 2=low, 3=high)
-  void SetTrigLevel(Int_t level = 1) {fTrigLevel = (level>=0 && level<4) ? level : 0;}
   
   /// set the number of muons to be matched with the trigger (0, 1 or 2)
   void SetNMatch(Int_t level = 1) {fNMatch = (level>=0 && level<3) ? level : 0;}
@@ -129,6 +129,19 @@ public:
   // Set the number of interested events per run
   void LoadRunWeights(const Char_t *fileName);
     
+  // set standard cuts to select tracks to be considered
+  void SetMuonTrackCuts(AliMuonTrackCuts &trackCuts);
+  
+  // create the original function with the parameters used in simulation to generate the pT distribution
+  void SetOriginPtFunc(TString formula, const Double_t *param, Double_t xMin, Double_t xMax);
+  // create the new function with the parameters used to generate the new pT distribution
+  void SetNewPtFunc(TString formula, const Double_t *param, Double_t xMin, Double_t xMax);
+  
+  // create the original function with the parameters used in simulation to generate the y distribution
+  void SetOriginYFunc(TString formula, const Double_t *param, Double_t xMin, Double_t xMax);
+  // create the new function with the parameters used to generate the new y distribution
+  void SetNewYFunc(TString formula, const Double_t *param, Double_t xMin, Double_t xMax);
+  
 private:
   
   /// Not implemented
@@ -168,6 +181,9 @@ private:
   /// Draw acceptance*efficiency versus centrality for this given pt/y bin
   void DrawAccEffVsCent(Int_t ipt, Int_t iy, Int_t nMatch);
   
+  // normalize the function to its integral in the given range
+  void NormFunc(TF1 *f, Double_t min, Double_t max);
+  
   private:
   
   enum eList {
@@ -195,15 +211,29 @@ private:
   TArrayF   fCentBinLowEdge; ///< centrality bin low-edge values
   TArrayF   fPtBinLowEdge;   ///< pT bin low-edge values
   TArrayF   fYBinLowEdge;    ///< y bin low-edge values
-  Int_t     fTrigLevel;      ///< trigger level to be matched with (1=all, 2=low, 3=high)
   Int_t     fNMatch;         ///< number of muons to be matched with the trigger (0, 1 or 2)
   Double_t  fMuLowPtCut;     ///< muon pt cut value
   Bool_t    fUseMCLabel;     ///< select tracks using MC label
   TList     *fSigWeights;    ///< number of signal versus centrality for different pt/y bins
   THashList *fRunWeights;    ///< number of interested events per run
   
-  ClassDef(AliAnalysisTaskJPsiAccEffCorr2, 2);
+  AliMuonTrackCuts* fMuonTrackCuts; ///< cuts to select tracks to be considered
+  
+  TF1     *fPtFuncOld; ///< original generated pT function with original parameters
+  TF1     *fPtFuncNew; ///< new generated pT fit function with new parameters
+  TF1     *fYFuncOld;  ///< original generated y function with original parameters
+  TF1     *fYFuncNew;  ///< new generated y fit function with new parameters
+  
+  ClassDef(AliAnalysisTaskJPsiAccEffCorr2, 3);
 };
+
+//________________________________________________________________________
+inline void AliAnalysisTaskJPsiAccEffCorr2::SetMuonTrackCuts(AliMuonTrackCuts &trackCuts)
+{
+  /// set standard cuts to select tracks to be considered
+  delete fMuonTrackCuts;
+  fMuonTrackCuts = new AliMuonTrackCuts(trackCuts);
+}
 
 #endif
 

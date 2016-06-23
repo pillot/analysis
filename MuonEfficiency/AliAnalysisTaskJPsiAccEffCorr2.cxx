@@ -19,6 +19,7 @@
 // ROOT includes
 #include <TMath.h>
 #include <TH1F.h>
+#include <TF1.h>
 #include <TParameter.h>
 #include <TObjArray.h>
 #include <TObjString.h>
@@ -157,12 +158,16 @@ fMassVsy(0x0),
 fCentBinLowEdge(0),
 fPtBinLowEdge(0),
 fYBinLowEdge(0),
-fTrigLevel(1),
 fNMatch(2),
 fMuLowPtCut(-1.),
 fUseMCLabel(kTRUE),
 fSigWeights(0x0),
-fRunWeights(0x0)
+fRunWeights(0x0),
+fMuonTrackCuts(0x0),
+fPtFuncOld(0x0),
+fPtFuncNew(0x0),
+fYFuncOld(0x0),
+fYFuncNew(0x0)
 {
   /// Dummy constructor
 }
@@ -178,12 +183,16 @@ fMassVsy(0x0),
 fCentBinLowEdge(0),
 fPtBinLowEdge(0),
 fYBinLowEdge(0),
-fTrigLevel(1),
 fNMatch(2),
 fMuLowPtCut(-1.),
 fUseMCLabel(kTRUE),
 fSigWeights(0x0),
-fRunWeights(0x0)
+fRunWeights(0x0),
+fMuonTrackCuts(0x0),
+fPtFuncOld(0x0),
+fPtFuncNew(0x0),
+fYFuncOld(0x0),
+fYFuncNew(0x0)
 {
   /// Constructor
   
@@ -221,6 +230,11 @@ AliAnalysisTaskJPsiAccEffCorr2::~AliAnalysisTaskJPsiAccEffCorr2()
   }
   delete fSigWeights;
   delete fRunWeights;
+  delete fMuonTrackCuts;
+  delete fPtFuncOld;
+  delete fPtFuncNew;
+  delete fYFuncOld;
+  delete fYFuncNew;
 }
 
 //___________________________________________________________________________
@@ -327,7 +341,7 @@ void AliAnalysisTaskJPsiAccEffCorr2::UserCreateOutputObjects()
   fJPsiCounters->AddRubric("ybin", ybins.Data());
   fJPsiCounters->AddRubric("cent", centbins.Data());
   fJPsiCounters->AddRubric("run", 100000);
-  fJPsiCounters->Init();
+  fJPsiCounters->Init(kTRUE);
   
   // Post data at least once per task to ensure data synchronisation (required for merging)
   PostData(1, fList);
@@ -335,6 +349,17 @@ void AliAnalysisTaskJPsiAccEffCorr2::UserCreateOutputObjects()
   PostData(3, fJPsiCounters);
   PostData(4, fMassVspT);
   PostData(5, fMassVsy);
+}
+
+//________________________________________________________________________
+void AliAnalysisTaskJPsiAccEffCorr2::NotifyRun()
+{
+  /// Prepare processing of new run: load corresponding OADB objects...
+  
+  // get the trackCuts for this run
+  if (!fMuonTrackCuts) AliFatal("You must specify the requested selections (AliMuonTrackCuts obj is missing)");
+  fMuonTrackCuts->SetRun(fInputHandler);
+  
 }
 
 //________________________________________________________________________
@@ -363,9 +388,13 @@ void AliAnalysisTaskJPsiAccEffCorr2::UserExec(Option_t *)
   TString matchKey[3] = {"any", "1", "2"};
   //  Double_t rAbsMin = 17.622;
   //  Double_t rAbsMax = 89.;
-  Double_t rAbsMin = 17.6;
-  Double_t rAbsMax = 89.5;
+  //Double_t rAbsMin = 17.6;
+  //Double_t rAbsMax = 89.5;
   Double_t mcPhi = 999.;
+  
+  UInt_t filterMask = fMuonTrackCuts->GetFilterMask();
+  UInt_t filterTrig = filterMask & (AliMuonTrackCuts::kMuMatchApt | AliMuonTrackCuts::kMuMatchLpt | AliMuonTrackCuts::kMuMatchHpt);
+  UInt_t filterRest = filterMask ^ filterTrig;
   
   // ------ MC part ------
   Int_t nMCTracks = mcEvt->GetNumberOfTracks();
@@ -386,6 +415,12 @@ void AliAnalysisTaskJPsiAccEffCorr2::UserExec(Option_t *)
   Double_t zVtxMC = AliAnalysisMuonUtility::GetMCVertexZ(evt,mcEvt);
   ((TH1F*)fList->UncheckedAt(kDzVtx))->Fill(zVtx-zVtxMC);
   
+  TArrayD weight;
+  if (fPtFuncOld && fPtFuncNew && fYFuncOld && fYFuncNew) {
+    weight.Set(nMCTracks);
+    fUseMCLabel = kTRUE; // enforce the use of MC label
+  }
+  
   for (Int_t iMCTrack = 0; iMCTrack < nMCTracks; ++iMCTrack) {
     
     AliVParticle *mctrack = mcEvt->GetTrack(iMCTrack);
@@ -394,23 +429,52 @@ void AliAnalysisTaskJPsiAccEffCorr2::UserExec(Option_t *)
     Double_t eta = mctrack->Eta();
     Double_t y = mctrack->Y();
     
+    // compute the weight only for JPsi
+    Double_t w = 1.;
+    if (weight.GetSize() > 0) {
+      if (AliAnalysisMuonUtility::IsPrimary(mctrack,mcEvt) && mctrack->PdgCode() == 443) {
+        weight[iMCTrack] = fPtFuncNew->Eval(pT) / fPtFuncOld->Eval(pT) * fYFuncNew->Eval(y) / fYFuncOld->Eval(y);
+        if (weight[iMCTrack] < 0.) {
+          AliError(Form("negative weight: y = %g, pT = %g: w = %g", y, pT, weight[iMCTrack]));
+          weight[iMCTrack] = 0.;
+        }
+      } else weight[iMCTrack] = 0.;
+      w = weight[iMCTrack];
+    }
+    
     // look for muons
     if (TMath::Abs(mctrack->PdgCode()) == 13 &&
 	eta >= fYBinLowEdge[0] && eta <= fYBinLowEdge[fYBinLowEdge.GetSize()-1]) {
       
-      ((TH1F*)fList->UncheckedAt(kPtGenMu))->Fill(pT);
-      ((TH1F*)fList->UncheckedAt(kYGenMu))->Fill(y);
+      Int_t motherMClabel = -1;
+      Bool_t fillHisto = kTRUE;
+      if (fUseMCLabel) {
+        motherMClabel = mctrack->GetMother();
+        if (motherMClabel < 0) fillHisto = kFALSE;
+        AliVParticle *mctrackMother = mcEvt->GetTrack(motherMClabel);
+        if (!mctrackMother || mctrackMother->PdgCode() != 443) fillHisto = kFALSE;
+      }
+      
+      if (fillHisto) {
+        
+        Double_t wMu = (weight.GetSize() > 0) ? weight[motherMClabel] : 1.;
+        
+        ((TH1F*)fList->UncheckedAt(kPtGenMu))->Fill(pT, wMu);
+        ((TH1F*)fList->UncheckedAt(kYGenMu))->Fill(y, wMu);
+        
+      }
       
     }
     
     // look for generated particles
     if(AliAnalysisMuonUtility::IsPrimary(mctrack,mcEvt) && mctrack->PdgCode() == 443 &&
+       //pT >= fPtBinLowEdge[0] && pT < fPtBinLowEdge[fPtBinLowEdge.GetSize()-1] &&
        y >= fYBinLowEdge[0] && y < fYBinLowEdge[fYBinLowEdge.GetSize()-1]) {
       
       mcPhi = mctrack->Phi();
       
-      ((TH1F*)fList->UncheckedAt(kPtGen))->Fill(pT);
-      ((TH1F*)fList->UncheckedAt(kYGen))->Fill(y);
+      ((TH1F*)fList->UncheckedAt(kPtGen))->Fill(pT, w);
+      ((TH1F*)fList->UncheckedAt(kYGen))->Fill(y, w);
       
       // pt bin
       TString ptKey = "";
@@ -428,9 +492,9 @@ void AliAnalysisTaskJPsiAccEffCorr2::UserExec(Option_t *)
       
       for (Int_t itrg = 0; itrg < 3; itrg++) {
 	fJPsiCounters->Count(Form("type:gen/match:%s/ptbin:%s/ybin:%s/cent:any/run:%d",
-				  matchKey[itrg].Data(),ptKey.Data(),yKey.Data(),fCurrentRunNumber));
+				  matchKey[itrg].Data(),ptKey.Data(),yKey.Data(),fCurrentRunNumber), w);
 	if (!centKey.IsNull()) fJPsiCounters->Count(Form("type:gen/match:%s/ptbin:%s/ybin:%s/cent:%s/run:%d",
-							 matchKey[itrg].Data(),ptKey.Data(),yKey.Data(),centKey.Data(),fCurrentRunNumber));
+							 matchKey[itrg].Data(),ptKey.Data(),yKey.Data(),centKey.Data(),fCurrentRunNumber), w);
       }
       
     }
@@ -445,23 +509,36 @@ void AliAnalysisTaskJPsiAccEffCorr2::UserExec(Option_t *)
     AliVParticle *track1 = AliAnalysisMuonUtility::GetTrack(iTrack1, evt);
     if (!AliAnalysisMuonUtility::IsMuonTrack(track1)) continue;
     
-    if (fUseMCLabel && track1->GetLabel() < 0) continue;
+    UInt_t selectionMask1 = fMuonTrackCuts->GetSelectionMask(track1);
+    if ((selectionMask1 & filterRest) != filterRest) continue;
+    
+    Int_t motherMClabel1 = -1;
+    if (fUseMCLabel) {
+      if (track1->GetLabel() < 0) continue;
+      AliVParticle *mctrack = mcEvt->GetTrack(track1->GetLabel());
+      if (!mctrack || TMath::Abs(mctrack->PdgCode()) != 13) continue;
+      motherMClabel1 = mctrack->GetMother();
+      if (motherMClabel1 < 0) continue;
+      AliVParticle *mctrackMother = mcEvt->GetTrack(motherMClabel1);
+      if (!mctrackMother || mctrackMother->PdgCode() != 443) continue;
+    }
+    
+    Double_t w = (weight.GetSize() > 0) ? weight[motherMClabel1] : 1.;
     
     TLorentzVector muV1(track1->Px(), track1->Py(), track1->Pz(), track1->E());
+    Bool_t matchTrig1 = ((selectionMask1 & filterTrig) == filterTrig);
     Short_t charge1 = track1->Charge();
-    Int_t matchTrig1 = AliAnalysisMuonUtility::GetMatchTrigger(track1);
     Double_t eta1 = track1->Eta();
-    Double_t rAbs1 = AliAnalysisMuonUtility::GetRabs(track1);
-    Double_t thetaAbs1 = AliAnalysisMuonUtility::GetThetaAbsDeg(track1);
+    //Double_t rAbs1 = AliAnalysisMuonUtility::GetRabs(track1);
     Double_t pT1 = track1->Pt();
     
     // fill single muon information
-    if (matchTrig1 >= fTrigLevel &&
-	eta1 >= fYBinLowEdge[0] && eta1 <= fYBinLowEdge[fYBinLowEdge.GetSize()-1] &&
-	rAbs1 >= rAbsMin && rAbs1 <= rAbsMax) {
+    if (matchTrig1
+	//&& rAbs1 >= rAbsMin && rAbs1 <= rAbsMax
+        ) {
       
-      ((TH1F*)fList->UncheckedAt(kPtRecMu))->Fill(pT1);
-      ((TH1F*)fList->UncheckedAt(kYRecMu))->Fill(track1->Y());
+      ((TH1F*)fList->UncheckedAt(kPtRecMu))->Fill(pT1, w);
+      ((TH1F*)fList->UncheckedAt(kYRecMu))->Fill(track1->Y(), w);
       
     }
     
@@ -470,14 +547,20 @@ void AliAnalysisTaskJPsiAccEffCorr2::UserExec(Option_t *)
       AliVParticle *track2 = AliAnalysisMuonUtility::GetTrack(iTrack2, evt);
       if (!AliAnalysisMuonUtility::IsMuonTrack(track2)) continue;
       
-      if (fUseMCLabel && track2->GetLabel() < 0) continue;
+      UInt_t selectionMask2 = fMuonTrackCuts->GetSelectionMask(track2);
+      if ((selectionMask2 & filterRest) != filterRest) continue;
+      
+      if (fUseMCLabel) {
+        if (track2->GetLabel() < 0) continue;
+        AliVParticle *mctrack = mcEvt->GetTrack(track2->GetLabel());
+        if (!mctrack || TMath::Abs(mctrack->PdgCode()) != 13 || mctrack->GetMother() != motherMClabel1) continue;
+      }
       
       TLorentzVector muV2(track2->Px(), track2->Py(), track2->Pz(), track2->E());
+      Bool_t matchTrig2 = ((selectionMask2 & filterTrig) == filterTrig);
       Short_t charge2 = track2->Charge();
-      Int_t matchTrig2 = AliAnalysisMuonUtility::GetMatchTrigger(track2);
       Double_t eta2 = track2->Eta();
-      Double_t rAbs2 = AliAnalysisMuonUtility::GetRabs(track2);
-      Double_t thetaAbs2 = AliAnalysisMuonUtility::GetThetaAbsDeg(track2);
+      //Double_t rAbs2 = AliAnalysisMuonUtility::GetRabs(track2);
       Double_t pT2 = track2->Pt();
       
       TLorentzVector dimuV = muV1 + muV2;
@@ -489,13 +572,12 @@ void AliAnalysisTaskJPsiAccEffCorr2::UserExec(Option_t *)
       // fill dimuon information
       //Double_t ptCut1 = gRandom->Gaus(fMuLowPtCut,0.333);
       //Double_t ptCut2 = gRandom->Gaus(fMuLowPtCut,0.333);
-      if(charge < 0 &&
-         y >= fYBinLowEdge[0] && y < fYBinLowEdge[fYBinLowEdge.GetSize()-1] &&
-         eta1 >= -4. && eta1 <= -2.5 && eta2 >= -4. && eta2 <= -2.5 &&
-         //pT1 > ptCut1 && pT2 > ptCut2 &&
-         pT1 > fMuLowPtCut && pT2 > fMuLowPtCut &&
-         //rAbs1 >= rAbsMin && rAbs1 <= rAbsMax && rAbs2 >= rAbsMin && rAbs2 <= rAbsMax
-         thetaAbs1 >= 2. && thetaAbs1 <= 10. && thetaAbs2 >= 2. && thetaAbs2 <= 10.
+      if(charge < 0
+         //&& pT >= fPtBinLowEdge[0] && pT < fPtBinLowEdge[fPtBinLowEdge.GetSize()-1]
+         && y >= fYBinLowEdge[0] && y < fYBinLowEdge[fYBinLowEdge.GetSize()-1]
+         //&& pT1 > ptCut1 && pT2 > ptCut2
+         && pT1 > fMuLowPtCut && pT2 > fMuLowPtCut
+         //&& rAbs1 >= rAbsMin && rAbs1 <= rAbsMax && rAbs2 >= rAbsMin && rAbs2 <= rAbsMax
          ) {
         /*
         // remove events with muons generated outside 168.5<Theta<178.5
@@ -517,20 +599,20 @@ void AliAnalysisTaskJPsiAccEffCorr2::UserExec(Option_t *)
         }
         */
         Bool_t trigOk[3] = {kTRUE, kFALSE, kFALSE};
-        if(matchTrig1 >= fTrigLevel || matchTrig2 >= fTrigLevel) trigOk[1] = kTRUE;
-        if(matchTrig1 >= fTrigLevel && matchTrig2 >= fTrigLevel) trigOk[2] = kTRUE;
+        if(matchTrig1 || matchTrig2) trigOk[1] = kTRUE;
+        if(matchTrig1 && matchTrig2) trigOk[2] = kTRUE;
         
         if (trigOk[2]) {
-          ((TH1F*)fList->UncheckedAt(kPtRec))->Fill(pT);
-          ((TH1F*)fList->UncheckedAt(kYRec))->Fill(y);
-          ((TH1F*)fList->UncheckedAt(kMass))->Fill(m);
+          ((TH1F*)fList->UncheckedAt(kPtRec))->Fill(pT, w);
+          ((TH1F*)fList->UncheckedAt(kYRec))->Fill(y, w);
+          ((TH1F*)fList->UncheckedAt(kMass))->Fill(m, w);
           Double_t phi = dimuV.Phi();
           if (phi < 0.) phi += 2.*TMath::Pi();
           Double_t dPhi = (phi-mcPhi);
           if (dPhi < -TMath::Pi()) dPhi += 2.*TMath::Pi();
           else if (dPhi > TMath::Pi()) dPhi -= 2.*TMath::Pi();
           ((TH1F*)fList->UncheckedAt(kDphi))->Fill(dPhi*TMath::RadToDeg());
-          if (dPhi > -0.5*TMath::Pi() && dPhi < 0.5*TMath::Pi()) ((TH1F*)fList->UncheckedAt(kCos2Dphi))->Fill(TMath::Cos(2.*dPhi));
+          if (dPhi > -0.5*TMath::Pi() && dPhi < 0.5*TMath::Pi()) ((TH1F*)fList->UncheckedAt(kCos2Dphi))->Fill(TMath::Cos(2.*dPhi), w);
           //((TH1F*)fList->UncheckedAt(kPtRecMu))->Fill(pT1);
           //((TH1F*)fList->UncheckedAt(kYRecMu))->Fill(track1->Y());
           //((TH1F*)fList->UncheckedAt(kPtRecMu))->Fill(pT2);
@@ -563,17 +645,17 @@ void AliAnalysisTaskJPsiAccEffCorr2::UserExec(Option_t *)
         for (Int_t itrg = 0; itrg < 3; itrg++) {
           if (!trigOk[itrg]) continue;
           fJPsiCounters->Count(Form("type:rec/match:%s/ptbin:%s/ybin:%s/cent:any/run:%d",
-                                    matchKey[itrg].Data(),ptKey.Data(),yKey.Data(),fCurrentRunNumber));
+                                    matchKey[itrg].Data(),ptKey.Data(),yKey.Data(),fCurrentRunNumber), w);
           if (!centKey.IsNull()) fJPsiCounters->Count(Form("type:rec/match:%s/ptbin:%s/ybin:%s/cent:%s/run:%d",
-                                                           matchKey[itrg].Data(),ptKey.Data(),yKey.Data(),centKey.Data(),fCurrentRunNumber));
+                                                           matchKey[itrg].Data(),ptKey.Data(),yKey.Data(),centKey.Data(),fCurrentRunNumber), w);
         }
         
         // fill mass histos
         if (trigOk[2]) {
-          ((TH1F*)fMassVspT->UncheckedAt(0))->Fill(m);
-          ((TH1F*)fMassVspT->UncheckedAt(ipt+1))->Fill(m);
-          ((TH1F*)fMassVsy->UncheckedAt(0))->Fill(m);
-          ((TH1F*)fMassVsy->UncheckedAt(iy+1))->Fill(m);
+          ((TH1F*)fMassVspT->UncheckedAt(0))->Fill(m, w);
+          ((TH1F*)fMassVspT->UncheckedAt(ipt+1))->Fill(m, w);
+          ((TH1F*)fMassVsy->UncheckedAt(0))->Fill(m, w);
+          ((TH1F*)fMassVsy->UncheckedAt(iy+1))->Fill(m, w);
         }
         
       }
@@ -1526,5 +1608,90 @@ void AliAnalysisTaskJPsiAccEffCorr2::DrawAccEffVsCent(Int_t ipt, Int_t iy, Int_t
   delete hgen;
   delete hrec;
   
+}
+
+//________________________________________________________________________
+void AliAnalysisTaskJPsiAccEffCorr2::SetOriginPtFunc(TString formula, const Double_t *param, Double_t xMin, Double_t xMax)
+{
+  /// Create the original function with the parameters used in simulation to generate the pT distribution.
+  /// It must be in the form [0]*(...) to allow for global normalization.
+  /// The [xMin,xMax] range is used to normalized the function.
+  /// Some parameters can be fixed when fitting the generated distribution for cross-check.
+  
+  assert(param);
+  
+  delete fPtFuncOld;
+  fPtFuncOld = new TF1("fPtFuncOld", formula.Data(), xMin, xMax);
+  
+  fPtFuncOld->SetParameters(param);
+  
+  NormFunc(fPtFuncOld, xMin, xMax);
+  
+}
+
+//________________________________________________________________________
+void AliAnalysisTaskJPsiAccEffCorr2::SetNewPtFunc(TString formula, const Double_t *param, Double_t xMin, Double_t xMax)
+{
+  /// Create the new function with its initial parameters to fit the generated/weighted pT distribution.
+  /// It must be in the form [0]*(...) to allow for global normalization.
+  /// The [xMin,xMax] range is used to normalized the function.
+  /// Some parameters can be fixed when fitting the generated distribution.
+  
+  assert(param);
+  
+  delete fPtFuncNew;
+  fPtFuncNew = new TF1("fPtFuncNew", formula.Data(), xMin, xMax);
+  
+  fPtFuncNew->SetParameters(param);
+  
+  NormFunc(fPtFuncNew, xMin, xMax);
+  
+}
+
+//________________________________________________________________________
+void AliAnalysisTaskJPsiAccEffCorr2::SetOriginYFunc(TString formula, const Double_t *param, Double_t xMin, Double_t xMax)
+{
+  /// Create the original function with the parameters used in simulation to generate the y distribution.
+  /// It must be in the form [0]*(...) to allow for global normalization.
+  /// The [xMin,xMax] range is used to normalized the function.
+  /// Some parameters can be fixed when fitting the generated distribution for cross-check.
+  
+  assert(param);
+  
+  delete fYFuncOld;
+  fYFuncOld = new TF1("fYFuncOld", formula.Data(), xMin, xMax);
+  
+  fYFuncOld->SetParameters(param);
+  
+  NormFunc(fYFuncOld, xMin, xMax);
+  
+}
+
+//________________________________________________________________________
+void AliAnalysisTaskJPsiAccEffCorr2::SetNewYFunc(TString formula, const Double_t *param, Double_t xMin, Double_t xMax)
+{
+  /// Create the new function with its initial parameters to fit the generated/weighted y distribution.
+  /// It must be in the form [0]*(...) to allow for global normalization.
+  /// The [xMin,xMax] range is used to normalized the function.
+  /// Some parameters can be fixed when fitting the generated distribution.
+  
+  assert(param);
+  
+  delete fYFuncNew;
+  fYFuncNew = new TF1("fYFuncNew", formula.Data(), xMin, xMax);
+  
+  fYFuncNew->SetParameters(param);
+  
+  NormFunc(fYFuncNew, xMin, xMax);
+  
+}
+
+//________________________________________________________________________
+void AliAnalysisTaskJPsiAccEffCorr2::NormFunc(TF1 *f, Double_t min, Double_t max)
+{
+  /// normalize the function to its integral in the given range
+  f->SetNpx(100.*(max-min));
+  Double_t integral = f->Integral(min, max);
+  if (integral != 0.) f->SetParameter(0, f->GetParameter(0)/integral);
 }
 
