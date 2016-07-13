@@ -64,7 +64,10 @@ fEventCounters(0x0),
 fTrigCounters(0x0),
 fMuonTrackCuts(0x0),
 fMuonTrackCuts2(0x0),
-fPtCut(-1.),
+fPtMin(-1.),
+fPtMax(-1.),
+fDimuPtMin(-1.),
+fDimuPtMax(-1.),
 fUseMCLabel(kFALSE),
 fSelectBadTracks(kFALSE),
 fCentMin(-FLT_MAX),
@@ -85,7 +88,10 @@ fEventCounters(0x0),
 fTrigCounters(0x0),
 fMuonTrackCuts(0x0),
 fMuonTrackCuts2(0x0),
-fPtCut(-1.),
+fPtMin(-1.),
+fPtMax(-1.),
+fDimuPtMin(-1.),
+fDimuPtMax(-1.),
 fUseMCLabel(kFALSE),
 fSelectBadTracks(kFALSE),
 fCentMin(-FLT_MAX),
@@ -550,8 +556,9 @@ void AliAnalysisTaskMuonPhysics::UserExec(Option_t *)
 	TLorentzVector muV2(track2->Px(), track2->Py(), track2->Pz(), track2->E());
 	TLorentzVector dimuV = muV1 + muV2;
 	
-        //if (dimuV.Pt() <= 18. || dimuV.Pt() > 20.) continue;
-        if (dimuV.Rapidity() <= -4. || dimuV.Rapidity() > -2.5) continue;
+        if (fDimuPtMin > 0. && dimuV.Pt() < fDimuPtMin) continue;
+        if (fDimuPtMax > 0. && dimuV.Pt() > fDimuPtMax) continue;
+        if (dimuV.Rapidity() < -4. || dimuV.Rapidity() > -2.5) continue;
         
 	// fill dimuon histograms
 	((TH1F*)fList->UncheckedAt(kMass))->Fill(dimuV.M());
@@ -624,7 +631,7 @@ void AliAnalysisTaskMuonPhysics::Terminate(Option_t *)
   // reset track cuts
 //  fMuonTrackCuts->SetCustomParamFromRun(169859, "pass2_muon");
 //  fMuonTrackCuts->SetCustomParamFromRun(189576, "muon_calo_pass2");
-  fMuonTrackCuts->SetCustomParamFromRun(244340, "muon_calo_pass1");
+  fMuonTrackCuts->SetCustomParamFromRun(244340, "muon_calo_pass2");
   fMuonTrackCuts->Print();
   
   // pDCA cut functions
@@ -698,8 +705,9 @@ Bool_t AliAnalysisTaskMuonPhysics::IsSelected(AliVParticle& track, Bool_t isESD,
   // skip tracks without cluster in station 2
   //if (!AliAnalysisMuonUtility::IsTrkChamberHit(2, &track) && !AliAnalysisMuonUtility::IsTrkChamberHit(3, &track)) return kFALSE;
   
-  // skip tracks with pT < fPtCut
-  if (fPtCut > 0. && track.Pt() < fPtCut) return kFALSE;
+  // skip tracks with pT < fPtMin and pT > fPtMax
+  if (fPtMin > 0. && track.Pt() < fPtMin) return kFALSE;
+  if (fPtMax > 0. && track.Pt() > fPtMax) return kFALSE;
   
   // skip tracks with p < 200 GeV/c
   //if (track.P() < 100.) return kFALSE;
