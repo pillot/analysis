@@ -51,6 +51,7 @@ void SaveQA(TString inputDataFile, TString inputMCFile)
   
   TString currDataName; // Current file path in Data
   TString currMCName; // Current file path in Data
+  TString failedRuns;
   
   TCanvas cTmp;
   gStyle->SetOptStat(0);
@@ -71,6 +72,11 @@ void SaveQA(TString inputDataFile, TString inputMCFile)
       return;
     }
     
+    if (!gSystem->AccessPathName(Form("displays/%d/ESDclusterMapChamber1.png",runNumberMC))) {
+      cout<<"run "<<runNumberMC<<" already processed. Remove files to reprocess..." << endl;
+      continue;
+    }
+    
     cout<<"\rprocessing run "<<runNumberMC<<" ...\r"<<flush;
     
     if (gSystem->AccessPathName(Form("displays/%d",runNumberMC)))
@@ -78,7 +84,10 @@ void SaveQA(TString inputDataFile, TString inputMCFile)
     
     TFile* currDataFile = TFile::Open(currDataName.Data(),"read");
     TFile* currMCFile = TFile::Open(currMCName.Data(),"read");
-    if (!currDataFile || !currDataFile->IsOpen() || !currMCFile || !currMCFile->IsOpen()) break;
+    if (!currDataFile || !currDataFile->IsOpen() || !currMCFile || !currMCFile->IsOpen()) {
+      failedRuns += Form("%d ", runNumberMC);
+      continue;
+    }
     
     TObjArray *objsData = static_cast<TObjArray*>(currDataFile->Get("MUON_QA/expert"));
     TObjArray *objsMC = static_cast<TObjArray*>(currMCFile->Get("MUON_QA/expert"));
@@ -95,6 +104,7 @@ void SaveQA(TString inputDataFile, TString inputMCFile)
 					     MultDirMC.Data(),MultDirMC.Data(),iCh)));
       if (!clusterMapData || !clusterMapMC) {
 	cout << "histograms not found for run " << runNumber << endl;
+        failedRuns += Form("%d ", runNumberMC);
 	break;
       }
       
@@ -115,7 +125,9 @@ void SaveQA(TString inputDataFile, TString inputMCFile)
   inDataFile.close();
   inMCFile.close();
   
-  cout << "done                     " << endl;
+  if (!failedRuns.IsNull()) {
+    cout << "processing failed for run(s) " << failedRuns.Data() << endl;
+  } else cout << "done                     " << endl;
 
 }
 
@@ -153,7 +165,10 @@ void CountTracks(TString inputFile)
     cout<<"\rprocessing run "<<runNumber<<" ...\r"<<flush;
     
     TFile* currFile = TFile::Open(currName.Data(),"read");
-    if (!currFile || !currFile->IsOpen()) continue;
+    if (!currFile || !currFile->IsOpen()) {
+      badFiles.AddLast(new TObjString(currName.Data()));
+      continue;
+    }
     
     TH1* hnClusters = 0x0;
     TObjArray *objs = static_cast<TObjArray*>(currFile->Get("MUON_QA/general1"));
