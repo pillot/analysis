@@ -18,8 +18,9 @@
 #include "TStyle.h"
 #include "TCanvas.h"
 #include "TH1.h"
+#include "TGrid.h"
+#include "AliAnalysisMuonUtility.h"
 
-Bool_t isQATask = kTRUE;
 TString MultDirData = "LowMultiplicity";
 TString MultDirMC = "LowMultiplicity";
 
@@ -40,6 +41,11 @@ void SaveQA(TString inputDataFile, TString inputMCFile)
     printf("cannot open file %s\n",inputMCFile.Data());
     return;
   }
+  
+  if (TString(gSystem->GetFromPipe(TString::Format("grep -c alien:// %s", inputDataFile.Data()))).Atoi() > 0 ||
+      TString(gSystem->GetFromPipe(TString::Format("grep -c alien:// %s", inputMCFile.Data()))).Atoi() > 0) {
+    TGrid::Connect("alien://");
+  }
 
   if (gSystem->AccessPathName("displays")) gSystem->Exec("mkdir displays");
   
@@ -58,53 +64,37 @@ void SaveQA(TString inputDataFile, TString inputMCFile)
     currMCName.ReadLine(inMCFile,kTRUE); // Read line in input MC file
     if(currMCName.IsNull()) continue;
     
-    TString runNumber = currDataName;
-    Int_t c = runNumber.Last('/');
-    runNumber.Remove(c);
-    c = runNumber.Last('/');
-    runNumber.Remove(0,c+1);
-    
-    TString runNumberMC = currMCName;
-    c = runNumberMC.Last('/');
-    runNumberMC.Remove(c);
-    c = runNumberMC.Last('/');
-    runNumberMC.Remove(0,c+1);
-    
-    if (runNumberMC.Atoi() != runNumber.Atoi()) {
+    Int_t runNumber(AliAnalysisMuonUtility::GetRunNumber(currDataName.Data()));
+    Int_t runNumberMC(AliAnalysisMuonUtility::GetRunNumber(currMCName.Data()));
+    if (runNumberMC != runNumber) {
       cout << "ERROR: mismatch found between the 2 files... Aborting." << endl;
       return;
     }
     
-    cout<<"\rprocessing run "<<runNumberMC.Data()<<" ...\r"<<flush;
+    cout<<"\rprocessing run "<<runNumberMC<<" ...\r"<<flush;
     
-    if (gSystem->AccessPathName(Form("displays/%s",runNumberMC.Data())))
-      gSystem->Exec(Form("mkdir displays/%s", runNumberMC.Data()));
+    if (gSystem->AccessPathName(Form("displays/%d",runNumberMC)))
+      gSystem->Exec(Form("mkdir displays/%d", runNumberMC));
     
-    TFile* currDataFile = new TFile(currDataName.Data(),"read");
-    TFile* currMCFile = new TFile(currMCName.Data(),"read");
+    TFile* currDataFile = TFile::Open(currDataName.Data(),"read");
+    TFile* currMCFile = TFile::Open(currMCName.Data(),"read");
+    if (!currDataFile || !currDataFile->IsOpen() || !currMCFile || !currMCFile->IsOpen()) break;
     
-    TObjArray *objsData = 0x0, *objsMC = 0x0;
-    if (isQATask) {
-      objsData = static_cast<TObjArray*>(currDataFile->Get("MUON_QA/expert"));
-      objsMC = static_cast<TObjArray*>(currMCFile->Get("MUON_QA/expert"));
-      if (!objsData || !objsMC) {
-	cout << "lists not found for run " << runNumberMC.Data() << endl;
-	break;
-      }
-    }
+    TObjArray *objsData = static_cast<TObjArray*>(currDataFile->Get("MUON_QA/expert"));
+    TObjArray *objsMC = static_cast<TObjArray*>(currMCFile->Get("MUON_QA/expert"));
     
     for ( Int_t iCh = 1 ; iCh < 11 ; iCh++ )
     {
-      TH1* clusterMapData = isQATask ?
+      TH1* clusterMapData = objsData ?
       static_cast<TH1*>(objsData->FindObject(Form("hClusterHitMapInCh%d",iCh))) :
       static_cast<TH1*>(currDataFile->Get(Form("MUON/ESDs/%s/Expert/%s_hESDClusterHitMap%d",
 					       MultDirData.Data(),MultDirData.Data(),iCh)));
-      TH1* clusterMapMC = isQATask ?
+      TH1* clusterMapMC = objsMC ?
       static_cast<TH1*>(objsMC->FindObject(Form("hClusterHitMapInCh%d",iCh))) :
       static_cast<TH1*>(currMCFile->Get(Form("MUON/ESDs/%s/Expert/%s_hESDClusterHitMap%d",
 					     MultDirMC.Data(),MultDirMC.Data(),iCh)));
       if (!clusterMapData || !clusterMapMC) {
-	cout << "histograms not found for run " << runNumber.Data() << endl;
+	cout << "histograms not found for run " << runNumber << endl;
 	break;
       }
       
@@ -114,7 +104,7 @@ void SaveQA(TString inputDataFile, TString inputMCFile)
       cTmp.cd(2);
       clusterMapMC->Draw();
 
-      cTmp.Print(Form("displays/%s/ESDclusterMapChamber%d.png",runNumber.Data(),iCh), "png");
+      cTmp.Print(Form("displays/%d/ESDclusterMapChamber%d.png",runNumber,iCh), "png");
 
     }
     
@@ -141,6 +131,10 @@ void CountTracks(TString inputFile)
     return;
   }
   
+  if (TString(gSystem->GetFromPipe(TString::Format("grep -c alien:// %s", inputFile.Data()))).Atoi() > 0) {
+    TGrid::Connect("alien://");
+  }
+  
   TString currName;
   Int_t nRuns = 0;
   TArrayI runs(10000);
@@ -154,24 +148,18 @@ void CountTracks(TString inputFile)
     currName.ReadLine(inFile,kTRUE); // Read line in input Data file
     if(currName.IsNull()) continue;
     
-    TString runNumber = currName;
-    Int_t c = runNumber.Last('/');
-    runNumber.Remove(c);
-    c = runNumber.Last('/');
-    runNumber.Remove(0,c+1);
+    Int_t runNumber(AliAnalysisMuonUtility::GetRunNumber(currName.Data()));
     
-    cout<<"\rprocessing run "<<runNumber.Data()<<" ...\r"<<flush;
+    cout<<"\rprocessing run "<<runNumber<<" ...\r"<<flush;
     
-    TFile* currFile = new TFile(currName.Data(),"read");
+    TFile* currFile = TFile::Open(currName.Data(),"read");
     if (!currFile || !currFile->IsOpen()) continue;
     
     TH1* hnClusters = 0x0;
-    if (isQATask) {
-      TObjArray *objs = static_cast<TObjArray*>(currFile->Get("MUON_QA/general1"));
-      if (objs) hnClusters = static_cast<TH1*>(objs->FindObject("hNClustersPerTrack"));
-    } else
-      hnClusters = static_cast<TH1*>(currFile->Get(Form("MUON/ESDs/%s/%s_hESDnClustersPerTrack",
-							MultDirData.Data(),MultDirData.Data())));
+    TObjArray *objs = static_cast<TObjArray*>(currFile->Get("MUON_QA/general1"));
+    if (objs) hnClusters = static_cast<TH1*>(objs->FindObject("hNClustersPerTrack"));
+    else hnClusters = static_cast<TH1*>(currFile->Get(Form("MUON/ESDs/%s/%s_hESDnClustersPerTrack",
+                                                           MultDirData.Data(),MultDirData.Data())));
     
     if (!hnClusters) {
       currFile->Close();
@@ -179,7 +167,7 @@ void CountTracks(TString inputFile)
       continue;
     }
     
-    runs[nRuns] = runNumber.Atoi();
+    runs[nRuns] = runNumber;
     nTracks[nRuns] = (Int_t)hnClusters->GetEntries();
     nTracksTot += nTracks[nRuns];
     nRuns++;
