@@ -834,6 +834,7 @@ void AliAnalysisTaskJPsiAccEffCorr2::Terminate(Option_t *)
 				fYBinLowEdge.GetSize()-0.5);
   
   // acceptance*efficiency for different pt/y bins
+  Int_t iBinSummary = 1; // current bin
   TH1F* hGenSummary = new TH1F("hGenSummary",Form("generated J/#psi versus pt/y bins;;%s",unit.Data()),
 			       fPtBinLowEdge.GetSize()*fYBinLowEdge.GetSize(), -0.5, fPtBinLowEdge.GetSize()*fYBinLowEdge.GetSize()-0.5);
   TH1F* hRecSummary = new TH1F("hRecSummary",Form("reconstructed J/#psi versus pt/y bins;;%s",unit.Data()),
@@ -854,7 +855,7 @@ void AliAnalysisTaskJPsiAccEffCorr2::Terminate(Option_t *)
     IntegratedAccEff(ipt, 0, 0., -1., fNMatch, gen, rec, acc);
     FillHistos(ipt, 0, gen, rec, acc, hGenPtSummary, hRecPtSummary, hAccPtSummary, ipt+1);
     if (ipt == 0) FillHistos(0, 0, gen, rec, acc, hGenYSummary, hRecYSummary, hAccYSummary, 1);
-    FillHistos(ipt, 0, gen, rec, acc, hGenSummary, hRecSummary, hAccSummary, ipt*fYBinLowEdge.GetSize()+1);
+    FillHistos(ipt, 0, gen, rec, acc, hGenSummary, hRecSummary, hAccSummary, iBinSummary++);
     
     // in 0-90% not weighted over centrality
     if (fSigWeights) IntegratedAccEff(ipt, 0, 0., 90., fNMatch, gen, rec, acc);
@@ -918,7 +919,7 @@ void AliAnalysisTaskJPsiAccEffCorr2::Terminate(Option_t *)
     // in 0-100% not weighted over centrality
     IntegratedAccEff(0, iy, 0., -1., fNMatch, gen, rec, acc);
     FillHistos(0, iy, gen, rec, acc, hGenYSummary, hRecYSummary, hAccYSummary, iy+1);
-    FillHistos(0, iy, gen, rec, acc, hGenSummary, hRecSummary, hAccSummary, iy+1);
+    FillHistos(0, iy, gen, rec, acc, hGenSummary, hRecSummary, hAccSummary, iBinSummary++);
     
     // in 0-90% not weighted over centrality
     if (fSigWeights) IntegratedAccEff(0, iy, 0., 90., fNMatch, gen, rec, acc);
@@ -969,25 +970,25 @@ void AliAnalysisTaskJPsiAccEffCorr2::Terminate(Option_t *)
   hAccYSummary->Write(0x0, TObject::kOverwrite);
   cSummary->Write(0x0, TObject::kOverwrite);
   file->Close();
-  /*
-  // loop over pt bins+1 (0 = integrated over pt)
-  for (Int_t ipt = 1; ipt < fPtBinLowEdge.GetSize(); ipt++) {
+  
+  // loop over y bins+1 (0 = integrated over y)
+  for (Int_t iy = 1; iy < fYBinLowEdge.GetSize(); iy++) {
     
-    Float_t ptMin = (ipt == 0) ? fPtBinLowEdge[0] : fPtBinLowEdge[ipt-1];
-    Float_t ptMax = (ipt == 0) ? fPtBinLowEdge[fPtBinLowEdge.GetSize()-1] : fPtBinLowEdge[ipt];
+    Float_t yMin = (iy == 0) ? fYBinLowEdge[0] : fYBinLowEdge[iy-1];
+    Float_t yMax = (iy == 0) ? fYBinLowEdge[fYBinLowEdge.GetSize()-1] : fYBinLowEdge[iy];
     
-    // loop over y bins+1 (0 = integrated over y)
-    for (Int_t iy = 1; iy < fYBinLowEdge.GetSize(); iy++) {
+    // loop over pt bins+1 (0 = integrated over pt)
+    for (Int_t ipt = 1; ipt < fPtBinLowEdge.GetSize(); ipt++) {
       
-      Float_t yMin = (iy == 0) ? fYBinLowEdge[0] : fYBinLowEdge[iy-1];
-      Float_t yMax = (iy == 0) ? fYBinLowEdge[fYBinLowEdge.GetSize()-1] : fYBinLowEdge[iy];
+      Float_t ptMin = (ipt == 0) ? fPtBinLowEdge[0] : fPtBinLowEdge[ipt-1];
+      Float_t ptMax = (ipt == 0) ? fPtBinLowEdge[fPtBinLowEdge.GetSize()-1] : fPtBinLowEdge[ipt];
       
       // print integrated value
       printf("\n---- Integrated acc*eff (%g<pt<%g / %g<y<%g):\n", ptMin, ptMax, yMin, yMax);
       
       // in 0-100% not weighted over centrality
       IntegratedAccEff(ipt, iy, 0., -1., fNMatch, gen, rec, acc);
-      FillHistos(ipt, iy, gen, rec, acc, hGenSummary, hRecSummary, hAccSummary, ipt*fYBinLowEdge.GetSize()+iy+1);
+      FillHistos(ipt, iy, gen, rec, acc, hGenSummary, hRecSummary, hAccSummary, iBinSummary++);
       
       // in 0-90% not weighted over centrality
       if (fSigWeights) IntegratedAccEff(ipt, iy, 0., 90., fNMatch, gen, rec, acc);
@@ -1017,7 +1018,7 @@ void AliAnalysisTaskJPsiAccEffCorr2::Terminate(Option_t *)
     }
     
   }
-  */
+  
   // draw summary histos
   cSummary = new TCanvas("cSummary", "summary", 900, 300);
   cSummary->Divide(3,1);
