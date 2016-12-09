@@ -14,14 +14,14 @@ TString runWeight = "runWeightCMUL7.txt";
 //______________________________________________________________________________
 void runJPsiAccEffCorr2(TString smode = "local", TString inputFileName = "AliAOD.root",
                         Int_t ipT = -1, Int_t iy = -1,
-                        Bool_t applyPhysicsSelection = kFALSE, Bool_t embedding = kFALSE)
+                        Bool_t applyPhysicsSelection = kTRUE, Bool_t embedding = kTRUE)
 {
   /// Compute the JPsi acc*eff correction
   
   // --- general analysis setup ---
   TString rootVersion = "";
   TString alirootVersion = "";
-  TString aliphysicsVersion = "vAN-20160601-1";
+  TString aliphysicsVersion = "vAN-20161207-1";
   TString extraLibs="";
   TString extraIncs="include";
   TString extraTasks="AliAnalysisTaskJPsiAccEffCorr2";
@@ -96,7 +96,7 @@ void CreateAnalysisTrain(TString dataType, Int_t ipT, Int_t iy, Bool_t applyPhys
     return;
   }
   
-  UInt_t offlineTriggerMask = AliVEvent::kMUSPB;
+  UInt_t offlineTriggerMask = AliVEvent::kINT7inMUON;
   if (dataType == "ESD") {
     
     // event selection
@@ -126,7 +126,7 @@ void CreateAnalysisTrain(TString dataType, Int_t ipT, Int_t iy, Bool_t applyPhys
   trackCuts.SetAllowDefaultParams();
   //  trackCuts.SetFilterMask(0);
   trackCuts.SetFilterMask(AliMuonTrackCuts::kMuMatchLpt | AliMuonTrackCuts::kMuEta |
-                          AliMuonTrackCuts::kMuThetaAbs);
+                          AliMuonTrackCuts::kMuThetaAbs | AliMuonTrackCuts::kMuPdca);
   
   // Acc*Eff results
   gROOT->LoadMacro("AddTaskJPsiAccEffCorr2.C");
@@ -140,18 +140,20 @@ void CreateAnalysisTrain(TString dataType, Int_t ipT, Int_t iy, Bool_t applyPhys
   jPsiAccEffCorr->SetNMatch(2);
   jPsiAccEffCorr->UseMCLabel(kTRUE);
 //  jPsiAccEffCorr->SetMuLowPtCut(1.);
-//  Float_t centBinLowEdge[] = {0.,10.,20.,30.,40.,50.,60.,70.,80.,90.};
-  Float_t centBinLowEdge[] = {-9999.,9999.};
+  Float_t centBinLowEdge[] = {0.,10.,20.,30.,40.,50.,60.,70.,80.,90.};
+//  Float_t centBinLowEdge[] = {-9999.,9999.};
   jPsiAccEffCorr->SetCentBins((Int_t)(sizeof(centBinLowEdge)/sizeof(Float_t))-1, centBinLowEdge);
-//  Float_t pTBinLowEdge[] = {0.,1.,2.,3.,4.,5.,6.,8.};
-  Float_t pTBinLowEdge[] = {0.,1.,2.,3.,4.,5.,6.,7.,8.,9.,10.,12.};
+//  Float_t pTBinLowEdge[] = {0.,2.,5.,8.,12.};
+  Float_t pTBinLowEdge[] = {0.,1.,2.,3.,4.,5.,6.,8.,12.};
+//  Float_t pTBinLowEdge[] = {0.,1.,2.,3.,4.,5.,6.,7.,8.,9.,10.,12.};
   jPsiAccEffCorr->SetPtBins((Int_t)(sizeof(pTBinLowEdge)/sizeof(Float_t))-1, pTBinLowEdge);
-//  Float_t yBinLowEdge[] = {-4.,-3.5,-3.,-2.5};
-  Float_t yBinLowEdge[] = {-4.,-3.75,-3.5,-3.25,-3.,-2.75,-2.5};
+//  Float_t yBinLowEdge[] = {-4.,-2.5};
+  Float_t yBinLowEdge[] = {-4.,-3.25,-2.5};
+//  Float_t yBinLowEdge[] = {-4.,-3.75,-3.5,-3.25,-3.,-2.75,-2.5};
   jPsiAccEffCorr->SetYBins((Int_t)(sizeof(yBinLowEdge)/sizeof(Float_t))-1, yBinLowEdge);
   if (!runWeight.IsNull()) jPsiAccEffCorr->LoadRunWeights(runWeight.Data());
   SetGenWeights(jPsiAccEffCorr, ipT, iy);
-//  SetSigWeights(jPsiAccEffCorr);
+  SetSigWeights(jPsiAccEffCorr);
   
 }
 
@@ -160,6 +162,16 @@ void SetSigWeights(TObject* jPsiAccEffCorr)
 {
   /// set the number of measured JPsi per pt/y bin or the <Ncoll> used to weight the acc*eff versus centrality
   
+  // LHC15o: NJpsi per centrality bin (width=10) in 2.5<y<4 and 0<pT<12GeV/c to weight the acc*eff calculation
+  Float_t centBinLowEdge01[] = {60., 70., 80., 90.};
+  Double_t nJpsi01[] = {3748., 1742., 672.};
+  (static_cast<AliAnalysisTaskJPsiAccEffCorr2*>(jPsiAccEffCorr))->SetSigWeights("nJPsi6090", 0., 12., -4., -2.5, (Int_t)(sizeof(nJpsi01)/sizeof(Double_t)), centBinLowEdge01, nJpsi01, kTRUE);
+  
+  // LHC15o: NJpsi per centrality bin (width=10) in 2.5<y<4 and 0<pT<12GeV/c to weight the acc*eff calculation
+  Float_t centBinLowEdge00[] = {0., 10., 20., 30., 40., 50., 60., 70., 80., 90.};
+  Double_t nJpsi00[] = {105482., 68195., 45007., 24221., 14443., 7425., 3748., 1742., 672.};
+  (static_cast<AliAnalysisTaskJPsiAccEffCorr2*>(jPsiAccEffCorr))->SetSigWeights("nJPsi", 0., 12., -4., -2.5, (Int_t)(sizeof(nJpsi00)/sizeof(Double_t)), centBinLowEdge00, nJpsi00, kTRUE);
+  /*
   // Ncoll per centrality bin (width=10) to weight the acc*eff calculation
   Float_t nColl10CentBinLowEdge[] = {0., 10., 20., 30., 40., 50., 60., 70., 80., 90.};
   Double_t nColl10[] = {1636., 1001., 601., 344., 183., 90., 40., 16., 6.};
@@ -169,7 +181,7 @@ void SetSigWeights(TObject* jPsiAccEffCorr)
   Float_t centBinLowEdge00[] = {0., 10., 20., 30., 40., 50., 60., 70., 80., 90.};
   Double_t nJpsi00[] = {118139., 73280., 46010., 25294., 15034., 7884., 4023., 2062., 910.};
   (static_cast<AliAnalysisTaskJPsiAccEffCorr2*>(jPsiAccEffCorr))->SetSigWeights("nJPsi", 0., 8., -4., -2.5, (Int_t)(sizeof(nJpsi00)/sizeof(Double_t)), centBinLowEdge00, nJpsi00, kTRUE);
-  /*
+  
   // Ncoll per centrality bin (width=10) to weight the acc*eff calculation
   Float_t nColl10CentBinLowEdge[9] = {0., 10., 20., 30., 40., 50., 60., 70., 80.};
   Double_t nColl10[8] = {1502.7, 923.26, 558.68, 321.20, 171.67, 85.13, 38.51, 15.78};
@@ -218,38 +230,51 @@ void SetGenWeights(TObject* jPsiAccEffCorr, Int_t ipT, Int_t iy)
   Double_t ptRange[2] = {0., 999.};
   Double_t yRange[2] = {-4.2, -2.3};
   
-  if (ipT < 0 && iy < 0) {
-    
+  if (ipT < 0) {
+    /*
+    // LHC15n
     TString oldPtFormula = "[0] * x / TMath::Power([1] + TMath::Power(x,[2]), [3])";
     Double_t oldPtParam[4] = {4654.3, 12.8133, 1.9647, 3.66641};
     accEffCorr->SetOriginPtFunc(oldPtFormula.Data(), oldPtParam, ptRange[0], ptRange[1]);
     
     TString newPtFormula = "[0] * x / TMath::Power([1] + TMath::Power(x,[2]), [3])";
 //    Double_t newPtParam[4] = {4654.3, 12.8133, 1.9647, 3.66641};
-    Double_t newPtParam[4]  = {5.21831e+04, 1.46939e+01,1.93309, 3.93941}; // fit cross section
+    Double_t newPtParam[4]  = {5.21831e+04, 1.46939e+01, 1.93309, 3.93941}; // fit cross section
+//    Double_t newPtParam[4]  = {17884.7, 13.9011, 2.01721, 3.64962}; // fit cross section -4<y<-3.25
+//    Double_t newPtParam[4]  = {449667, 13.5231, 1.69545, 4.78706}; // fit cross section -3.25<y<-2.5
 //    Double_t newPtParam[4] = {5164.53, 13.868, 1.98408, 3.6322}; // from genTuner
     // AliGenMUONlib "pp E" tuning, where E is the energy set in param[1] (in GeV)
     //  TString newPtFormula = "[0] * x / TMath::Power(1.+0.363*TMath::Power((x/(1.04*TMath::Power([1],0.101))),2.),3.9)";
     //  Double_t newPtParam[2] = {1., 5030.};
     accEffCorr->SetNewPtFunc(newPtFormula.Data(), newPtParam, ptRange[0], ptRange[1]);
+    */
+    // LHC15o
+    TString oldPtFormula = "[0] * x / TMath::Power( 1. + TMath::Power(x/[1],[2]), [3])";
+    Double_t oldPtParam[4] = {1.00715e6, 3.50274, 1.93403, 3.96363};
+    accEffCorr->SetOriginPtFunc(oldPtFormula.Data(), oldPtParam, ptRange[0], ptRange[1]);
     
-    TString oldYFormula = "[0] * (1. + [1]*x*x)";
-    Double_t oldYParam[2] = {1.18296, -0.0405994};
-    accEffCorr->SetOriginYFunc(oldYFormula.Data(), oldYParam, yRange[0], yRange[1]);
+    TString newPtFormula = "[0] * x / TMath::Power( 1. + TMath::Power(x/[1],[2]), [3])";
+//    Double_t newPtParam[4] = {1.00715e6, 3.50274, 1.93403, 3.96363};
+//    accEffCorr->SetNewPtFunc(newPtFormula.Data(), newPtParam, ptRange[0], ptRange[1]);
+    Double_t newPtParam1[4] = {0.4025, 2.8951, 2.4136, 2.7965};
+    accEffCorr->SetNewPtFunc(newPtFormula.Data(), newPtParam1, ptRange[0], ptRange[1], 0., 10.);
+    Double_t newPtParam2[4] = {0.4151, 3.1890, 2.1364, 3.2719};
+    accEffCorr->SetNewPtFunc(newPtFormula.Data(), newPtParam2, ptRange[0], ptRange[1], 10., 20.);
+    Double_t newPtParam3[4] = {0.3701, 3.0393, 2.3389, 2.7934};
+    accEffCorr->SetNewPtFunc(newPtFormula.Data(), newPtParam3, ptRange[0], ptRange[1], 20., 30.);
+    Double_t newPtParam4[4] = {0.3949, 4.2660, 1.8056, 4.5051};
+    accEffCorr->SetNewPtFunc(newPtFormula.Data(), newPtParam4, ptRange[0], ptRange[1], 30., 40.);
+    Double_t newPtParam5[4] = {0.3299, 3.1371, 2.3729, 2.6413};
+    accEffCorr->SetNewPtFunc(newPtFormula.Data(), newPtParam5, ptRange[0], ptRange[1], 40., 50.);
+    Double_t newPtParam6[4] = {0.3666, 3.7934, 1.9449, 3.7121};
+    accEffCorr->SetNewPtFunc(newPtFormula.Data(), newPtParam6, ptRange[0], ptRange[1], 50., 60.);
+    Double_t newPtParam7[4] = {0.4220, 4.6310, 1.6776, 5.0790};
+    accEffCorr->SetNewPtFunc(newPtFormula.Data(), newPtParam7, ptRange[0], ptRange[1], 60., 90.);
     
-    TString newYFormula = "[0] * (1. + [1]*x*x)";
-//    Double_t newYParam[2] = {1.18296, -0.0405994};
-    Double_t newYParam[2] = {6.36959, -3.99165e-02}; // fit cross section
-//    Double_t newYParam[2] = {1.17479, -0.040254}; // from genTuner
-    // AliGenMUONlib "pp E" tuning, where E is the energy set in param[1] (in GeV)
-    //  TString newYFormula = "[0] * TMath::Exp(-0.5*TMath::Power(x/TMath::Log([1]/3.097)/0.4,2.))";
-    //  Double_t newYParam[2] = {1., 5030.};
-    accEffCorr->SetNewYFunc(newYFormula.Data(), newYParam, yRange[0], yRange[1]);
+  } else if (ipT >= 0 && ipT < 7) {
+//  } else if (ipT >= 0 && ipT < 6) {
+//  } else if (ipT >= 0 && ipT < 4) {
     
-//  } else if (ipT >= 0 && ipT < 7 && iy >= 0 && iy < 13) {
-//  } else if (ipT >= 0 && ipT < 6 && iy >= 0 && iy < 13) {
-  } else if (ipT >= 0 && ipT < 4 && iy >= 0 && iy < 12) {
-    /*
     // pp 13 TeV
     TString ptFormula = "[0] * x / TMath::Power(1. + TMath::Power(x/[1],[2]), [3])";
     const Double_t ptParam[7][4] = {
@@ -260,7 +285,7 @@ void SetGenWeights(TObject* jPsiAccEffCorr, Int_t ipT, Int_t iy)
       {1., 4.7547, 1.6953, 4.4997},
       {1., 4.5144, 1.7925, 4.2223},
       {1., 5.448, 1.5637, 5.5774}};
-    *//*
+    /*
     // pp 7 TeV (LHCb: https://arxiv.org/pdf/1103.0423v2.pdf ) my fits
     TString ptFormula = "[0] * x / TMath::Power([1] + TMath::Power(x,[2]), [3])";
     const Double_t ptParam[6][4] = {
@@ -280,7 +305,7 @@ void SetGenWeights(TObject* jPsiAccEffCorr, Int_t ipT, Int_t iy)
       {1956.414017, 4.490100, 1.722058, 4.595126},
       {1582.221713, 4.655218, 1.706322, 4.949379},
       {1173.498991, 5.108379, 1.663448, 5.772206}};
-    */
+    *//*
     // pp 7 TeV (LHCb: https://arxiv.org/pdf/1103.0423v2.pdf ) Jana's fits
     TString ptFormula = "[0] * x / TMath::Power((1 + [1]*x*x), [2])";
     const Double_t ptParam[4][3] = {
@@ -288,14 +313,45 @@ void SetGenWeights(TObject* jPsiAccEffCorr, Int_t ipT, Int_t iy)
       {1946.4, 0.0768768, 3.21477},
       {1773.8, 0.0777934, 3.30499},
       {1432.46, 0.076854, 3.43851}};
-    /*
+    *//*
     TString oldPtFormula = "[0] * x / TMath::Power([1] + TMath::Power(x,[2]), [3])";
     Double_t oldPtParam[4] = {4654.3, 12.8133, 1.9647, 3.66641};
     accEffCorr->SetOriginPtFunc(oldPtFormula.Data(), oldPtParam, ptRange[0], ptRange[1]);
     */
     accEffCorr->SetOriginPtFunc(ptFormula.Data(), ptParam[0], ptRange[0], ptRange[1]);
     accEffCorr->SetNewPtFunc(ptFormula.Data(), ptParam[ipT], ptRange[0], ptRange[1]);
+    
+  }
+  
+  if (iy < 0) {
     /*
+    // LHC15n
+    TString oldYFormula = "[0] * (1. + [1]*x*x)";
+    Double_t oldYParam[2] = {1.18296, -0.0405994};
+    accEffCorr->SetOriginYFunc(oldYFormula.Data(), oldYParam, yRange[0], yRange[1]);
+    
+    TString newYFormula = "[0] * (1. + [1]*x*x)";
+    //    Double_t newYParam[2] = {1.18296, -0.0405994};
+    Double_t newYParam[2] = {6.36959, -3.99165e-02}; // fit cross section
+    //    Double_t newYParam[2] = {1.17479, -0.040254}; // from genTuner
+    // AliGenMUONlib "pp E" tuning, where E is the energy set in param[1] (in GeV)
+    //  TString newYFormula = "[0] * TMath::Exp(-0.5*TMath::Power(x/TMath::Log([1]/3.097)/0.4,2.))";
+    //  Double_t newYParam[2] = {1., 5030.};
+    accEffCorr->SetNewYFunc(newYFormula.Data(), newYParam, yRange[0], yRange[1]);
+    */
+    // LHC15o
+    TString oldYFormula = "[0] * TMath::Exp(-(1./2.)*TMath::Power(((x-[1])/[2]),2))";
+    Double_t oldYParam[3] = {1.09886e6, 0., 2.12568};
+    accEffCorr->SetOriginYFunc(oldYFormula.Data(), oldYParam, yRange[0], yRange[1]);
+    
+    TString newYFormula = "[0] * TMath::Exp(-(1./2.)*TMath::Power(((x-[1])/[2]),2))";
+    Double_t newYParam[3] = {1.09886e6, 0., 2.12568};
+    accEffCorr->SetNewYFunc(newYFormula.Data(), newYParam, yRange[0], yRange[1]);
+    
+  } else if (iy >= 0 && iy < 13) {
+//  } else if (iy >= 0 && iy < 13) {
+//  } else if (iy >= 0 && iy < 12) {
+    
     // pp 13 TeV
     TString yFormula = "[0] * TMath::Exp(-0.5*x*x/[1]/[1])";
     const Double_t yParam[13][2] = {
@@ -312,7 +368,7 @@ void SetGenWeights(TObject* jPsiAccEffCorr, Int_t ipT, Int_t iy)
       {0.050845, 2.2532},
       {0.026694, 1.815},
       {0.003918, 2.249}};
-    *//*
+    /*
     // pp 7 TeV (LHCb: https://arxiv.org/pdf/1103.0423v2.pdf ) my fits
     TString yFormula = "[0] * (1. + [1]*x*x)";
     const Double_t yParam[13][2] = {
@@ -346,7 +402,7 @@ void SetGenWeights(TObject* jPsiAccEffCorr, Int_t ipT, Int_t iy)
       {58.197163, 0.000000, 2.005567},
       {31.018428, 0.000000, 2.102733},
       {23.571972, 0.000000, 1.898878}};
-    */
+    *//*
     // pp 7 TeV (LHCb: https://arxiv.org/pdf/1103.0423v2.pdf ) Jana's fits
     TString yFormula = "[0] * TMath::Exp(-0.5*(x-[1])*(x-[1])/[2]/[2])";
     const Double_t yParam[12][3] = {
@@ -362,7 +418,7 @@ void SetGenWeights(TObject* jPsiAccEffCorr, Int_t ipT, Int_t iy)
       {49.4501, -1.83735, 1.356},
       {26.2173, -2.11165, 1.16468},
       {16.078, -2.06902, 1.17026}};
-    /*
+    *//*
     TString oldYFormula = "[0] * (1. + [1]*x*x)";
     Double_t oldYParam[2] = {1.18296, -0.0405994};
     accEffCorr->SetOriginYFunc(oldYFormula.Data(), oldYParam, yRange[0], yRange[1]);

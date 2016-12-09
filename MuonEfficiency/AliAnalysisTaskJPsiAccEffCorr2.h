@@ -51,7 +51,7 @@ public:
   /// return the flag telling whether to weight at the reconstruction or at the generation level
   Bool_t WeightRec() const { return fWeightRec; }
   
-  /// get the list of weights with associated centrality hey words
+  /// get the list of weights with associated centrality key words
   const THashList& GetWeights() const {return fWeights;}
   
   /// check whether the given pt/y range is within the pt/y range valid for these weights
@@ -92,7 +92,35 @@ private:
 };
 
 //________________________________________________________________________
+class FuncRange : public TObject {
+
+public:
+  
+  FuncRange();
+  FuncRange(TF1 &f, Float_t centMin, Float_t cenMax);
+  virtual ~FuncRange();
+  
+  Bool_t IsValid(Float_t cent) const { return (cent > fCentMin && cent <= fCentMax); }
+  
+  TF1* GetFunc() { return fFunc; }
+  
+private:
+  
+  /// Not implemented
+  FuncRange(const FuncRange& rhs);
+  /// Not implemented
+  FuncRange& operator = (const FuncRange& rhs);
+  
+  Float_t fCentMin; ///< centrality bin low-edge
+  Float_t fCentMax; ///< centrality bin up-edge
+  TF1 *fFunc;       ///< function (owner)
+  
+  ClassDef(FuncRange, 1);
+};
+
+//________________________________________________________________________
 class AliAnalysisTaskJPsiAccEffCorr2 : public AliAnalysisTaskSE {
+
 public:
   
   AliAnalysisTaskJPsiAccEffCorr2();
@@ -135,12 +163,14 @@ public:
   // create the original function with the parameters used in simulation to generate the pT distribution
   void SetOriginPtFunc(TString formula, const Double_t *param, Double_t xMin, Double_t xMax);
   // create the new function with the parameters used to generate the new pT distribution
-  void SetNewPtFunc(TString formula, const Double_t *param, Double_t xMin, Double_t xMax);
+  void SetNewPtFunc(TString formula, const Double_t *param, Double_t xMin, Double_t xMax,
+                    Float_t centMin = -999., Float_t centMax = 999.);
   
   // create the original function with the parameters used in simulation to generate the y distribution
   void SetOriginYFunc(TString formula, const Double_t *param, Double_t xMin, Double_t xMax);
   // create the new function with the parameters used to generate the new y distribution
-  void SetNewYFunc(TString formula, const Double_t *param, Double_t xMin, Double_t xMax);
+  void SetNewYFunc(TString formula, const Double_t *param, Double_t xMin, Double_t xMax,
+                   Float_t centMin = -999., Float_t centMax = 999.);
   
 private:
   
@@ -181,6 +211,12 @@ private:
   /// Draw acceptance*efficiency versus centrality for this given pt/y bin
   void DrawAccEffVsCent(Int_t ipt, Int_t iy, Int_t nMatch);
   
+  // get the new pT function valid for this centrality
+  TF1* GetNewPtFunc(Float_t cent);
+  
+  // get the new y function valid for this centrality
+  TF1* GetNewYFunc(Float_t cent);
+  
   // normalize the function to its integral in the given range
   void NormFunc(TF1 *f, Double_t min, Double_t max);
   
@@ -220,11 +256,11 @@ private:
   AliMuonTrackCuts* fMuonTrackCuts; ///< cuts to select tracks to be considered
   
   TF1     *fPtFuncOld; ///< original generated pT function with original parameters
-  TF1     *fPtFuncNew; ///< new generated pT fit function with new parameters
+  TList   *fPtFuncNew; ///< list of new generated pT fit function with new parameters
   TF1     *fYFuncOld;  ///< original generated y function with original parameters
-  TF1     *fYFuncNew;  ///< new generated y fit function with new parameters
+  TList   *fYFuncNew;  ///< list of new generated y fit function with new parameters
   
-  ClassDef(AliAnalysisTaskJPsiAccEffCorr2, 3);
+  ClassDef(AliAnalysisTaskJPsiAccEffCorr2, 4);
 };
 
 //________________________________________________________________________

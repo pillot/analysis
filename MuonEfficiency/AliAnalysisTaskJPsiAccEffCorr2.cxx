@@ -119,8 +119,8 @@ TString Weights::GetCentKey(Float_t centMin, Float_t centMax, const TArrayF &cen
     
   } else {
     
-    centMin -= 1.e-6;
-    centMax += 1.e-6;
+    centMin -= 1.e-4;
+    centMax += 1.e-4;
     imin = 0;
     while (centBinLowEdge[imin] < centMin && imin < centBinLowEdge.GetSize()) imin++;
     imax = centBinLowEdge.GetSize()-1;
@@ -129,10 +129,10 @@ TString Weights::GetCentKey(Float_t centMin, Float_t centMax, const TArrayF &cen
       AliErrorClass("incorrect centrality integration range");
       return "";
     }
-    if (TMath::Abs(centBinLowEdge[imin]-centMin) > 1.e-4 ||
-	TMath::Abs(centBinLowEdge[imax]-centMax) > 1.e-4)
+    if (TMath::Abs(centBinLowEdge[imin]-centMin) > 1.e-3 ||
+	TMath::Abs(centBinLowEdge[imax]-centMax) > 1.e-3)
       AliWarningClass(Form("centrality integration range needed to be adjusted:\n %g-%g --> %g-%g",
-		      centMin+1.e-6, centMax-1.e-6, centBinLowEdge[imin], centBinLowEdge[imax]));
+		      centMin+1.e-4, centMax-1.e-4, centBinLowEdge[imin], centBinLowEdge[imax]));
     
     // integrate over centrality range
     centKey = Form("%g-%g",centBinLowEdge[imin],centBinLowEdge[imin+1]);
@@ -142,6 +142,36 @@ TString Weights::GetCentKey(Float_t centMin, Float_t centMax, const TArrayF &cen
   }
   
   return centKey;
+}
+
+//========================================================================
+ClassImp(FuncRange)
+
+//________________________________________________________________________
+FuncRange::FuncRange() :
+TObject(),
+fCentMin(0.),
+fCentMax(0.),
+fFunc(0x0)
+{
+  /// Dummy constructor
+}
+
+//________________________________________________________________________
+FuncRange::FuncRange(TF1 &f, Float_t centMin, Float_t centMax) :
+TObject(),
+fCentMin(centMin),
+fCentMax(centMax),
+fFunc(&f)
+{
+  /// Constructor
+}
+
+//________________________________________________________________________
+FuncRange::~FuncRange()
+{
+  /// Destructor
+  delete fFunc;
 }
 
 //========================================================================
@@ -416,7 +446,8 @@ void AliAnalysisTaskJPsiAccEffCorr2::UserExec(Option_t *)
   ((TH1F*)fList->UncheckedAt(kDzVtx))->Fill(zVtx-zVtxMC);
   
   TArrayD weight;
-  if (fPtFuncOld && fPtFuncNew && fYFuncOld && fYFuncNew) {
+  TF1 *ptFuncNew = 0x0, *yFuncNew = 0x0;
+  if (fPtFuncOld && (ptFuncNew = GetNewPtFunc(centrality)) && fYFuncOld && (yFuncNew = GetNewYFunc(centrality))) {
     weight.Set(nMCTracks);
     fUseMCLabel = kTRUE; // enforce the use of MC label
   }
@@ -433,7 +464,7 @@ void AliAnalysisTaskJPsiAccEffCorr2::UserExec(Option_t *)
     Double_t w = 1.;
     if (weight.GetSize() > 0) {
       if (AliAnalysisMuonUtility::IsPrimary(mctrack,mcEvt) && mctrack->PdgCode() == 443) {
-        weight[iMCTrack] = fPtFuncNew->Eval(pT) / fPtFuncOld->Eval(pT) * fYFuncNew->Eval(y) / fYFuncOld->Eval(y);
+        weight[iMCTrack] = ptFuncNew->Eval(pT) / fPtFuncOld->Eval(pT) * yFuncNew->Eval(y) / fYFuncOld->Eval(y);
         if (weight[iMCTrack] < 0.) {
           AliError(Form("negative weight: y = %g, pT = %g: w = %g", y, pT, weight[iMCTrack]));
           weight[iMCTrack] = 0.;
@@ -1229,8 +1260,9 @@ void AliAnalysisTaskJPsiAccEffCorr2::GetAccEff(TString selection, Double_t gen[3
     
   } else {
     
-    // compute acc*eff
-    TGraphAsymmErrors *gacceff = new TGraphAsymmErrors(hrec, hgen, "cpe0");
+    // compute acc*eff except for pathological cases
+    TGraphAsymmErrors *gacceff = (hgen->GetBinContent(1) > 0. && hrec->GetBinContent(1) <= hgen->GetBinContent(1)) ?
+                                 new TGraphAsymmErrors(hrec, hgen, "cpe0") : 0x0;
     
     // get the results for each matching case
     for (Int_t i = 0; i < 3; i++) {
@@ -1247,7 +1279,7 @@ void AliAnalysisTaskJPsiAccEffCorr2::GetAccEff(TString selection, Double_t gen[3
 	acc[i][0] = 0.;
 	acc[i][1] = acc[i][2] = 1.;
 	
-      } else if (gen[i][0] < rec[i][0]) {
+      } else if (!gacceff || gen[i][0] < rec[i][0]) {
 	
 	acc[i][0] = rec[i][0]/gen[i][0];
 	acc[i][1] = acc[i][2] = TMath::Max(1./gen[i][0], TMath::Sqrt(acc[i][0]*TMath::Abs(1.-acc[i][0])/gen[i][0]));
@@ -1617,7 +1649,6 @@ void AliAnalysisTaskJPsiAccEffCorr2::SetOriginPtFunc(TString formula, const Doub
   /// Create the original function with the parameters used in simulation to generate the pT distribution.
   /// It must be in the form [0]*(...) to allow for global normalization.
   /// The [xMin,xMax] range is used to normalized the function.
-  /// Some parameters can be fixed when fitting the generated distribution for cross-check.
   
   assert(param);
   
@@ -1631,21 +1662,54 @@ void AliAnalysisTaskJPsiAccEffCorr2::SetOriginPtFunc(TString formula, const Doub
 }
 
 //________________________________________________________________________
-void AliAnalysisTaskJPsiAccEffCorr2::SetNewPtFunc(TString formula, const Double_t *param, Double_t xMin, Double_t xMax)
+void AliAnalysisTaskJPsiAccEffCorr2::SetNewPtFunc(TString formula, const Double_t *param, Double_t xMin, Double_t xMax,
+                                                  Float_t centMin, Float_t centMax)
 {
   /// Create the new function with its initial parameters to fit the generated/weighted pT distribution.
   /// It must be in the form [0]*(...) to allow for global normalization.
   /// The [xMin,xMax] range is used to normalized the function.
-  /// Some parameters can be fixed when fitting the generated distribution.
+  /// It is valid for the centrality range centMin < cent <= centMax.
   
   assert(param);
   
-  delete fPtFuncNew;
-  fPtFuncNew = new TF1("fPtFuncNew", formula.Data(), xMin, xMax);
+  if (centMax <= centMin) {
+    AliError("incorrect centrality range");
+    return;
+  }
   
-  fPtFuncNew->SetParameters(param);
+  if (GetNewPtFunc(centMin+1.e-4) || GetNewPtFunc(centMax-1.e-4)) {
+    AliError(Form("There is already a function partially valid for the range %g-%g", centMin, centMax));
+    return;
+  }
   
-  NormFunc(fPtFuncNew, xMin, xMax);
+  if (!fPtFuncNew) {
+    fPtFuncNew = new TList;
+    fPtFuncNew->SetOwner();
+  }
+  
+  TF1 *ptFuncNew = new TF1(Form("fPtFuncNew_%f_%f", centMin, centMax), formula.Data(), xMin, xMax);
+  
+  ptFuncNew->SetParameters(param);
+  
+  NormFunc(ptFuncNew, xMin, xMax);
+  
+  fPtFuncNew->AddLast(new FuncRange(*ptFuncNew, centMin, centMax));
+  
+}
+
+//________________________________________________________________________
+TF1* AliAnalysisTaskJPsiAccEffCorr2::GetNewPtFunc(Float_t cent)
+{
+  /// get the new pT function valid for this centrality
+  
+  if (!fPtFuncNew) return 0x0;
+  
+  TIter nextFunc(fPtFuncNew);
+  FuncRange *func = 0x0;
+  while ((func = static_cast<FuncRange*>(nextFunc())))
+    if (func->IsValid(cent)) return func->GetFunc();
+  
+  return 0x0;
   
 }
 
@@ -1655,7 +1719,6 @@ void AliAnalysisTaskJPsiAccEffCorr2::SetOriginYFunc(TString formula, const Doubl
   /// Create the original function with the parameters used in simulation to generate the y distribution.
   /// It must be in the form [0]*(...) to allow for global normalization.
   /// The [xMin,xMax] range is used to normalized the function.
-  /// Some parameters can be fixed when fitting the generated distribution for cross-check.
   
   assert(param);
   
@@ -1669,21 +1732,54 @@ void AliAnalysisTaskJPsiAccEffCorr2::SetOriginYFunc(TString formula, const Doubl
 }
 
 //________________________________________________________________________
-void AliAnalysisTaskJPsiAccEffCorr2::SetNewYFunc(TString formula, const Double_t *param, Double_t xMin, Double_t xMax)
+void AliAnalysisTaskJPsiAccEffCorr2::SetNewYFunc(TString formula, const Double_t *param, Double_t xMin, Double_t xMax,
+                                                 Float_t centMin, Float_t centMax)
 {
   /// Create the new function with its initial parameters to fit the generated/weighted y distribution.
   /// It must be in the form [0]*(...) to allow for global normalization.
   /// The [xMin,xMax] range is used to normalized the function.
-  /// Some parameters can be fixed when fitting the generated distribution.
+  /// It is valid for the centrality range centMin < cent <= centMax.
   
   assert(param);
   
-  delete fYFuncNew;
-  fYFuncNew = new TF1("fYFuncNew", formula.Data(), xMin, xMax);
+  if (centMax <= centMin) {
+    AliError("incorrect centrality range");
+    return;
+  }
   
-  fYFuncNew->SetParameters(param);
+  if (GetNewYFunc(centMin+1.e-4) || GetNewYFunc(centMax-1.e-4)) {
+    AliError(Form("There is already a function partially valid for the range %g-%g", centMin, centMax));
+    return;
+  }
   
-  NormFunc(fYFuncNew, xMin, xMax);
+  if (!fYFuncNew) {
+    fYFuncNew = new TList;
+    fYFuncNew->SetOwner();
+  }
+  
+  TF1 *yFuncNew = new TF1(Form("fYFuncNew_%f_%f", centMin, centMax), formula.Data(), xMin, xMax);
+  
+  yFuncNew->SetParameters(param);
+  
+  NormFunc(yFuncNew, xMin, xMax);
+  
+  fYFuncNew->AddLast(new FuncRange(*yFuncNew, centMin, centMax));
+  
+}
+
+//________________________________________________________________________
+TF1* AliAnalysisTaskJPsiAccEffCorr2::GetNewYFunc(Float_t cent)
+{
+  /// get the new y function valid for this centrality
+  
+  if (!fYFuncNew) return 0x0;
+  
+  TIter nextFunc(fYFuncNew);
+  FuncRange *func = 0x0;
+  while ((func = static_cast<FuncRange*>(nextFunc())))
+    if (func->IsValid(cent)) return func->GetFunc();
+  
+  return 0x0;
   
 }
 
