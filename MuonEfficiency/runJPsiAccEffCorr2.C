@@ -247,6 +247,24 @@ void SetGenWeights(TObject* jPsiAccEffCorr, Int_t ipT, Int_t iy)
     //  TString newPtFormula = "[0] * x / TMath::Power(1.+0.363*TMath::Power((x/(1.04*TMath::Power([1],0.101))),2.),3.9)";
     //  Double_t newPtParam[2] = {1., 5030.};
     accEffCorr->SetNewPtFunc(newPtFormula.Data(), newPtParam, ptRange[0], ptRange[1]);
+    *//*
+    // pp 13 TeV
+    TString ptFormula = "[0] * x / TMath::Power(1. + TMath::Power(x/[1],[2]), [3])";
+    const Double_t ptParam[7][4] = {
+      {1., 4.75208, 1.69247, 4.49224},
+      {1., 4.608, 1.6918, 4.2423},
+      {1., 5.0297, 1.6365, 4.7689},
+      {1., 4.4274, 1.7741, 4.026},
+      {1., 4.7547, 1.6953, 4.4997},
+      {1., 4.5144, 1.7925, 4.2223},
+      {1., 5.448, 1.5637, 5.5774}};
+    accEffCorr->SetOriginPtFunc(ptFormula.Data(), ptParam[0], ptRange[0], ptRange[1]);
+    accEffCorr->SetNewPtFunc(ptFormula.Data(), ptParam[1], ptRange[0], ptRange[1], -999., 999., -999., 999., -2.8, -2.5);
+    accEffCorr->SetNewPtFunc(ptFormula.Data(), ptParam[2], ptRange[0], ptRange[1], -999., 999., -999., 999., -3., -2.8);
+    accEffCorr->SetNewPtFunc(ptFormula.Data(), ptParam[3], ptRange[0], ptRange[1], -999., 999., -999., 999., -3.2, -3.);
+    accEffCorr->SetNewPtFunc(ptFormula.Data(), ptParam[4], ptRange[0], ptRange[1], -999., 999., -999., 999., -3.5, -3.2);
+    accEffCorr->SetNewPtFunc(ptFormula.Data(), ptParam[5], ptRange[0], ptRange[1], -999., 999., -999., 999., -3.8, -3.5);
+    accEffCorr->SetNewPtFunc(ptFormula.Data(), ptParam[6], ptRange[0], ptRange[1], -999., 999., -999., 999., -4., -3.8);
     */
     // LHC15o
     TString oldPtFormula = "[0] * x / TMath::Power( 1. + TMath::Power(x/[1],[2]), [3])";
@@ -338,6 +356,33 @@ void SetGenWeights(TObject* jPsiAccEffCorr, Int_t ipT, Int_t iy)
     //  TString newYFormula = "[0] * TMath::Exp(-0.5*TMath::Power(x/TMath::Log([1]/3.097)/0.4,2.))";
     //  Double_t newYParam[2] = {1., 5030.};
     accEffCorr->SetNewYFunc(newYFormula.Data(), newYParam, yRange[0], yRange[1]);
+    *//*
+    TString yFormula = "[0] * TMath::Exp(-0.5*x*x/[1]/[1])";
+    const Double_t yParam[13][2] = {
+      {1., 2.98887},
+      {1.6018, 3.5004},
+      {3.0763, 3.4912},
+      {2.7625, 3.2579},
+      {1.832, 3.1353},
+      {1.1356, 2.9421},
+      {0.78027, 2.5091},
+      {0.38906, 2.7312},
+      {0.27124, 2.3781},
+      {0.10791, 2.5896},
+      {0.050845, 2.2532},
+      {0.026694, 1.815},
+      {0.003918, 2.249}};
+    accEffCorr->SetOriginYFunc(yFormula.Data(), yParam[0], yRange[0], yRange[1]);
+    accEffCorr->SetNewYFunc(yFormula.Data(), yParam[1], yRange[0], yRange[1], -999., 999., 0., 1., -999., 999.);
+    accEffCorr->SetNewYFunc(yFormula.Data(), yParam[2], yRange[0], yRange[1], -999., 999., 1., 2., -999., 999.);
+    accEffCorr->SetNewYFunc(yFormula.Data(), yParam[3], yRange[0], yRange[1], -999., 999., 2., 3., -999., 999.);
+    accEffCorr->SetNewYFunc(yFormula.Data(), yParam[4], yRange[0], yRange[1], -999., 999., 3., 4., -999., 999.);
+    accEffCorr->SetNewYFunc(yFormula.Data(), yParam[5], yRange[0], yRange[1], -999., 999., 4., 5., -999., 999.);
+    accEffCorr->SetNewYFunc(yFormula.Data(), yParam[6], yRange[0], yRange[1], -999., 999., 5., 6., -999., 999.);
+    accEffCorr->SetNewYFunc(yFormula.Data(), yParam[7], yRange[0], yRange[1], -999., 999., 6., 7., -999., 999.);
+    accEffCorr->SetNewYFunc(yFormula.Data(), yParam[8], yRange[0], yRange[1], -999., 999., 7., 8., -999., 999.);
+    accEffCorr->SetNewYFunc(yFormula.Data(), yParam[9], yRange[0], yRange[1], -999., 999., 8., 10., -999., 999.);
+    accEffCorr->SetNewYFunc(yFormula.Data(), yParam[10], yRange[0], yRange[1], -999., 999., 10., 999., -999., 999.);
     */
     // LHC15o
     TString oldYFormula = "[0] * TMath::Exp(-(1./2.)*TMath::Power(((x-[1])/[2]),2))";

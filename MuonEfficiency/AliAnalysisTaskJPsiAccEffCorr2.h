@@ -97,11 +97,21 @@ class FuncRange : public TObject {
 public:
   
   FuncRange();
-  FuncRange(TF1 &f, Float_t centMin, Float_t cenMax);
+  FuncRange(TF1 &f, Float_t centMin, Float_t centMax, Double_t pTMin, Double_t pTMax, Double_t yMin, Double_t yMax);
   virtual ~FuncRange();
   
-  Bool_t IsValid(Float_t cent) const { return (cent > fCentMin && cent <= fCentMax); }
+  /// check the validity of the function for this particular centrality-pT-y combination
+  Bool_t IsValid(Float_t cent, Double_t pT, Double_t y) const {
+    return (cent > fCentMin && cent <= fCentMax && pT >= fPtMin && pT < fPtMax && y >= fYMin && y < fYMax);
+  }
   
+  /// check whether the given validity domain overlap the one of this function
+  Bool_t Overlap(Float_t centMin, Float_t centMax, Double_t pTMin, Double_t pTMax, Double_t yMin, Double_t yMax) const {
+    return !(centMin+1.e-4 > fCentMax || centMax-1.e-4 < fCentMin || pTMin+1.e-4 > fPtMax || pTMax-1.e-4 < fPtMin ||
+             yMin+1.e-4 > fYMax || yMax-1.e-4 < fYMin);
+  }
+  
+  /// return the function
   TF1* GetFunc() { return fFunc; }
   
 private:
@@ -111,11 +121,15 @@ private:
   /// Not implemented
   FuncRange& operator = (const FuncRange& rhs);
   
-  Float_t fCentMin; ///< centrality bin low-edge
-  Float_t fCentMax; ///< centrality bin up-edge
-  TF1 *fFunc;       ///< function (owner)
+  Float_t  fCentMin; ///< centrality bin low-edge
+  Float_t  fCentMax; ///< centrality bin up-edge
+  Double_t fPtMin;   ///< pt bin low-edge
+  Double_t fPtMax;   ///< pt bin up-edge
+  Double_t fYMin;    ///< y bin low-edge
+  Double_t fYMax;    ///< y bin up-edge
+  TF1     *fFunc;    ///< function (owner)
   
-  ClassDef(FuncRange, 1);
+  ClassDef(FuncRange, 2);
 };
 
 //________________________________________________________________________
@@ -164,13 +178,17 @@ public:
   void SetOriginPtFunc(TString formula, const Double_t *param, Double_t xMin, Double_t xMax);
   // create the new function with the parameters used to generate the new pT distribution
   void SetNewPtFunc(TString formula, const Double_t *param, Double_t xMin, Double_t xMax,
-                    Float_t centMin = -999., Float_t centMax = 999.);
+                    Float_t centMin = -999., Float_t centMax = 999.,
+                    Double_t pTMin = -999., Double_t pTMax = 999.,
+                    Double_t yMin = -999., Double_t yMax = 999.);
   
   // create the original function with the parameters used in simulation to generate the y distribution
   void SetOriginYFunc(TString formula, const Double_t *param, Double_t xMin, Double_t xMax);
   // create the new function with the parameters used to generate the new y distribution
   void SetNewYFunc(TString formula, const Double_t *param, Double_t xMin, Double_t xMax,
-                   Float_t centMin = -999., Float_t centMax = 999.);
+                   Float_t centMin = -999., Float_t centMax = 999.,
+                   Double_t pTMin = -999., Double_t pTMax = 999.,
+                   Double_t yMin = -999., Double_t yMax = 999.);
   
 private:
   
@@ -212,10 +230,10 @@ private:
   void DrawAccEffVsCent(Int_t ipt, Int_t iy, Int_t nMatch);
   
   // get the new pT function valid for this centrality
-  TF1* GetNewPtFunc(Float_t cent);
+  TF1* GetNewPtFunc(Float_t cent, Double_t pT, Double_t y);
   
   // get the new y function valid for this centrality
-  TF1* GetNewYFunc(Float_t cent);
+  TF1* GetNewYFunc(Float_t cent, Double_t pT, Double_t y);
   
   // normalize the function to its integral in the given range
   void NormFunc(TF1 *f, Double_t min, Double_t max);
