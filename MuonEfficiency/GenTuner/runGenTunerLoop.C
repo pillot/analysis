@@ -31,7 +31,7 @@ void runGenTunerLoop(TString smode = "local", TString inputFileName = "AliAOD.ro
   CopyInputFileLocally(referenceDataFile.Data(), "ReferenceResults.root");
   fileList.Add(new TObjString("ReferenceResults.root"));
   TString runWeight = gSystem->GetFromPipe("egrep '^[ ]*TString runWeight' runGenTuner.C | cut -d'\"' -f2");
-  if (!runWeight.IsNull()) fileList.Add(new TObjString("runWeight.txt"));
+  if (!runWeight.IsNull()) fileList.Add(new TObjString(runWeight.Data()));
   
   // --- general analysis setup ---
   TString aliphysicsVersion = gSystem->GetFromPipe("egrep '^[ ]*TString aliphysicsVersion' runGenTuner.C | cut -d'\"' -f2");

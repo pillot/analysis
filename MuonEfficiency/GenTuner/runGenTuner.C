@@ -65,13 +65,29 @@ Bool_t oldFixPtParam[6] = {kFALSE, kFALSE, kFALSE, kFALSE, kFALSE, kFALSE};
 TString newPtFormula = "[0] * (1. / TMath::Power([1] + TMath::Power(x,[2]), [3]) + [4] * TMath::Exp([5]*x))";
 Double_t newPtParam[6] = {349.454, 0.965971, 0.83717, 7.82193, -0.00325109, -1.79551};
 Bool_t newFixPtParam[6] = {kFALSE, kFALSE, kFALSE, kFALSE, kFALSE, kFALSE};
-*/
+*//*
 // tune CMUU7 LHC15o
 TString oldPtFormula = "[0] * (1. / TMath::Power([1] + TMath::Power(x,[2]), [3]) + [4] * TMath::Exp([5]*x))";
 Double_t oldPtParam[6] = {1150.91, 0.933872, 0.617325, 9.81893, -0.00265495, -2.26299};
 Bool_t oldFixPtParam[6] = {kFALSE, kFALSE, kFALSE, kFALSE, kFALSE, kFALSE};
 TString newPtFormula = "[0] * (1. / TMath::Power([1] + TMath::Power(x,[2]), [3]) + [4] * TMath::Exp([5]*x))";
 Double_t newPtParam[6] = {1150.91, 0.933872, 0.617325, 9.81893, -0.00265495, -2.26299};
+Bool_t newFixPtParam[6] = {kFALSE, kFALSE, kFALSE, kFALSE, kFALSE, kFALSE};
+*//*
+// tune CMSH7 LHC15o
+TString oldPtFormula = "[0] / TMath::Power([1] + TMath::Power(x,[2]), [3])";
+Double_t oldPtParam[4] = {4651.49, 1.94975, 1.52804, 3.76443};
+Bool_t oldFixPtParam[4] = {kFALSE, kFALSE, kFALSE, kFALSE};
+TString newPtFormula = "[0] / TMath::Power([1] + TMath::Power(x,[2]), [3])";
+Double_t newPtParam[4] = {4651.49, 1.94975, 1.52804, 3.76443};
+Bool_t newFixPtParam[4] = {kFALSE, kFALSE, kFALSE, kFALSE};
+*/
+// tune CMSL7 LHC15o
+TString oldPtFormula = "[0] * (1. / TMath::Power([1] + TMath::Power(x,[2]), [3]) + [4] * TMath::Exp([5]*x))";
+Double_t oldPtParam[6] = {811.367, 0.804372, 0.614056, 10.4864, -0.000650586, -1.72877};
+Bool_t oldFixPtParam[6] = {kFALSE, kFALSE, kFALSE, kFALSE, kFALSE, kFALSE};
+TString newPtFormula = "[0] * (1. / TMath::Power([1] + TMath::Power(x,[2]), [3]) + [4] * TMath::Exp([5]*x))";
+Double_t newPtParam[6] = {811.367, 0.804372, 0.614056, 10.4864, -0.000650586, -1.72877};
 Bool_t newFixPtParam[6] = {kFALSE, kFALSE, kFALSE, kFALSE, kFALSE, kFALSE};
 
 Double_t ptRange[2] = {0.8, 999.};
@@ -135,13 +151,29 @@ Bool_t oldFixYParam[3] = {kFALSE, kFALSE, kFALSE};
 TString newYFormula = "[0] * (1. + [1]*x*x + [2]*x*x*x*x)";
 Double_t newYParam[3] = {1.77115, -0.0966005, 0.00260707};
 Bool_t newFixYParam[3] = {kFALSE, kFALSE, kFALSE};
-*/
+*//*
 // tune CMUU7 LHC15o
 TString oldYFormula = "[0] * (1. + [1]*x*x + [2]*x*x*x*x)";
 Double_t oldYParam[3] = {1.03935, -0.0555363, 0.000838707};
 Bool_t oldFixYParam[3] = {kFALSE, kFALSE, kFALSE};
 TString newYFormula = "[0] * (1. + [1]*x*x + [2]*x*x*x*x)";
 Double_t newYParam[3] = {1.03935, -0.0555363, 0.000838707};
+Bool_t newFixYParam[3] = {kFALSE, kFALSE, kFALSE};
+*//*
+// tune CMSH7 LHC15o
+TString oldYFormula = "[0] * (1. + [1]*x*x + [2]*x*x*x*x)";
+Double_t oldYParam[3] = {1.98226, -0.101579, 0.00279066};
+Bool_t oldFixYParam[3] = {kFALSE, kFALSE, kFALSE};
+TString newYFormula = "[0] * (1. + [1]*x*x + [2]*x*x*x*x)";
+Double_t newYParam[3] = {1.98226, -0.101579, 0.00279066};
+Bool_t newFixYParam[3] = {kFALSE, kFALSE, kFALSE};
+*/
+// tune CMSL7 LHC15o
+TString oldYFormula = "[0] * (1. + [1]*x*x + [2]*x*x*x*x)";
+Double_t oldYParam[3] = {1.81086, -0.0983371, 0.00270169};
+Bool_t oldFixYParam[3] = {kFALSE, kFALSE, kFALSE};
+TString newYFormula = "[0] * (1. + [1]*x*x + [2]*x*x*x*x)";
+Double_t newYParam[3] = {1.81086, -0.0983371, 0.00270169};
 Bool_t newFixYParam[3] = {kFALSE, kFALSE, kFALSE};
 
 Double_t yRange[2] = {-4.3, -2.3};
@@ -157,7 +189,7 @@ Bool_t tuneMuPlusFrac = kTRUE;
 Bool_t isMC = kTRUE;
 Bool_t applyPhysicsSelection = kFALSE;
 Bool_t applyCentralitySelection = kFALSE;
-TString referenceDataFile = "/Users/pillot/Work/Alice/Data/2015/LHC15o/muon_calo_pass1/AOD175/GenTuner/CMUU7_50-90/AnalysisResults.root";
+TString referenceDataFile = "/Users/pillot/Work/Alice/Data/2015/LHC15o/muon_calo_pass1/AOD175/GenTuner/CMSL7_50-90/AnalysisResults.root";
 //TString runWeight = "runWeight.txt";
 TString runWeight = "";
 
@@ -188,13 +220,13 @@ void runGenTuner(TString smode = "local", TString inputFileName = "AliAOD.Muons.
   fileList.Add(new TObjString("AliAnalysisTaskGenTuner.h"));
   
   // --- grid specific setup ---
-  TString dataDir = "/alice/cern.ch/user/p/ppillot/Data/LHC15n/reco/PbPbParam_AlignV6";
-  TString dataPattern = "*AliESDs.root";
-  TString runFormat = "%09d";
-  TString outDir = "Data/LHC15n/reco/PbPbParam_AlignV6/Phys/all";
-  TString analysisMacroName = "Physics";
+  TString dataDir = "/alice/cern.ch/user/p/ppillot/Sim/LHC15o/muTuneCMSL7/results";
+  TString dataPattern = "*AliAOD.Muons.root";
+  TString runFormat = "%d";
+  TString outDir = "Sim/LHC15o/muTuneCMSL7/GenTuner";
+  TString analysisMacroName = "GenTuner";
   Int_t ttl = 30000;
-  Int_t maxFilesPerJob = 100;
+  Int_t maxFilesPerJob = 20;
   Int_t maxMergeFiles = 10;
   Int_t maxMergeStages = 2;
   
@@ -206,7 +238,7 @@ void runGenTuner(TString smode = "local", TString inputFileName = "AliAOD.Muons.
     CopyInputFileLocally(referenceDataFile.Data(), "ReferenceResults.root", overwrite);
     fileList.Add(new TObjString("ReferenceResults.root"));
   }
-  if (!runWeight.IsNull()) fileList.Add(new TObjString("runWeight.txt"));
+  if (!runWeight.IsNull()) fileList.Add(new TObjString(runWeight.Data()));
   
   // --- run the analysis (saf3 is a special case as the analysis is launched on the server) ---
   if (mode == kSAF3Connect) {
@@ -226,7 +258,7 @@ void runGenTuner(TString smode = "local", TString inputFileName = "AliAOD.Muons.
     AliAnalysisTaskGenTuner *genTuner = static_cast<AliAnalysisTaskGenTuner*>(CreateAnalysisTrain(iStep));
     if (!genTuner) return;
     
-    if (smode == "saf3" && splitDataset) AliAnalysisManager::GetAnalysisManager()->SetSkipTerminate(kTRUE);
+    if ((smode == "saf3" && splitDataset) || (mode == kGrid && smode != "terminate")) AliAnalysisManager::GetAnalysisManager()->SetSkipTerminate(kTRUE);
     
     RunAnalysis(smode, inputFileName, rootVersion, alirootVersion, aliphysicsVersion, extraLibs, extraIncs, extraTasks, extraPkgs, dataDir, dataPattern, outDir, analysisMacroName, runFormat, ttl, maxFilesPerJob, maxMergeFiles, maxMergeStages);
     
@@ -298,8 +330,8 @@ TObject* CreateAnalysisTrain(Int_t iStep)
     Error("CreateAnalysisTrain","AliAnalysisTaskGenTuner not created!");
     return 0x0;
   }
-  if (applyPhysicsSelection) genTuner->SelectCollisionCandidates(AliVEvent::kMUU7);
-//  if (applyPhysicsSelection) genTuner->SelectCollisionCandidates(AliVEvent::kMUS7);
+//  if (applyPhysicsSelection) genTuner->SelectCollisionCandidates(AliVEvent::kMUU7);
+  if (applyPhysicsSelection) genTuner->SelectCollisionCandidates(AliVEvent::kMUS7);
 //  if (applyPhysicsSelection) genTuner->SelectCollisionCandidates(AliVEvent::kMUSH7);
   if (applyCentralitySelection) genTuner->SelectCentrality(50., 90.);
   genTuner->SetMuonTrackCuts(trackCuts);
@@ -331,14 +363,14 @@ TObject* CreateAnalysisTrain(Int_t iStep)
     // enable the (run) weighting
     if (iStep > 0) {
       genTuner->Weight(kTRUE);
-      if (!runWeight.IsNull()) genTuner->RunWeight("Results_step0.root", "runWeight.txt");
+      if (!runWeight.IsNull()) genTuner->RunWeight("Results_step0.root", runWeight.Data());
       else genTuner->RunWeight("Results_step0.root", "ReferenceResults.root");
     }
     
   } else {
     
     // enable the run weighting for data
-    if (!runWeight.IsNull()) genTuner->RunWeight("runWeight.txt");
+    if (!runWeight.IsNull()) genTuner->RunWeight(runWeight.Data());
     
   }
   
