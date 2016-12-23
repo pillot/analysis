@@ -43,7 +43,7 @@ Double_t GetUpEdge(TH1 &h)
 }
 
 //______________________________________________________________________________
-void Compare(TString sfile1, TString sfile2)
+void Compare(TString sfile1, TString sfile2, Bool_t rebin = kFALSE)
 {
   /// compare generated histograms and functions
   
@@ -74,8 +74,14 @@ void Compare(TString sfile1, TString sfile2)
       }
       for (Int_t i = 0; i < 8; i++) {
 	hRes[i][j] = static_cast<TH1*>(list->FindObject(sRes[i].Data())->Clone(Form("%s%d",sRes[i].Data(),j+1)));
-	if (hRes[i][j]) hRes[i][j]->SetDirectory(0);
-//        if (hRes[i][j]) hRes[i][j]->Rebin(24);
+        if (hRes[i][j]) {
+          hRes[i][j]->SetDirectory(0);
+          if (rebin) {
+            if (i == 0 || i == 4) hRes[i][j]->Rebin(10);
+            if (i == 1 || i == 5) hRes[i][j]->Rebin(10);
+            if (i == 2 || i == 6) hRes[i][j]->Rebin(24);
+          }
+        }
       }
       for (Int_t i = 0; i < 2; i++) {
 	TF1 *f = static_cast<TF1*>(file->FindObjectAny(sfunc[i][j].Data()));
