@@ -54,6 +54,9 @@ Int_t GetMode(TString smode, TString input)
     } else if (!input.IsNull()) mode = kProof;
     if (mode == kProof && smode == "saf3" && gSystem->GetFromPipe("hostname") != "nansafmaster3.in2p3.fr")
       mode = kSAF3Connect;
+  } else if (smode == "vaf" && !input.IsNull() && !input.EndsWith(".root")) {
+    if (gSystem->GetFromPipe("hostname") != "alivaf-002.cern.ch") mode = kSAF3Connect;
+    else mode = kProof;
   }
   return mode;
 }
@@ -100,6 +103,7 @@ void CopyFileLocally(TList &pathList, TList &fileList, char overwrite = '\0')
   /// Copy files needed for this analysis
   
   if (gSystem->GetFromPipe("hostname") == "nansafmaster3.in2p3.fr") return; // files already there
+  else if (gSystem->GetFromPipe("hostname") == "alivaf-002.cern.ch") return; // files already there
   
   TIter nextFile(&fileList);
   TObjString *file;
@@ -149,6 +153,7 @@ void CopyInputFileLocally(TString inFile, TString outFileName, char overwrite = 
   /// Copy an input file needed for this analysis eventually changing its name
   
   if (gSystem->GetFromPipe("hostname") == "nansafmaster3.in2p3.fr") return; // files already there
+  else if (gSystem->GetFromPipe("hostname") == "alivaf-002.cern.ch") return; // files already there
   
   if (overwrite != 'a' && overwrite != 'k') {
     
@@ -176,19 +181,19 @@ void CopyInputFileLocally(TString inFile, TString outFileName, char overwrite = 
 }
 
 //______________________________________________________________________________
-Bool_t CopyFileOnSAF3(TList &fileList, TString dataset)
+Bool_t CopyFileOnAAF(TString aaf, TList &fileList, TString dataset)
 {
-  /// Copy files needed for this analysis from current to saf3 directory
+  /// Copy files needed for this analysis from current to aaf directory
   
-  TString saf3dir = gSystem->ExpandPathName("$HOME/saf3");
-  if (gSystem->AccessPathName(Form("%s/.vaf", saf3dir.Data()))) {
-    cout<<"saf3 folder is not mounted"<<endl;
+  TString aafdir = gSystem->ExpandPathName(Form("$HOME/%s",aaf.Data()));
+  if (gSystem->AccessPathName(Form("%s/.vaf", aafdir.Data()))) {
+    cout<<aaf.Data()<<" folder is not mounted"<<endl;
     cout<<"please retry as it can take some time to mount it"<<endl;
     return kFALSE;
   }
   
   TString remoteLocation = gSystem->pwd();
-  remoteLocation.ReplaceAll(gSystem->Getenv("HOME"),saf3dir.Data());
+  remoteLocation.ReplaceAll(gSystem->Getenv("HOME"),aafdir.Data());
   if (gSystem->AccessPathName(remoteLocation.Data())) gSystem->Exec(Form("mkdir -p %s", remoteLocation.Data()));
   
   TIter nextFile(&fileList);
@@ -207,14 +212,15 @@ Bool_t CopyFileOnSAF3(TList &fileList, TString dataset)
   
   gSystem->Exec(Form("cp runAnalysis.sh %s/runAnalysis.sh", remoteLocation.Data()));
   
-  if (gSystem->AccessPathName(Form("%s/Work/Alice/Macros/Facilities", saf3dir.Data())))
-    gSystem->Exec(Form("mkdir -p %s/Work/Alice/Macros/Facilities", saf3dir.Data()));
-  gSystem->Exec("cp -p $HOME/Work/Alice/Macros/Facilities/runTaskFacilities.C $HOME/saf3/Work/Alice/Macros/Facilities/runTaskFacilities.C");
-  gSystem->Exec("cp -p $HOME/Work/Alice/Macros/Facilities/mergeLocally.C $HOME/saf3/Work/Alice/Macros/Facilities/mergeLocally.C");
+  if (gSystem->AccessPathName(Form("%s/Work/Alice/Macros/Facilities", aafdir.Data())))
+    gSystem->Exec(Form("mkdir -p %s/Work/Alice/Macros/Facilities", aafdir.Data()));
+  gSystem->Exec(Form("cp -p $HOME/Work/Alice/Macros/Facilities/runTaskFacilities.C %s/Work/Alice/Macros/Facilities/runTaskFacilities.C", aafdir.Data()));
+  gSystem->Exec(Form("cp -p $HOME/Work/Alice/Macros/Facilities/mergeLocally.C %s/Work/Alice/Macros/Facilities/mergeLocally.C", aafdir.Data()));
   
   if (dataset.EndsWith(".txt")) {
-    gSystem->Exec(Form("cat %s | awk {'print $1\";Mode=cache\"}' > datasetSaf3.txt", dataset.Data()));
-    gSystem->Exec(Form("cp datasetSaf3.txt %s/datasetSaf3.txt", remoteLocation.Data()));
+    if (aaf == "saf3") gSystem->Exec(Form("cat %s | awk {'print $1\";Mode=cache\"}' > datasetAAF.txt", dataset.Data()));
+    else gSystem->Exec(Form("cat %s | awk {'print $1\";Mode=remote;\"}' > datasetAAF.txt", dataset.Data()));
+    gSystem->Exec(Form("cp datasetAAF.txt %s/datasetAAF.txt", remoteLocation.Data()));
   } else if (dataset.EndsWith(".root"))
     gSystem->Exec(Form("cp %s %s/%s", dataset.Data(), remoteLocation.Data(), gSystem->BaseName(dataset.Data())));
   
@@ -274,14 +280,14 @@ void LoadAlirootOnProof(TString& aaf, TString rootVersion, TString aliphysicsVer
                         Bool_t notOnClient = kFALSE, TString alirootMode = "base")
 {
   /// Load aliroot packages and set environment on Proof
-  
+
   // set general environment
   gEnv->SetValue("XSec.GSI.DelegProxy","2");
   
   // connect
   if (aaf == "prooflite") TProof::Open("");
   //  if (aaf == "prooflite") TProof::Open("workers=2");
-  else if (aaf == "saf3") TProof::Open("pod://");
+  else if (aaf == "saf3" || aaf == "vaf") TProof::Open("pod://");
   else {
     TString location, nWorkers;
     if (aaf == "caf") {
@@ -310,6 +316,10 @@ void LoadAlirootOnProof(TString& aaf, TString rootVersion, TString aliphysicsVer
     TString home = gSystem->Getenv("HOME");
     gProof->UploadPackage(Form("%s/AliceVaf.par", home.Data()));
     gProof->EnablePackage(Form("%s/AliceVaf.par", home.Data()), list);
+  } else if (aaf == "vaf") {
+    TFile::Cp("http://alibrary.web.cern.ch/alibrary/vaf/AliceVaf.par", "AliceVaf.par");
+    gProof->UploadPackage("AliceVaf.par");
+    gProof->EnablePackage("AliceVaf.par", list);
   } else gProof->EnablePackage(Form("VO_ALICE@AliPhysics::%s",aliphysicsVersion.Data()), list, notOnClient);
   
   // Optionally add packages
@@ -344,7 +354,7 @@ Int_t PrepareAnalysis(TString smode, TString input, TString &extraLibs, TString 
   // --- copy files needed for this analysis ---
   CopyFileLocally(pathList, fileList, overwrite);
   
-  // --- prepare environment locally (not needed if runing on saf3) ---
+  // --- prepare environment locally (not needed if runing on aaf) ---
   if (mode != kSAF3Connect) LoadAlirootLocally(extraLibs, extraIncs, extraTasks, extraPkgs);
   
   return mode;
@@ -532,18 +542,18 @@ TObject* CreateInputObject(Int_t mode, TString &inputName)
 }
 
 //______________________________________________________________________________
-void CreateSAF3Executable(TString dataset, Bool_t splitDataset, Bool_t overwriteDataset = kFALSE)
+void CreateAAFExecutable(TString aaf, TString dataset, Bool_t splitDataset, Bool_t overwriteDataset = kFALSE)
 {
-  /// Create the executable to run on SAF3
+  /// Create the executable to run on AAF
   ofstream outFile("runAnalysis.sh");
   outFile << "#!/bin/bash" << endl;
   outFile << "vafctl start" << endl;
-  Int_t nWorkers = 88;
+  Int_t nWorkers = (aaf == "saf3") ? 88 : 48;
   outFile << "nWorkers=" << nWorkers << endl;
   outFile << "let \"nWorkers -= `pod-info -n`\"" << endl;
   outFile << "echo \"requesting $nWorkers additional workers\"" << endl;
   outFile << "vafreq $nWorkers" << endl;
-  outFile << "vafwait " << nWorkers << endl;
+  outFile << "vafwait " << nWorkers - 8 << endl;
   TString macro = gSystem->GetFromPipe("tail -n 1 $HOME/.root_hist | sed 's/(.*)//g;s/^.x //g;s:^.*/::g'");
   TString arg = gSystem->GetFromPipe("tail -n 1 $HOME/.root_hist | sed 's/.*(/(/g'");
   arg.ReplaceAll("'", "'\"'\"'");
@@ -562,7 +572,7 @@ void CreateSAF3Executable(TString dataset, Bool_t splitDataset, Bool_t overwrite
         outFile << "fi" << endl;
       }
       outFile << "if [[ ! -d \"results\" ]]; then mkdir results; fi" << endl;
-      outFile << "for ds in `cat datasetSaf3.txt`; do" << endl;
+      outFile << "for ds in `cat datasetAAF.txt`; do" << endl;
       outFile << "  run=`echo $ds | egrep -o '[1-9][0-9][0-9][0-9][0-9][0-9]'`" << endl;
       outFile << "  if [[ -d \"results/$run\" ]]; then continue; fi" << endl;
       outFile << "  mkdir results/$run" << endl;
@@ -573,8 +583,8 @@ void CreateSAF3Executable(TString dataset, Bool_t splitDataset, Bool_t overwrite
       outFile << "done" << endl;
       outFile << "ls `pwd`/results/*/AnalysisResults.root > files2merge.txt" << endl;
       outFile << "root -b -q '$HOME/Work/Alice/Macros/Facilities/mergeLocally.C+(\"files2merge.txt\", kTRUE, kFALSE)'" << endl;
-      arg.ReplaceAll("saf3", "terminateonly");
-    } else arg.ReplaceAll(dataset.Data(), "datasetSaf3.txt");
+      arg.ReplaceAll(aaf.Data(), "terminateonly");
+    } else arg.ReplaceAll(dataset.Data(), "datasetAAF.txt");
   } else if (dataset.EndsWith(".root")) arg.ReplaceAll(dataset.Data(), gSystem->BaseName(dataset.Data()));
   outFile << "root -b -q '" << macro.Data() << arg.Data() << "'" << endl;
   outFile << "vafctl stop" << endl;
@@ -662,10 +672,10 @@ Bool_t RunAnalysisOnSAF3(TList &fileList, TString aliphysicsVersion, TString dat
   }
   
   // --- create the executable to run on SAF3 ---
-  CreateSAF3Executable(dataset, splitDataset, overwriteDataset);
+  CreateAAFExecutable("saf3", dataset, splitDataset, overwriteDataset);
   
   // --- copy files needed for this analysis ---
-  if (!CopyFileOnSAF3(fileList, dataset)) {
+  if (!CopyFileOnAAF("saf3", fileList, dataset)) {
     cout << "cp problem" << endl;
     return kFALSE;
   }
@@ -680,6 +690,54 @@ Bool_t RunAnalysisOnSAF3(TList &fileList, TString aliphysicsVersion, TString dat
   
   // --- copy analysis results (assuming analysis run smootly) ---
   gSystem->Exec(Form("cp -p %s/%s/*.root .", saf3dir.Data(), analysisLocation.Data()));
+  
+  return kTRUE;
+  
+}
+
+//______________________________________________________________________________
+Bool_t RunAnalysisOnVAF(TList &fileList, TString aliphysicsVersion, TString dataset,
+                        Bool_t splitDataset, Bool_t overwriteDataset = kFALSE)
+{
+  /// Run analysis on VAF
+  
+  // --- need a tunnel to alivaf-002 ---
+  TString user = (gSystem->Getenv("alien_API_USER") == NULL) ? "" : Form("%s@",gSystem->Getenv("alien_API_USER"));
+  if (gSystem->Exec("nc -z localhost 5501") != 0) {
+    gSystem->Exec(Form("xterm -e 'ssh %slxplus.cern.ch -L 5501:alivaf-002:22' &", user.Data()));
+    while (gSystem->Exec("nc -z localhost 5501") != 0);
+  }
+  
+  // --- mount alivaf-002 ---
+  TString vafdir = gSystem->ExpandPathName("$HOME/vaf");
+  if (gSystem->AccessPathName(vafdir.Data())) gSystem->Exec(Form("mkdir %s", vafdir.Data()));
+  if (gSystem->AccessPathName(Form("%s/.vaf", vafdir.Data()))) {
+    Int_t ret = gSystem->Exec(Form("sshfs -o ssh_command=\"gsissh -p5501\" %slocalhost: %s", user.Data(), vafdir.Data()));
+    if (ret != 0) {
+      cout<<"mounting of vaf folder failed"<<endl;
+      return kFALSE;
+    }
+  }
+  
+  // --- create the executable to run on VAF ---
+  CreateAAFExecutable("vaf", dataset, splitDataset, overwriteDataset);
+  
+  // --- copy files needed for this analysis ---
+  if (!CopyFileOnAAF("vaf", fileList, dataset)) {
+    cout << "cp problem" << endl;
+    return kFALSE;
+  }
+  
+  // --- change the AliPhysics version on VAF ---
+  gSystem->Exec(Form("sed -i '' 's/VafAliPhysicsVersion.*/VafAliPhysicsVersion=\"%s\"/g' $HOME/vaf/.vaf/vaf.conf", aliphysicsVersion.Data()));
+  
+  // --- enter VAF and run analysis ---
+  TString analysisLocation = gSystem->pwd();
+  analysisLocation.ReplaceAll(Form("%s/", gSystem->Getenv("HOME")), "");
+  gSystem->Exec(Form("gsissh -p 5501 -t -Y %slocalhost 'cd %s; ~/vaf-enter \"\" \"./runAnalysis.sh 2>&1 | tee runAnalysis.log; exit\"'", user.Data(), analysisLocation.Data()));
+  
+  // --- copy analysis results (assuming analysis run smootly) ---
+  gSystem->Exec(Form("cp -p %s/%s/*.root .", vafdir.Data(), analysisLocation.Data()));
   
   return kTRUE;
   
