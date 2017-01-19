@@ -25,31 +25,88 @@
 
 #endif
 
+enum {kCrystalBall, kBreitWigner, kGaus};
+Int_t chosenFunc = kCrystalBall;
 
-// average (non-)bending resolution at the chamber level (m)
-// to get the resolution at the station level it has to be divided by sqrt(2)
-// --- DATA ---
-/*// gaussian fit
-Double_t sigmaxChSt1 = 0.000450; // used to compute uncertainty on the slope at vtx
-Double_t sigmayChSt1 = 0.000150; // used to compute uncertainty on the slope at vtx
-Double_t sigmayCh = 0.000200; // used to compute uncertainty on the momentum at vtx
-// Breit Wigner fit (correspond to gamma values = FWHM/2.)
-Double_t sigmaxChSt1 = 0.000550; // used to compute uncertainty on the slope at vtx
-Double_t sigmayChSt1 = 0.000190; // used to compute uncertainty on the slope at vtx
-Double_t sigmayCh = 0.000280; // used to compute uncertainty on the momentum at vtx
-*/// ------------
-// --- SIM ---
-Double_t sigmaxChSt1 = 0.000544; // used to compute uncertainty on the slope at vtx
-Double_t sigmayChSt1 = 0.000131; // used to compute uncertainty on the slope at vtx
-Double_t sigmayCh = 0.000160; // used to compute uncertainty on the momentum at vtx
-/*// Breit Wigner fit (correspond to gamma values = FWHM/2.)
-Double_t sigmaxChSt1 = 0.000665; // used to compute uncertainty on the slope at vtx
-Double_t sigmayChSt1 = 0.000166; // used to compute uncertainty on the slope at vtx
-Double_t sigmayCh = 0.000224; // used to compute uncertainty on the momentum at vtx
-*/// -----------
+Bool_t tuneData = kTRUE;
+Double_t sigmaxChSt1 = -1.; // used to compute uncertainty on the slope at vtx
+Double_t sigmayChSt1 = -1.; // used to compute uncertainty on the slope at vtx
+Double_t sigmayCh = -1.; // used to compute uncertainty on the momentum at vtx
+Double_t tailxChSt1[2] = {0., 0.}; // CB tails for station 1 resolution dispersion along x
+Double_t tailyChSt1[2] = {0., 0.}; // CB tails for station 1 resolution dispersion along y
+Double_t tailyCh[2] = {0., 0.}; // CB tails for spectrometer resolution dispersion along y
 
-// use a Breit Wigner function instead of a gaussian to describe the chamber resolution
-Bool_t useBreitWigner = kFALSE;
+void InitSigmas()
+{
+  /// average (non-)bending resolution at the chamber level (m)
+  /// to get the resolution at the station level it has to be divided by sqrt(2)
+  
+  if (tuneData) { // --- DATA ---
+    
+    switch ( chosenFunc ) {
+      case kCrystalBall:
+        // Crystal Ball fit
+        sigmaxChSt1 = 0.000401;
+        tailxChSt1[0] = 2.017293;
+        tailxChSt1[1] = 1.890778;
+        sigmayChSt1 = 0.000110;
+        tailyChSt1[0] = 1.514588;
+        tailyChSt1[1] = 1.938707;
+        sigmayCh = 0.000153;
+        tailyCh[0] = 1.280116;
+        tailyCh[1] = 2.239019;
+        break;
+      case kBreitWigner:
+        // Breit Wigner fit (correspond to gamma values = FWHM/2.)
+        sigmaxChSt1 = 0.000550;
+        sigmayChSt1 = 0.000190;
+        sigmayCh = 0.000280;
+        break;
+      case kGaus:
+        // gaussian fit
+        sigmaxChSt1 = 0.000419;
+        sigmayChSt1 = 0.000130;
+        sigmayCh = 0.000207;
+        break;
+      default:
+        break;
+    }
+    
+  } else { // --- SIM ---
+    
+    switch ( chosenFunc ) {
+      case kCrystalBall:
+        // Crystal Ball fit
+        sigmaxChSt1 = 0.000519;
+        tailxChSt1[0] = 3.671484;
+        tailxChSt1[1] = 4.590817;
+        sigmayChSt1 = 0.000064;
+        tailyChSt1[0] = 2.453060;
+        tailyChSt1[1] = 1.715218;
+        sigmayCh = 0.000105;
+        tailyCh[0] = 2.145035;
+        tailyCh[1] = 1.782320;
+        break;
+      case kBreitWigner:
+        // Breit Wigner fit (correspond to gamma values = FWHM/2.)
+        sigmaxChSt1 = 0.000665;
+        sigmayChSt1 = 0.000166;
+        sigmayCh = 0.000224;
+        break;
+      case kGaus:
+        // gaussian fit
+        sigmaxChSt1 = 0.000506;
+        sigmayChSt1 = 0.000065;
+        sigmayCh = 0.000112;
+        break;
+      default:
+        break;
+    }
+    
+  }
+  
+}
+
 Double_t sigmaTrk = 0.002; // chamber resolution used during tracking
 Double_t sigmaTrkCut = 4.; // sigma cut used during tracking
 
@@ -102,7 +159,7 @@ Double_t phiRange[2] = {0.,360.};
 Double_t nPhiBinPerUnit = 0.25;
 
 // number of events to generate
-Int_t nEvents = 10000000;
+Int_t nEvents = 100000;
 
 // generate uniform in pT/eta and weight by the distribution instead of generating according to the distributions
 Bool_t generateUniform = kTRUE;
@@ -130,11 +187,17 @@ Double_t ELoss(Double_t p, Double_t theta);
 Double_t ELossFluctuation2(Double_t p, Double_t rhoZoverA);
 Double_t MCS2(Double_t p, Double_t dZ, Double_t x0);
 Double_t GetSigma(TH1 *h, Double_t *sigmaErr = 0x0);
+Double_t GetSigmaCrystalBall(TH1 *h, Double_t *sigmaErr = 0x0);
+Double_t GetSigmaGaus(TH1 *h, Double_t *sigmaErr = 0x0);
 Double_t GetSigmaBreitWigner(TH1 *h, Double_t *sigmaErr = 0x0);
 void FitGausResVsMom(TH2 *h, TGraphAsymmErrors *gSigma, Int_t rebinP);
 Double_t langaufun(Double_t *x, Double_t *par);
 Double_t GausInvXFun(Double_t *x, Double_t *par);
 void FitPResVsP(TH2 *h, TGraphAsymmErrors *gSigma, Int_t rebinP, Double_t pSwitch);
+Double_t CrystalBallSymmetric(Double_t *x,Double_t *par);
+Double_t GenRndGaus(Double_t mean, Double_t sigma);
+Double_t GenRndBreitWigner(Double_t mean, Double_t sigma, Double_t max);
+Double_t GenRndCrystalBall(Double_t mean, Double_t sigma, Double_t tail[2], Double_t max);
 
 
 //-----------------------------------------------------------------------
@@ -143,6 +206,9 @@ void PropagateResolutionToYield(TString fileResMeas = "results.root",
                                 Bool_t checkResVsP = kFALSE)
 {
   /// propagate the momentum resolution to an uncertainty on the muon yield vs pT
+  
+  InitSigmas();
+  if (sigmaxChSt1 < 0. || sigmayChSt1 < 0. || sigmayCh < 0.) return;
   
   gRandom->SetSeed(0);
   
@@ -190,8 +256,14 @@ void PropagateResolutionToYield(TString fileResMeas = "results.root",
   
   // read ouput of the task AliAnalysisTaskMuonResolution
   TH2F *hPRes = 0x0, *hSlopeXRes = 0x0, *hSlopeYRes = 0x0;
-  TH1D *hXResSt1_clIn = 0x0, *hXRes_clIn = 0x0, *hXResSt1_clOut = 0x0, *hXRes_clOut = 0x0;
-  TH1D *hYResSt1_clIn = 0x0, *hYRes_clIn = 0x0, *hYResSt1_clOut = 0x0, *hYRes_clOut = 0x0;
+  TH1D *hXResSt_clIn[5], *hXRes_clIn = 0x0, *hXResSt_clOut[5], *hXRes_clOut = 0x0;
+  TH1D *hYResSt_clIn[5], *hYRes_clIn = 0x0, *hYResSt_clOut[5], *hYRes_clOut = 0x0;
+  for (Int_t iSt = 0; iSt < 5; ++iSt) {
+    hXResSt_clIn[iSt] = 0x0;
+    hXResSt_clOut[iSt] = 0x0;
+    hYResSt_clIn[iSt] = 0x0;
+    hYResSt_clOut[iSt] = 0x0;
+  }
   TFile *fResMeas = TFile::Open(fileResMeas.Data(),"READ");
   if (fResMeas) {
     
@@ -222,30 +294,28 @@ void PropagateResolutionToYield(TString fileResMeas = "results.root",
     if (!hResidualXPerCh_ClusterIn || !hResidualXPerCh_ClusterOut || !hResidualYPerCh_ClusterIn || !hResidualYPerCh_ClusterOut) return;
     printf("\nmeasured resolution (m):\n");
     dummy->cd();
-    hXResSt1_clIn = hResidualXPerCh_ClusterIn->ProjectionY("hXResSt1_clIn",1,2,"e");
-    hXResSt1_clIn->SetDirectory(0);
-    hXResSt1_clOut = hResidualXPerCh_ClusterOut->ProjectionY("hXResSt1_clOut",1,2,"e");
-    hXResSt1_clOut->SetDirectory(0);
-    if (useBreitWigner) printf("- sigma x st1 = %.6f\n", 0.01*TMath::Sqrt(GetSigmaBreitWigner(hXResSt1_clIn)*GetSigmaBreitWigner(hXResSt1_clOut)));
-    else printf("- sigma x st1 = %.6f\n", 0.01*TMath::Sqrt(GetSigma(hXResSt1_clIn)*GetSigma(hXResSt1_clOut)));
+    for (Int_t iSt = 0; iSt < 5; ++iSt) {
+      hXResSt_clIn[iSt] = hResidualXPerCh_ClusterIn->ProjectionY(Form("hXResSt%d_clIn",iSt+1),2*iSt+1,2*iSt+2,"e");
+      hXResSt_clIn[iSt]->SetDirectory(0);
+      hXResSt_clOut[iSt] = hResidualXPerCh_ClusterOut->ProjectionY(Form("hXResSt%d_clOut",iSt+1),2*iSt+1,2*iSt+2,"e");
+      hXResSt_clOut[iSt]->SetDirectory(0);
+      printf("- sigma x st%d = %.6f\n", iSt+1, 0.01*TMath::Sqrt(GetSigma(hXResSt_clIn[iSt])*GetSigma(hXResSt_clOut[iSt])));
+      hYResSt_clIn[iSt] = hResidualYPerCh_ClusterIn->ProjectionY(Form("hYResSt%d_clIn",iSt+1),2*iSt+1,2*iSt+2,"e");
+      hYResSt_clIn[iSt]->SetDirectory(0);
+      hYResSt_clOut[iSt] = hResidualYPerCh_ClusterOut->ProjectionY(Form("hYResSt%d_clOut",iSt+1),2*iSt+1,2*iSt+2,"e");
+      hYResSt_clOut[iSt]->SetDirectory(0);
+      printf("- sigma y st%d = %.6f\n", iSt+1, 0.01*TMath::Sqrt(GetSigma(hYResSt_clIn[iSt])*GetSigma(hYResSt_clOut[iSt])));
+    }
     hXRes_clIn = hResidualXPerCh_ClusterIn->ProjectionY("hXRes_clIn",1,10,"e");
     hXRes_clIn->SetDirectory(0);
     hXRes_clOut = hResidualXPerCh_ClusterOut->ProjectionY("hXRes_clOut",1,10,"e");
     hXRes_clOut->SetDirectory(0);
-    if (useBreitWigner) printf("- sigma x = %.6f\n", 0.01*TMath::Sqrt(GetSigmaBreitWigner(hXRes_clIn)*GetSigmaBreitWigner(hXRes_clOut)));
-    else printf("- sigma x = %.6f\n", 0.01*TMath::Sqrt(GetSigma(hXRes_clIn)*GetSigma(hXRes_clOut)));
-    hYResSt1_clIn = hResidualYPerCh_ClusterIn->ProjectionY("hYResSt1_clIn",1,2,"e");
-    hYResSt1_clIn->SetDirectory(0);
-    hYResSt1_clOut = hResidualYPerCh_ClusterOut->ProjectionY("hYResSt1_clOut",1,2,"e");
-    hYResSt1_clOut->SetDirectory(0);
-    if (useBreitWigner) printf("- sigma y st1 = %.6f\n", 0.01*TMath::Sqrt(GetSigmaBreitWigner(hYResSt1_clIn)*GetSigmaBreitWigner(hYResSt1_clOut)));
-    else printf("- sigma y st1 = %.6f\n", 0.01*TMath::Sqrt(GetSigma(hYResSt1_clIn)*GetSigma(hYResSt1_clOut)));
+    printf("- sigma x = %.6f\n", 0.01*TMath::Sqrt(GetSigma(hXRes_clIn)*GetSigma(hXRes_clOut)));
     hYRes_clIn = hResidualYPerCh_ClusterIn->ProjectionY("hYRes_clIn",1,10,"e");
     hYRes_clIn->SetDirectory(0);
     hYRes_clOut = hResidualYPerCh_ClusterOut->ProjectionY("hYRes_clOut",1,10,"e");
     hYRes_clOut->SetDirectory(0);
-    if (useBreitWigner) printf("- sigma y = %.6f\n\n", 0.01*TMath::Sqrt(GetSigmaBreitWigner(hYRes_clIn)*GetSigmaBreitWigner(hYRes_clOut)));
-    else printf("- sigma y = %.6f\n\n", 0.01*TMath::Sqrt(GetSigma(hYRes_clIn)*GetSigma(hYRes_clOut)));
+    printf("- sigma y = %.6f\n\n", 0.01*TMath::Sqrt(GetSigma(hYRes_clIn)*GetSigma(hYRes_clOut)));
 
     fResMeas->Close();
   }
@@ -254,8 +324,12 @@ void PropagateResolutionToYield(TString fileResMeas = "results.root",
   TGraphAsymmErrors *gSigmaResPAtVtxVsP = 0x0, *gSigmaResSlopeXAtVtxVsP = 0x0, *gSigmaResSlopeYAtVtxVsP = 0x0;
   TGraphAsymmErrors *gSigmaResPAtVtxVsPIn02deg = 0x0, *gSigmaResPAtVtxVsPIn23deg = 0x0, *gSigmaResPAtVtxVsPIn310deg = 0x0;
   TGraphAsymmErrors *gSigmaResSlopeXAtVtxVsP2 = 0x0, *gSigmaResSlopeYAtVtxVsP2 = 0x0;
-  TH1D *hXResSt1 = 0x0, *hXRes = 0x0;
-  TH1D *hYResSt1 = 0x0, *hYRes = 0x0;
+  TH1D *hXResSt[5], *hXRes = 0x0;
+  TH1D *hYResSt[5], *hYRes = 0x0;
+  for (Int_t iSt = 0; iSt < 5; ++iSt) {
+    hXResSt[iSt] = 0x0;
+    hYResSt[iSt] = 0x0;
+  }
   TFile *fResSim = TFile::Open(fileResSim.Data(),"READ");
   if (fResSim) {
     
@@ -285,28 +359,26 @@ void PropagateResolutionToYield(TString fileResMeas = "results.root",
     if (!hResClXVsCh || !hResClYVsCh) return;
     printf("true resolution (m):\n");
     dummy->cd();
-    hXResSt1 = hResClXVsCh->ProjectionY("hXResSt1",1,2,"e");
-    hXResSt1->SetDirectory(0);
-    if (useBreitWigner) printf("- sigma x st1 = %.6f\n", 0.01*GetSigmaBreitWigner(hXResSt1));
-    else printf("- sigma x st1 = %.6f\n", 0.01*GetSigma(hXResSt1));
+    for (Int_t iSt = 0; iSt < 5; ++iSt) {
+      hXResSt[iSt] = hResClXVsCh->ProjectionY(Form("hXResSt%d",iSt+1),2*iSt+1,2*iSt+2,"e");
+      hXResSt[iSt]->SetDirectory(0);
+      printf("- sigma x st%d = %.6f\n", iSt+1, 0.01*GetSigma(hXResSt[iSt]));
+      hYResSt[iSt] = hResClYVsCh->ProjectionY(Form("hYResSt%d",iSt+1),2*iSt+1,2*iSt+2,"e");
+      hYResSt[iSt]->SetDirectory(0);
+      printf("- sigma y st%d = %.6f\n", iSt+1, 0.01*GetSigma(hYResSt[iSt]));
+    }
     hXRes = hResClXVsCh->ProjectionY("hXRes",1,10,"e");
     hXRes->SetDirectory(0);
-    if (useBreitWigner) printf("- sigma x = %.6f\n", 0.01*GetSigmaBreitWigner(hXRes));
-    else printf("- sigma x = %.6f\n", 0.01*GetSigma(hXRes));
-    hYResSt1 = hResClYVsCh->ProjectionY("hYResSt1",1,2,"e");
-    hYResSt1->SetDirectory(0);
-    if (useBreitWigner) printf("- sigma y st1 = %.6f\n", 0.01*GetSigmaBreitWigner(hYResSt1));
-    else printf("- sigma y st1 = %.6f\n", 0.01*GetSigma(hYResSt1));
+    printf("- sigma x = %.6f\n", 0.01*GetSigma(hXRes));
     hYRes = hResClYVsCh->ProjectionY("hYRes",1,10,"e");
     hYRes->SetDirectory(0);
-    if (useBreitWigner) printf("- sigma y = %.6f\n\n", 0.01*GetSigmaBreitWigner(hYRes));
-    else printf("- sigma y = %.6f\n\n", 0.01*GetSigma(hYRes));
+    printf("- sigma y = %.6f\n\n", 0.01*GetSigma(hYRes));
     
     if (checkResVsP) {
       
       if (atFirstCluster) {
         
-        // recompute momentum resolution at 1st versus p
+        // recompute momentum resolution at 1st cluster versus p
         TH2F *hResPAtVtxVsPIn310deg = static_cast<TH2F*>(trackerResolutionList->FindObject("hResPAt1stClVsP"));
         if (!hResPAtVtxVsPIn310deg) return;
         dummy->cd();
@@ -317,7 +389,7 @@ void PropagateResolutionToYield(TString fileResMeas = "results.root",
         gSigmaResPAtVtxVsPIn310deg->SetLineColor(6);
         FitPResVsP(hResPAtVtxVsPIn310deg, gSigmaResPAtVtxVsPIn310deg, rebinP, -1.);
         
-        // recompute slope resolution at vertex versus p
+        // recompute slope resolution at 1st cluster versus p
         TH2F *hResSlopeXAtVtxVsP = static_cast<TH2F*>(trackerResolutionList->FindObject("hResSlopeXAt1stClVsP"));
         TH2F *hResSlopeYAtVtxVsP = static_cast<TH2F*>(trackerResolutionList->FindObject("hResSlopeYAt1stClVsP"));
         if (!hResSlopeXAtVtxVsP || !hResSlopeYAtVtxVsP) return;
@@ -435,49 +507,53 @@ void PropagateResolutionToYield(TString fileResMeas = "results.root",
   fSlopeYResVsP310->Draw("same");
   
   // draw cluster-track and cluster-trackRef x-residuals
-  if (hXResSt1_clIn || hXRes_clIn || hXResSt1_clOut || hXRes_clOut || hXResSt1 || hXRes) {
-    TCanvas *cResX = new TCanvas("cResX","cResX",10,10,900,600);
-    cResX->Divide(3,2);
-    gROOT->SetSelectedPad(cResX->cd(1));
-    gPad->SetLogy();
-    if (hXResSt1_clIn) hXResSt1_clIn->Draw();
-    gROOT->SetSelectedPad(cResX->cd(2));
-    gPad->SetLogy();
-    if (hXResSt1_clOut) hXResSt1_clOut->Draw();
-    gROOT->SetSelectedPad(cResX->cd(3));
-    gPad->SetLogy();
-    if (hXResSt1) hXResSt1->Draw();
-    gROOT->SetSelectedPad(cResX->cd(4));
+  if (hXResSt_clIn[0] || hXRes_clIn || hXResSt_clOut[0] || hXRes_clOut || hXResSt[0] || hXRes) {
+    TCanvas *cResX = new TCanvas("cResX","cResX",10,10,1200,600);
+    cResX->Divide(6,3);
+    for (Int_t iSt = 0; iSt < 5; ++iSt) {
+      gROOT->SetSelectedPad(cResX->cd(iSt+1));
+      gPad->SetLogy();
+      if (hXResSt_clIn[iSt]) hXResSt_clIn[iSt]->Draw();
+      gROOT->SetSelectedPad(cResX->cd(iSt+7));
+      gPad->SetLogy();
+      if (hXResSt_clOut[iSt]) hXResSt_clOut[iSt]->Draw();
+      gROOT->SetSelectedPad(cResX->cd(iSt+13));
+      gPad->SetLogy();
+      if (hXResSt[iSt]) hXResSt[iSt]->Draw();
+    }
+    gROOT->SetSelectedPad(cResX->cd(6));
     gPad->SetLogy();
     if (hXRes_clIn) hXRes_clIn->Draw();
-    gROOT->SetSelectedPad(cResX->cd(5));
+    gROOT->SetSelectedPad(cResX->cd(12));
     gPad->SetLogy();
     if (hXRes_clOut) hXRes_clOut->Draw();
-    gROOT->SetSelectedPad(cResX->cd(6));
+    gROOT->SetSelectedPad(cResX->cd(18));
     gPad->SetLogy();
     if (hXRes) hXRes->Draw();
   }
   
   // draw cluster-track and cluster-trackRef y-residuals
-  if (hYResSt1_clIn || hYRes_clIn || hYResSt1_clOut || hYRes_clOut || hYResSt1 || hYRes) {
-    TCanvas *cResY = new TCanvas("cResY","cResY",10,10,900,600);
-    cResY->Divide(3,2);
-    gROOT->SetSelectedPad(cResY->cd(1));
-    gPad->SetLogy();
-    if (hYResSt1_clIn) hYResSt1_clIn->Draw();
-    gROOT->SetSelectedPad(cResY->cd(2));
-    gPad->SetLogy();
-    if (hYResSt1_clOut) hYResSt1_clOut->Draw();
-    gROOT->SetSelectedPad(cResY->cd(3));
-    gPad->SetLogy();
-    if (hYResSt1) hYResSt1->Draw();
-    gROOT->SetSelectedPad(cResY->cd(4));
+  if (hYResSt_clIn[0] || hYRes_clIn || hYResSt_clOut[0] || hYRes_clOut || hYResSt[0] || hYRes) {
+    TCanvas *cResY = new TCanvas("cResY","cResY",10,10,1200,600);
+    cResY->Divide(6,3);
+    for (Int_t iSt = 0; iSt < 5; ++iSt) {
+      gROOT->SetSelectedPad(cResY->cd(iSt+1));
+      gPad->SetLogy();
+      if (hYResSt_clIn[iSt]) hYResSt_clIn[iSt]->Draw();
+      gROOT->SetSelectedPad(cResY->cd(iSt+7));
+      gPad->SetLogy();
+      if (hYResSt_clOut[iSt]) hYResSt_clOut[iSt]->Draw();
+      gROOT->SetSelectedPad(cResY->cd(iSt+13));
+      gPad->SetLogy();
+      if (hYResSt[iSt]) hYResSt[iSt]->Draw();
+    }
+    gROOT->SetSelectedPad(cResY->cd(6));
     gPad->SetLogy();
     if (hYRes_clIn) hYRes_clIn->Draw();
-    gROOT->SetSelectedPad(cResY->cd(5));
+    gROOT->SetSelectedPad(cResY->cd(12));
     gPad->SetLogy();
     if (hYRes_clOut) hYRes_clOut->Draw();
-    gROOT->SetSelectedPad(cResY->cd(6));
+    gROOT->SetSelectedPad(cResY->cd(18));
     gPad->SetLogy();
     if (hYRes) hYRes->Draw();
   }
@@ -651,8 +727,8 @@ void PropagateResolutionToYield(TString fileResMeas = "results.root",
     Double_t slopeX = TMath::Cos(phi)/TMath::SinH(eta);
     Double_t slopeY = TMath::Sin(phi)/TMath::SinH(eta);
     Double_t sigmaMCSAbs = TMath::Sqrt(SigmaSlopeFromMCSInAbs2((theta < 2.) ? p : pHalfLoss, theta));
-    Double_t slopeXMCS = gRandom->Gaus(slopeX,sigmaMCSAbs);
-    Double_t slopeYMCS = gRandom->Gaus(slopeY,sigmaMCSAbs);
+    Double_t slopeXMCS = GenRndGaus(slopeX,sigmaMCSAbs);
+    Double_t slopeYMCS = GenRndGaus(slopeY,sigmaMCSAbs);
     
     // track position at the end of the absorber
     Double_t slopeXAbs, slopeYAbs;
@@ -711,55 +787,60 @@ void PropagateResolutionToYield(TString fileResMeas = "results.root",
     Double_t sigmaMCSCh2 = SigmaSlopeFromMCSInCh2(pAbsEnd, kFALSE, zBRec);
     Double_t sigmaResX2 = SigmaSlopeFromRes2(kFALSE, kFALSE, zBRec);
     Double_t sigmaResY2 = SigmaSlopeFromRes2(kTRUE, kFALSE, zBRec);
-    Double_t slopeXRec, slopeYRec;
-    if (useBreitWigner) {
-      Double_t slopeXMCSCh = gRandom->Gaus(slopeXMCS,TMath::Sqrt(sigmaMCSCh2));
-      Double_t slopeYMCSCh = gRandom->Gaus(slopeYMCS,TMath::Sqrt(sigmaMCSCh2));
-      do slopeXRec = gRandom->BreitWigner(slopeXMCSCh,TMath::Sqrt(sigmaResX2));
-      while (TMath::Abs(slopeXRec-slopeXMCSCh) > sigmaTrkCut * TMath::Sqrt(sigmaResX2) / sigmaxChSt1 * sigmaTrk);
-      do slopeYRec = gRandom->BreitWigner(slopeYMCSCh,TMath::Sqrt(sigmaResY2));
-      while (TMath::Abs(slopeYRec-slopeYMCSCh) > sigmaTrkCut * TMath::Sqrt(sigmaResY2) / sigmayChSt1 * sigmaTrk);
+    Double_t slopeXRec = 0., slopeYRec = 0.;
+    if (chosenFunc == kGaus) {
+      slopeXRec = GenRndGaus(slopeXMCS,TMath::Sqrt(sigmaMCSCh2+sigmaResX2));
+      slopeYRec = GenRndGaus(slopeYMCS,TMath::Sqrt(sigmaMCSCh2+sigmaResY2));
     } else {
-      Double_t sigmaSlopeX = TMath::Sqrt(sigmaMCSCh2+sigmaResX2);
-      Double_t sigmaSlopeY = TMath::Sqrt(sigmaMCSCh2+sigmaResY2);
-      slopeXRec = gRandom->Gaus(slopeXMCS,sigmaSlopeX);
-      slopeYRec = gRandom->Gaus(slopeYMCS,sigmaSlopeY);
+      Double_t slopeXMCSCh = GenRndGaus(slopeXMCS,TMath::Sqrt(sigmaMCSCh2));
+      Double_t slopeYMCSCh = GenRndGaus(slopeYMCS,TMath::Sqrt(sigmaMCSCh2));
+      Double_t sigmaResX = TMath::Sqrt(sigmaResX2);
+      Double_t sigmaResY = TMath::Sqrt(sigmaResY2);
+      if (chosenFunc == kBreitWigner) {
+        slopeXRec = GenRndBreitWigner(slopeXMCSCh, sigmaResX, sigmaTrkCut * sigmaResX / sigmaxChSt1 * sigmaTrk);
+        slopeYRec = GenRndBreitWigner(slopeYMCSCh, sigmaResY, sigmaTrkCut * sigmaResY / sigmayChSt1 * sigmaTrk);
+      } else if (chosenFunc == kCrystalBall) {
+        slopeXRec = GenRndCrystalBall(slopeXMCSCh, sigmaResX, tailxChSt1, sigmaTrkCut * sigmaResX / sigmaxChSt1 * sigmaTrk);
+        slopeYRec = GenRndCrystalBall(slopeYMCSCh, sigmaResY, tailyChSt1, sigmaTrkCut * sigmaResY / sigmayChSt1 * sigmaTrk);
+      }
     }
     /*
     // track slope dispersion at first cluster
     Double_t sigmaMCSCh2 = SigmaSlopeFromMCSInCh2(pAbsEnd, kFALSE, zBRec);
     Double_t sigmaSlopeX2 = SigmaSlopeFromRes2(kFALSE, kFALSE, zBRec);
     Double_t sigmaSlopeY2 = SigmaSlopeFromRes2(kTRUE, kFALSE, zBRec);
-    Double_t dSlopeX, dSlopeY;
-    if (useBreitWigner) {
+    Double_t dSlopeX = 0., dSlopeY = 0.;
+    if (chosenFunc == kGaus) {
+      dSlopeX = GenRndGaus(0.,TMath::Sqrt(sigmaMCSCh2+sigmaSlopeX2));
+      dSlopeY = GenRndGaus(0.,TMath::Sqrt(sigmaMCSCh2+sigmaSlopeY2));
+    } else {
       Double_t sigmaMCSCh = TMath::Sqrt(sigmaMCSCh2);
+      Double_t dSlopeXMCS = GenRndGaus(0.,sigmaMCSCh);
+      Double_t dSlopeYMCS = GenRndGaus(0.,sigmaMCSCh);
       Double_t sigmaSlopeX = TMath::Sqrt(sigmaSlopeX2);
       Double_t sigmaSlopeY = TMath::Sqrt(sigmaSlopeX2);
-      Double_t dSlopeXMCS = gRandom->Gaus(0.,sigmaMCSCh);
-      Double_t dSlopeYMCS = gRandom->Gaus(0.,sigmaMCSCh);
-      do dSlopeX = gRandom->BreitWigner(dSlopeXMCS,sigmaSlopeX);
-      while (TMath::Abs(dSlopeX-dSlopeXMCS) > sigmaTrkCut * sigmaSlopeX / sigmaxChSt1 * sigmaTrk);
-      do dSlopeY = gRandom->BreitWigner(dSlopeYMCS,sigmaSlopeY);
-      while (TMath::Abs(dSlopeY-dSlopeYMCS) > sigmaTrkCut * sigmaSlopeY / sigmayChSt1 * sigmaTrk);
-    } else {
-      Double_t sigmaSlopeX = TMath::Sqrt(sigmaMCSCh2+sigmaSlopeX2);
-      Double_t sigmaSlopeY = TMath::Sqrt(sigmaMCSCh2+sigmaSlopeY2);
-      dSlopeX = gRandom->Gaus(0.,sigmaSlopeX);
-      dSlopeY = gRandom->Gaus(0.,sigmaSlopeY);
+      if (chosenFunc == kBreitWigner) {
+        dSlopeX = GenRndBreitWigner(dSlopeXMCS, sigmaSlopeX, sigmaTrkCut * sigmaSlopeX / sigmaxChSt1 * sigmaTrk);
+        dSlopeY = GenRndBreitWigner(dSlopeYMCS, sigmaSlopeY, sigmaTrkCut * sigmaSlopeY / sigmayChSt1 * sigmaTrk);
+      } else if (chosenFunc == kCrystalBall) {
+        dSlopeX = GenRndCrystalBall(dSlopeXMCS, sigmaSlopeX, tailxChSt1, sigmaTrkCut * sigmaSlopeX / sigmaxChSt1 * sigmaTrk);
+        dSlopeY = GenRndCrystalBall(dSlopeYMCS, sigmaSlopeY, tailyChSt1, sigmaTrkCut * sigmaSlopeY / sigmayChSt1 * sigmaTrk);
+      }
     }
     
     // track position dispersion at first cluster
     Double_t sigmaResX = TMath::Sqrt(SigmaPosFromRes2(kFALSE, kFALSE, zBRec));
     Double_t sigmaResY = TMath::Sqrt(SigmaPosFromRes2(kTRUE, kFALSE, zBRec));
-    Double_t dPosX, dPosY;
-    if (useBreitWigner) {
-      do dPosX = gRandom->BreitWigner(0.,sigmaResX);
-      while (TMath::Abs(dPosX) > sigmaTrkCut * sigmaResX / sigmaxChSt1 * sigmaTrk);
-      do dPosY = gRandom->BreitWigner(0.,sigmaResY);
-      while (TMath::Abs(dPosY) > sigmaTrkCut * sigmaResY / sigmayChSt1 * sigmaTrk);
-    } else {
-      dPosX = gRandom->Gaus(0.,sigmaResX);
-      dPosY = gRandom->Gaus(0.,sigmaResY);
+    Double_t dPosX = 0., dPosY = 0.;
+    if (chosenFunc == kGaus) {
+      dPosX = GenRndGaus(0.,sigmaResX);
+      dPosY = GenRndGaus(0.,sigmaResY);
+    } else if (chosenFunc == kBreitWigner) {
+      dPosX = GenRndBreitWigner(0., sigmaResX, sigmaTrkCut * sigmaResX / sigmaxChSt1 * sigmaTrk);
+      dPosY = GenRndBreitWigner(0., sigmaResY, sigmaTrkCut * sigmaResY / sigmayChSt1 * sigmaTrk);
+    } else if (chosenFunc == kCrystalBall) {
+      dPosX = GenRndCrystalBall(0., sigmaResX, tailxChSt1, sigmaTrkCut * sigmaResX / sigmaxChSt1 * sigmaTrk);
+      dPosY = GenRndCrystalBall(0., sigmaResY, tailyChSt1, sigmaTrkCut * sigmaResY / sigmayChSt1 * sigmaTrk);
     }
     
     // compute reconstructed slopes at vertex
@@ -767,17 +848,18 @@ void PropagateResolutionToYield(TString fileResMeas = "results.root",
     Double_t slopeYRec = slopeYMCS + (dSlopeY*(5.36-zBRec) + dPosY)/zBRec;
     */
     // compute reconstructed momentum at first cluster
-    Double_t pAbsEndRec;
-    if (useBreitWigner) {
-      Double_t thetaDevMCS = gRandom->Gaus(PToThetaDev(pAbsEnd),TMath::Sqrt(SigmaThetaDevFromMCS2(pAbsEnd)));
-      Double_t sigmaThetaRes = TMath::Sqrt(SigmaThetaDevFromRes2());
-      Double_t thetaDevRec;
-      do thetaDevRec = gRandom->BreitWigner(thetaDevMCS,sigmaThetaRes);
-      while (TMath::Abs(thetaDevRec-thetaDevMCS) > sigmaTrkCut * sigmaThetaRes / sigmayCh * sigmaTrk);
-      pAbsEndRec = ThetaDevToP(thetaDevRec);
-    } else {
+    Double_t pAbsEndRec = 0.;
+    if (chosenFunc == kGaus) {
       Double_t sigmaThetaDev = TMath::Sqrt(SigmaThetaDevFromMCS2(pAbsEnd) + SigmaThetaDevFromRes2());
-      pAbsEndRec = ThetaDevToP(gRandom->Gaus(PToThetaDev(pAbsEnd),sigmaThetaDev));
+      pAbsEndRec = ThetaDevToP(GenRndGaus(PToThetaDev(pAbsEnd),sigmaThetaDev));
+    } else {
+      Double_t thetaDevMCS = GenRndGaus(PToThetaDev(pAbsEnd),TMath::Sqrt(SigmaThetaDevFromMCS2(pAbsEnd)));
+      Double_t sigmaThetaRes = TMath::Sqrt(SigmaThetaDevFromRes2());
+      if (chosenFunc == kBreitWigner) {
+        pAbsEndRec = ThetaDevToP(GenRndBreitWigner(thetaDevMCS, sigmaThetaRes, sigmaTrkCut * sigmaThetaRes / sigmayCh * sigmaTrk));
+      } else if (chosenFunc == kCrystalBall) {
+        pAbsEndRec = ThetaDevToP(GenRndCrystalBall(thetaDevMCS, sigmaThetaRes, tailyCh, sigmaTrkCut * sigmaThetaRes / sigmayCh * sigmaTrk));
+      }
     }
     if (pAbsEndRec < 0.) pAbsEndRec = 1.e6;
     
@@ -1099,7 +1181,7 @@ Double_t PResVsP( const Double_t *x, const Double_t *par )
   Double_t pCorr = TMath::Max(atFirstCluster ? p : p - dp, pAccCut);
   Double_t thetaDev = PToThetaDev(pCorr);
   Double_t sigmaThetaDev2 = SigmaThetaDevFromRes2();
-  if (useBreitWigner) sigmaThetaDev2 /= 2.*log(2.); // FWHM = 2 * gamma = 2 * srqt(2*ln(2)) * sigma
+  if (chosenFunc == kBreitWigner) sigmaThetaDev2 /= 2.*log(2.); // FWHM = 2 * gamma = 2 * srqt(2*ln(2)) * sigma
   sigmaThetaDev2 += SigmaThetaDevFromMCS2(pCorr);
   if (atFirstCluster) return 100.*TMath::Sqrt(sigmaThetaDev2)/thetaDev;
   else {
@@ -1122,7 +1204,7 @@ Double_t SlopeResVsP( const Double_t *x, const Double_t *par )
   Double_t pCorr = TMath::Max(atFirstCluster ? p : p - dp, pAccCut);
   Double_t sigmaMCSCh2 = SigmaSlopeFromMCSInCh2(pCorr, atFirstCluster, zB);
   Double_t sigmaRes2 = SigmaSlopeFromRes2((par[1] > 0), atFirstCluster, zB);
-  if (useBreitWigner) sigmaRes2 /= 2.*log(2.); // FWHM = 2 * gamma = 2 * srqt(2*ln(2)) * sigma
+  if (chosenFunc == kBreitWigner) sigmaRes2 /= 2.*log(2.); // FWHM = 2 * gamma = 2 * srqt(2*ln(2)) * sigma
   if (atFirstCluster) return TMath::Sqrt(sigmaMCSCh2+sigmaRes2);
   else {
     Double_t pHalfCorr = p-0.5*TMath::Min(p-1.e-6,dp);
@@ -1280,6 +1362,66 @@ Double_t MCS2(Double_t p, Double_t dZ, Double_t x0)
 Double_t GetSigma(TH1 *h, Double_t *sigmaErr)
 {
   /// get the dispersion of the histo
+  switch (chosenFunc) {
+    case kCrystalBall:
+      return GetSigmaCrystalBall(h, sigmaErr);
+      break;
+    case kBreitWigner:
+      return GetSigmaBreitWigner(h, sigmaErr);
+      break;
+    case kGaus:
+      return GetSigmaGaus(h, sigmaErr);
+      break;
+    default:
+      printf("Unknown option chosen!\n");
+      return -1.;
+      break;
+  }
+}
+
+//-----------------------------------------------------------------------
+Double_t GetSigmaCrystalBall(TH1 *h, Double_t *sigmaErr)
+{
+  /// get the dispersion of the histo
+  
+  static TF1 *fCrystalBall = new TF1("CrystalBall",CrystalBallSymmetric,-2.5,2.5,5);
+  
+  if (h->GetEntries() < 10.) {
+    if (sigmaErr) *sigmaErr = 0.;
+    return 0.;
+  }
+  
+  // first fit
+  Double_t xMin = -sigmaTrkCut*sigmaTrk*100.;
+  Double_t xMax = sigmaTrkCut*sigmaTrk*100.;
+  fCrystalBall->SetRange(xMin, xMax);
+  fCrystalBall->SetParameters(h->GetEntries(), 0., 0.1, 2., 1.5);
+  fCrystalBall->SetParLimits(1, xMin, xMax);
+  fCrystalBall->SetParLimits(2, 0., 1.);
+  fCrystalBall->FixParameter(3, 1.e6);
+  h->Fit(fCrystalBall, "WWRNQ");
+  
+  // rebin histo
+  Int_t rebin = static_cast<Int_t>(TMath::Min(0.1*h->GetNbinsX(),TMath::Max(0.3*fCrystalBall->GetParameter(2)/h->GetBinWidth(1),1.)));
+  while (h->GetNbinsX()%rebin!=0) rebin--;
+  h->Rebin(rebin);
+  
+  // second fit
+  fCrystalBall->ReleaseParameter(3);
+  fCrystalBall->SetParameter(3, 2.);
+  fCrystalBall->SetParameter(4, 1.5);
+  h->Fit(fCrystalBall,"RQ");
+  
+  if (!TString(h->GetName()).Contains("In")) printf("alpha = %f; n = %f\n", fCrystalBall->GetParameter(3), fCrystalBall->GetParameter(4));
+  if (sigmaErr) *sigmaErr = fCrystalBall->GetParError(2);
+  return fCrystalBall->GetParameter(2);
+  
+}
+
+//-----------------------------------------------------------------------
+Double_t GetSigmaGaus(TH1 *h, Double_t *sigmaErr)
+{
+  /// get the dispersion of the histo
   
   static TF1 *fGaus = new TF1("fGaus","gaus");
   
@@ -1372,7 +1514,7 @@ void FitGausResVsMom(TH2 *h, TGraphAsymmErrors *gSigma, Int_t rebinP)
     
     // get fit results and fill graph
     Double_t sigmaErr = 0.;
-    Double_t sigma = GetSigma(tmp, &sigmaErr);
+    Double_t sigma = GetSigmaGaus(tmp, &sigmaErr);
     h->GetXaxis()->SetRange(i-rebinP+1,i);
     Double_t p = (tmp->GetEntries() > 0) ? h->GetMean() : 0.5 * (h->GetXaxis()->GetBinLowEdge(i-rebinP+1) + h->GetXaxis()->GetBinLowEdge(i+1));
     h->GetXaxis()->SetRange();
@@ -1581,5 +1723,56 @@ void FitPResVsP(TH2 *h, TGraphAsymmErrors *gSigma, Int_t rebinP, Double_t pSwitc
     
   }
   
+}
+
+//-----------------------------------------------------------------------
+Double_t CrystalBallSymmetric(Double_t *x,Double_t *par)
+{
+  ///par[0] = Normalization
+  ///par[1] = mean
+  ///par[2] = sigma
+  ///par[3] = alpha = alpha'
+  ///par[4] = n = n'
+  
+  Double_t t = fabs((x[0]-par[1])/par[2]);
+  
+  Double_t absAlpha = fabs(par[3]);
+  Double_t a = TMath::Power(par[4]/absAlpha,par[4])*exp(-0.5*absAlpha*absAlpha);
+  Double_t b = par[4]/absAlpha - absAlpha;
+  
+  if (t < absAlpha) return par[0]*(exp(-0.5*t*t)); // gaussian core
+  else return par[0]*(a/TMath::Power(b + t, par[4])); //left and right tails
+  
+}
+
+//-----------------------------------------------------------------------
+Double_t GenRndGaus(Double_t mean, Double_t sigma)
+{
+  /// generate a random number following a gaussian distribution
+  return gRandom->Gaus(mean,sigma);
+}
+
+//-----------------------------------------------------------------------
+Double_t GenRndBreitWigner(Double_t mean, Double_t sigma, Double_t max)
+{
+  /// generate a random number following a Breit-Wigner distribution in the range mean ± max
+  Double_t val = 0.;
+  do val = gRandom->BreitWigner(mean,sigma);
+  while (TMath::Abs(val-mean) > max);
+  return val;
+}
+
+//-----------------------------------------------------------------------
+Double_t GenRndCrystalBall(Double_t mean, Double_t sigma, Double_t tail[2], Double_t max)
+{
+  /// generate a random number following a Crystal Ball distribution in the range mean ± max
+  static TF1 *fCrystalBall = 0x0;
+  if (!fCrystalBall) {
+    fCrystalBall = new TF1("CrystalBall2",CrystalBallSymmetric,-2.,2.,5);
+    fCrystalBall->SetNpx(1000);
+  }
+  fCrystalBall->SetParameters(1.,mean,sigma,tail[0],tail[1]);
+  fCrystalBall->SetRange(mean-max,mean+max);
+  return fCrystalBall->GetRandom();
 }
 
