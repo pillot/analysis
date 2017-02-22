@@ -190,6 +190,12 @@ public:
                    Double_t pTMin = -999., Double_t pTMax = 999.,
                    Double_t yMin = -999., Double_t yMax = 999.);
   
+  /// do not compute the 2D pT-y results
+  void Skip2DResults() {f2DRes = kFALSE;}
+  
+  /// compute only the results integrated over centrality using the first provided set of weights
+  void OnlyResultsWeightedOverCent() {fWResOnly = kTRUE;}
+  
 private:
   
   /// Not implemented
@@ -270,6 +276,8 @@ private:
   Bool_t    fUseMCLabel;     ///< select tracks using MC label
   TList     *fSigWeights;    ///< number of signal versus centrality for different pt/y bins
   THashList *fRunWeights;    ///< number of interested events per run
+  Bool_t    f2DRes;          ///< compute 2D pT-y results
+  Bool_t    fWResOnly;       ///< only results integrated over cent using the first set of weights
   
   AliMuonTrackCuts* fMuonTrackCuts; ///< cuts to select tracks to be considered
   
@@ -278,7 +286,7 @@ private:
   TF1     *fYFuncOld;  ///< original generated y function with original parameters
   TList   *fYFuncNew;  ///< list of new generated y fit function with new parameters
   
-  ClassDef(AliAnalysisTaskJPsiAccEffCorr2, 4);
+  ClassDef(AliAnalysisTaskJPsiAccEffCorr2, 5);
 };
 
 //________________________________________________________________________
