@@ -1,0 +1,49 @@
+AliAnalysisTaskDimuon* AddTaskDimuon()
+{
+  /// Add AliAnalysisTaskDimuon to the train (Philippe Pillot)
+  
+  // Get the pointer to the existing analysis manager via the static access method.
+  AliAnalysisManager *mgr = AliAnalysisManager::GetAnalysisManager();
+  if(!mgr) {
+    Error("AddTaskDimuon","AliAnalysisManager not set!");
+    return NULL;
+  }
+  
+  // This task run on AODs
+  TString type = mgr->GetInputEventHandler()->GetDataType();
+  if (!type.Contains("AOD")) {
+    Error("AddTaskDimuon", "AOD input handler needed!");
+    return NULL;
+  }
+  
+  // Create and configure task
+  AliAnalysisTaskDimuon *task = new AliAnalysisTaskDimuon("Dimuon");
+  if (!task) {
+    Error("AddTaskDimuon", "Dimuon task cannot be created!");
+    return NULL;
+  }
+  
+  // Add task to analysis manager
+  mgr->AddTask(task);
+  
+  // Connect input container
+  mgr->ConnectInput(task, 0, mgr->GetCommonInputContainer());
+  
+  // Define output file directory
+  TString outputfile = AliAnalysisManager::GetCommonFileName();
+  if ( outputfile.IsNull() ) {
+    Error("AddTaskDimuon", "Common output file is not defined!");
+    return NULL;
+  }
+  
+  // Create and connect output containers
+  AliAnalysisDataContainer *events = mgr->CreateContainer("events", AliCounterCollection::Class(), AliAnalysisManager::kOutputContainer, outputfile.Data());
+  AliAnalysisDataContainer *histoOS = mgr->CreateContainer("hOS", THnSparse::Class(), AliAnalysisManager::kOutputContainer, outputfile.Data());
+  AliAnalysisDataContainer *histoLS = mgr->CreateContainer("hLS", THnSparse::Class(), AliAnalysisManager::kOutputContainer, outputfile.Data());
+  mgr->ConnectOutput(task, 1, events);
+  mgr->ConnectOutput(task, 2, histoOS);
+  mgr->ConnectOutput(task, 3, histoLS);
+  
+  return task;
+}
+
