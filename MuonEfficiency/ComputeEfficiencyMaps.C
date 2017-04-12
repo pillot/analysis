@@ -20,6 +20,7 @@
 #include <TIterator.h>
 #include <TList.h>
 #include <TSystem.h>
+#include <TCanvas.h>
 
 #include "AliCDBManager.h"
 #include "AliCounterCollection.h"
@@ -27,6 +28,11 @@
 #include "AliMUONCDB.h"
 #include "AliMUONRejectList.h"
 #include "AliMUONTrackerData.h"
+#include "AliMUONVPainter.h"
+#include "AliMUONAttPainter.h"
+#include "AliMUONChamberPainter.h"
+#include "AliMUONPainterMatrix.h"
+#include "AliMUONPainterRegistry.h"
 
 #include "AliMpSegmentation.h"
 #include "AliMpDDLStore.h"
@@ -42,10 +48,11 @@ void ComputeBusPatchEfficiency(AliCounterCollection &nClusters, AliMUONRejectLis
 void ComputeManuEfficiency(AliCounterCollection &nClusters, AliMUONRejectList effMaps[2]);
 void ComputeChannelEfficiency(AliCounterCollection &nClusters, AliMUONRejectList effMaps[2]);
 void ComputeEfficiency(Float_t nExpected, Float_t nAccepted, Float_t efficiency[2]);
+void CreateEfficiencyCanvases(AliMUONVTrackerData* data, Double_t effMin, Double_t effMax);
 
 
 //---------------------------------------------------------------------------
-void ComputeEfficiencyMaps()
+void ComputeEfficiencyMaps(TString extension = "")
 {
   /// compute the efficiency maps and associated errors per Manu, Bus Patch and Detection Element
   /*
@@ -56,7 +63,7 @@ void ComputeEfficiencyMaps()
   
   // load mapping locally if not already done
   AliCDBManager* man = AliCDBManager::Instance();
-  if (!man->IsDefaultStorageSet()) man->SetDefaultStorage("local://$ALICE_ROOT/OCDB");
+  if (!man->IsDefaultStorageSet()) man->SetDefaultStorage("local://$ALIROOT_OCDB_ROOT/OCDB");
   if (man->GetRun() < 0) man->SetRun(0);
   if (!AliMpSegmentation::Instance(kFALSE) || !AliMpDDLStore::Instance(kFALSE)) {
     if (!AliMUONCDB::LoadMapping()) return;
@@ -68,7 +75,7 @@ void ComputeEfficiencyMaps()
     printf("cannot open the file AnalysisResults.root\n");
     return;
   }
-  AliCounterCollection *nClusters = static_cast<AliCounterCollection*>(inFile->FindObjectAny("ClustersCounters"));
+  AliCounterCollection *nClusters = static_cast<AliCounterCollection*>(inFile->FindObjectAny(Form("ClustersCounters%s",extension.Data())));
   if (!nClusters) {
     printf("cannot find the counter collection \"ClustersCounters\"\n");
     return;
@@ -107,7 +114,8 @@ void ComputeEfficiencyMaps()
   }
   
   // display efficiency maps
-  gSystem->Exec("mchview --use EfficiencyMaps.root");
+  CreateEfficiencyCanvases(&effMapsDisp, 0., 1.);
+  gSystem->Exec("mchview --ocdb local://$ALIROOT_OCDB_ROOT/OCDB --use EfficiencyMaps.root");
   
 }
 
@@ -373,6 +381,50 @@ void ComputeEfficiency(Float_t nExpected, Float_t nAccepted, Float_t efficiency[
     efficiency[0] = -1.;
     efficiency[1] = 2.;
     
+  }
+  
+}
+
+//---------------------------------------------------------------------------
+void CreateEfficiencyCanvases(AliMUONVTrackerData* data, Double_t effMin, Double_t effMax)
+{
+  /// Create 2 canvases with the efficiencies contained in data
+  /// for bending and non bending, with given limits
+  
+  AliMUONAttPainter att[2];
+  
+  att[0].SetViewPoint(kTRUE,kFALSE);
+  att[0].SetCathode(kFALSE,kFALSE);
+  att[0].SetPlane(kTRUE,kFALSE);
+  
+  att[1].SetViewPoint(kTRUE,kFALSE);
+  att[1].SetCathode(kFALSE,kFALSE);
+  att[1].SetPlane(kFALSE,kTRUE);
+  
+  TString name[2] = {"EfficiencyMapsBending.png", "EfficiencyMapsNonBending.png"};
+  
+  for ( Int_t iatt = 0; iatt < 2; ++iatt )
+  {
+    AliMUONPainterMatrix* matrix = new AliMUONPainterMatrix("Tracker",5,2);
+    
+    for ( Int_t ichamber = 0; ichamber < 10; ++ichamber )
+    {
+      AliMUONVPainter* painter = new AliMUONChamberPainter(att[iatt],ichamber);
+      
+      painter->SetResponder("BUSPATCH");
+      
+      painter->SetOutlined("*",kFALSE);
+      
+      matrix->Adopt(painter);
+    }
+    
+    matrix->SetData("PAD",data,0);
+    matrix->SetDataRange(effMin,effMax);
+    
+    AliMUONPainterRegistry::Instance()->Register(matrix);
+    
+    TCanvas* c = matrix->CreateCanvas(10, 10, 1200, 600);
+    c->SaveAs(name[iatt].Data());
   }
   
 }
