@@ -273,6 +273,119 @@ TCanvas* DrawRatio(TString name, TString title, TGraphAsymmErrors* GraphData, TG
   return c;
 }
 
+//---------------------------------------------------------------------------
+TCanvas* DrawRatio(TString name,
+                   TGraphAsymmErrors* GraphDataRun, TGraphAsymmErrors * GraphSimRun, TGraphAsymmErrors* GraphRatioRun,
+                   TGraphAsymmErrors* GraphDataPt, TGraphAsymmErrors * GraphSimPt, TGraphAsymmErrors* GraphRatioPt,
+                   TGraphAsymmErrors* GraphDataY, TGraphAsymmErrors * GraphSimY, TGraphAsymmErrors* GraphRatioY,
+                   TGraphAsymmErrors* GraphDataPhi, TGraphAsymmErrors * GraphSimPhi, TGraphAsymmErrors* GraphRatioPhi,
+                   TString dataName = "Data", TString simName = "Simulation")
+{
+  Float_t fracOfHeight = 0.5*0.3;
+  Float_t rightMargin = 0.02;
+  Float_t bottomMargin = 0.3;
+  TCanvas *c = new TCanvas(name.Data(), name.Data(), 1200, 800);
+  
+  c->Divide(2,4);
+  
+  // versus run
+  c->cd(1);
+  
+  gPad->SetPad(0., 0.5+fracOfHeight, 0.5, 1.);
+  gPad->SetTopMargin(0.03);
+  gPad->SetBottomMargin(0.);
+  gPad->SetRightMargin(rightMargin);
+  
+  GraphDataRun->Draw("AP");
+  GraphSimRun->Draw("Psame");
+  TLegend *legend = new TLegend (0.79, 0.8, 0.97, 0.95);
+  legend->SetTextSize(0.06);
+  legend->AddEntry(GraphSimRun, Form(" %s",simName.Data()), "ep");
+  legend->AddEntry(GraphDataRun, Form(" %s",dataName.Data()), "ep");
+  legend->Draw("same");
+  
+  c->cd(3);
+  
+  gPad->SetPad(0., 0.5, 0.5, 0.5+fracOfHeight);
+  gPad->SetTopMargin(0.);
+  gPad->SetBottomMargin(bottomMargin);
+  gPad->SetRightMargin(rightMargin);
+  gPad->SetGridy();
+  
+  GraphRatioRun->Draw("ap");
+  
+  TLegend *legend2 = new TLegend (0.69, 0.8, 0.97, 0.97);
+  legend2->AddEntry(GraphRatioRun, Form(" %s / %s ",dataName.Data(), simName.Data()), "ep");
+  legend2->Draw("same");
+  
+  // versus pT
+  c->cd(2);
+  
+  gPad->SetPad(0.5, 0.5+fracOfHeight, 1., 1.);
+  gPad->SetTopMargin(0.03);
+  gPad->SetBottomMargin(0.);
+  gPad->SetRightMargin(rightMargin);
+  
+  GraphDataPt->Draw("AP");
+  GraphSimPt->Draw("Psame");
+  
+  c->cd(4);
+  
+  gPad->SetPad(0.5, 0.5, 1., 0.5+fracOfHeight);
+  gPad->SetTopMargin(0.);
+  gPad->SetBottomMargin(bottomMargin);
+  gPad->SetRightMargin(rightMargin);
+  gPad->SetGridy();
+  
+  GraphRatioPt->Draw("ap");
+  
+  // versus y
+  c->cd(5);
+  
+  gPad->SetPad(0., fracOfHeight, 0.5, 0.5);
+  gPad->SetTopMargin(0.03);
+  gPad->SetBottomMargin(0.);
+  gPad->SetRightMargin(rightMargin);
+  
+  GraphDataY->Draw("AP");
+  GraphSimY->Draw("Psame");
+  
+  c->cd(7);
+  
+  gPad->SetPad(0., 0., 0.5, fracOfHeight);
+  gPad->SetTopMargin(0.);
+  gPad->SetBottomMargin(bottomMargin);
+  gPad->SetRightMargin(rightMargin);
+  gPad->SetGridy();
+  
+  GraphRatioY->Draw("ap");
+  
+  // versus phi
+  c->cd(6);
+  
+  gPad->SetPad(0.5, fracOfHeight, 1., 0.5);
+  gPad->SetTopMargin(0.03);
+  gPad->SetBottomMargin(0.);
+  gPad->SetRightMargin(rightMargin);
+  
+  GraphDataPhi->Draw("AP");
+  GraphSimPhi->Draw("Psame");
+  
+  c->cd(8);
+  
+  gPad->SetPad(0.5, 0., 1., fracOfHeight);
+  gPad->SetTopMargin(0.);
+  gPad->SetBottomMargin(bottomMargin);
+  gPad->SetRightMargin(rightMargin);
+  gPad->SetGridy();
+  
+  GraphRatioPhi->Draw("ap");
+  
+  c->Update();
+  
+  return c;
+}
+
 //-------------------------------------------------------------------------------------------------------------------------------------------
 void ComparisonDataMC(TString fileNameData, TString fileNameSim, Bool_t integrated = kFALSE)
 {
@@ -596,7 +709,7 @@ void ComparisonDataMC(TString fileNameData, TString fileNameSim, Bool_t integrat
 //  }
   
   //Load the mapping for the DE histos
-  AliCDBManager::Instance()->SetDefaultStorage("local://$ALICE_ROOT/OCDB");
+  AliCDBManager::Instance()->SetDefaultStorage("local://$ALIROOT_OCDB_ROOT/OCDB");
   AliCDBManager::Instance()->SetRun(0);
   AliMUONCDB::LoadMapping();
   AliMpDEIterator deit;
@@ -675,7 +788,10 @@ void ComparisonDataMC(TString fileNameData, TString fileNameSim, Bool_t integrat
 //  SetRunLabel(deVSrunRatios,irun,runs);
 //  SetRunLabel(chamberVSrunRatios,irun,runs);
 //  SetRunLabel(globalRatios,irun,runs,1); //Write it in such a way the number is the position on the list of the graph you want to label
-//  
+//
+  
+  TCanvas* cRatioEffAndEff = DrawRatio("RatioEffAndEff",effVSrunDataCopy,effVSrunSimCopy,ratioRunCopy,effVSptDataCopy,effVSptSimCopy,ratioPtCopy,effVSyDataCopy,effVSySimCopy,ratioYCopy,effVSphiDataCopy,effVSphiSimCopy,ratioPhiCopy);
+  
   // save output
   TFile* file = new TFile("EffComparison.root","update");
   
@@ -689,7 +805,7 @@ void ComparisonDataMC(TString fileNameData, TString fileNameSim, Bool_t integrat
 //  deVSrunRatiosAndEff.Write("DEEffVSrunRatiosAndEff", TObject::kOverwrite | TObject::kSingleKey);
   chamberVSdeRatiosAndEff.Write("ChamberEffperDERatiosAndEff", TObject::kOverwrite | TObject::kSingleKey);
 
-  
+  cRatioEffAndEff->Write("RatioEffAndEff", TObject::kOverwrite | TObject::kSingleKey);
    
   file->Close();
  
