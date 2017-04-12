@@ -6,6 +6,7 @@
 //  Copyright (c) 2015 Philippe Pillot. All rights reserved.
 //
 
+#include <TSystem.h>
 #include <TH1.h>
 #include <THnSparse.h>
 #include <TAxis.h>
@@ -20,7 +21,8 @@
 #include "AliCounterCollection.h"
 
 // kinematics range for histogram projection (pT, y, phi, charge)
-const Float_t kineRange[4][2] = {{-999., 999.}, {-999., 999.}, {-999., 999.}, {-999., 999.}};
+const Float_t kineRange[2][4][2] = {{{-999., 999.}, {-999., 999.}, {-999., 999.}, {-999., 999.}},
+                                    {{-999., 999.}, {-999., 999.}, {-999., 999.}, {-999., 999.}}};
 
 // centrality range for each input file
 const Float_t centRange[2][2] = {{-999., 999.}, {-999., 999.}};
@@ -38,7 +40,7 @@ THashList *runWeights = 0x0;
 void LoadRunWeights(TString fileName);
 void AddHisto(TString sfile[2], TH1 *hRes[nHist][3], Double_t weight);
 void AddHistoProj(TString sfile[2], TH1 *hProj[4][3], Double_t weight);
-void SetKineRange(THnSparse& hKine);
+void SetKineRange(THnSparse& hKine, const Float_t kineRange[4][2]);
 void SetCentRange(THnSparse& hKine, const Float_t centRange[2]);
 
 //______________________________________________________________________________
@@ -68,16 +70,18 @@ void CompareMuonDistributions(TString dir1, TString dir2, TString fileNameWeight
     while ((weight = static_cast<TParameter<Double_t>*>(next()))) {
       TString sfile[2];
       sfile[0] = Form("%s/runs/%s/AnalysisResults.root", dir1.Data(), weight->GetName());
-//      sfile[0] = Form("%s/runs/%s/QAresults.root", dir1.Data(), weight->GetName());
+      if (gSystem->AccessPathName(sfile[0].Data())) sfile[0].ReplaceAll("AnalysisResults.root", "QAresults.root");
       sfile[1] = Form("%s/runs/%s/AnalysisResults.root", dir2.Data(), weight->GetName());
+      if (gSystem->AccessPathName(sfile[1].Data())) sfile[1].ReplaceAll("AnalysisResults.root", "QAresults.root");
       AddHisto(sfile, hRes, weight->GetVal());
       AddHistoProj(sfile, hProj, weight->GetVal());
     }
   } else {
     TString sfile[2];
     sfile[0] = Form("%s/AnalysisResults.root", dir1.Data());
+    if (gSystem->AccessPathName(sfile[0].Data())) sfile[0].ReplaceAll("AnalysisResults.root", "QAresults.root");
     sfile[1] = Form("%s/AnalysisResults.root", dir2.Data());
-//    sfile[1] = Form("%s/QAresults.root", dir2.Data());
+    if (gSystem->AccessPathName(sfile[1].Data())) sfile[1].ReplaceAll("AnalysisResults.root", "QAresults.root");
     AddHisto(sfile, hRes, 1.);
     AddHistoProj(sfile, hProj, 1.);
   }
@@ -203,7 +207,7 @@ void AddHistoProj(TString sfile[2], TH1 *hProj[4][3], Double_t weight)
         kineRange[3][0] = -1.;
         kineRange[3][1] = -1.;
       }
-*/      SetKineRange(*hKine);
+*/      SetKineRange(*hKine, kineRange[j]);
       SetCentRange(*hKine, centRange[j]);
       AliCounterCollection *eventCounters = static_cast<AliCounterCollection*>(file->FindObjectAny(Form("EventsCounters%s",extension[j].Data())));
       if (!eventCounters) {
@@ -234,7 +238,7 @@ void AddHistoProj(TString sfile[2], TH1 *hProj[4][3], Double_t weight)
 }
 
 //______________________________________________________________________________
-void SetKineRange(THnSparse& hKine)
+void SetKineRange(THnSparse& hKine, const Float_t kineRange[4][2])
 {
   /// Sets the kinematics range for histogram projection
   /// If the range exceeds the minimum (maximum) it includes the underflow (overflow)
