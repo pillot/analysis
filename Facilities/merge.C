@@ -14,14 +14,15 @@ void merge(TString gridLocation, TString fileName = "AnalysisResults.root", TStr
   /// merge the files named "fileName" located in "alien://home/gridLocation/*/run" for each run in the "runList"
   
   // load potentially needed libraries
-  gROOT->LoadMacro("$WORK/Macros/Facilities/runTaskFacilities.C");
-  TString extraLibs = "CORRFW";
+  gROOT->LoadMacro("$HOME/Work/Alice/Macros/Facilities/runTaskFacilities.C");
+  TString extraLibs = "";
   TString extraIncs = "";
   TString extraTasks = "";
+  TString extraPkgs="";
 //  TString extraLibs = "CORRFW:PWGmuon";
 //  TString extraIncs = "include:PWG/muon";
 //  TString extraTasks = "AliAnalysisTaskJPsi";
-  LoadAlirootLocally(extraLibs, extraIncs, extraTasks);
+  LoadAlirootLocally(extraLibs, extraIncs, extraTasks, extraPkgs);
   
   // connect to alien
   if (!TGrid::Connect("alien://")) {
