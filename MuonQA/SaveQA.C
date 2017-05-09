@@ -21,8 +21,8 @@
 #include "TGrid.h"
 #include "AliAnalysisMuonUtility.h"
 
-TString MultDirData = "LowMultiplicity";
-TString MultDirMC = "LowMultiplicity";
+TString MultDirData = "HighMultiplicity";
+TString MultDirMC = "HighMultiplicity";
 
 //----------------------------------------------------------------------------
 void SaveQA(TString inputDataFile, TString inputMCFile)
@@ -79,15 +79,15 @@ void SaveQA(TString inputDataFile, TString inputMCFile)
     
     cout<<"\rprocessing run "<<runNumberMC<<" ...\r"<<flush;
     
-    if (gSystem->AccessPathName(Form("displays/%d",runNumberMC)))
-      gSystem->Exec(Form("mkdir displays/%d", runNumberMC));
-    
     TFile* currDataFile = TFile::Open(currDataName.Data(),"read");
     TFile* currMCFile = TFile::Open(currMCName.Data(),"read");
     if (!currDataFile || !currDataFile->IsOpen() || !currMCFile || !currMCFile->IsOpen()) {
       failedRuns += Form("%d ", runNumberMC);
       continue;
     }
+    
+    if (gSystem->AccessPathName(Form("displays/%d",runNumberMC)))
+      gSystem->Exec(Form("mkdir displays/%d", runNumberMC));
     
     TObjArray *objsData = static_cast<TObjArray*>(currDataFile->Get("MUON_QA/expert"));
     TObjArray *objsMC = static_cast<TObjArray*>(currMCFile->Get("MUON_QA/expert"));
