@@ -45,7 +45,7 @@ Double_t CrystalBallExtended(Double_t *x,Double_t *par)
   //par[6] = n'  
   
   Double_t t = (x[0]-par[1])/par[2];
-  if (par[3] < 0) t = -t;
+  if (par[2] < 0) t = -t;
   
   Double_t absAlpha = fabs((Double_t)par[3]);
   Double_t absAlpha2 = fabs((Double_t)par[5]);
@@ -155,8 +155,7 @@ void Fit(TString fileName = "AnalysisResults.root", TString containerName = "His
   // prepare environment
   if (!gInterpreter->IsLoaded("$WORK/Macros/Facilities/runTaskFacilities.C")) {
     gROOT->LoadMacro("$WORK/Macros/Facilities/runTaskFacilities.C");
-    TString extraLibs = "RAWDatabase:CDB:STEER:MUONcore:MUONmapping:MUONcalib:MUONgeometry:MUONtrigger:MUONraw:MUONbase:MUONrec";
-    gROOT->ProcessLineFast(Form("LoadAlirootLocally(\"%s\",\"\",\"\");",extraLibs.Data()));
+    gROOT->ProcessLineFast("LoadAlirootLocally(\"\",\"include\",\"\",\"\");");
   }
   
   // open file
@@ -258,14 +257,14 @@ void Fit(TString fileName = "AnalysisResults.root", TString containerName = "His
     fitFctCB2VWG->SetParLimits(5, 3.08, 3.2);  
     fitFctCB2VWG->SetParameter(6, 0.08);
     fitFctCB2VWG->SetParLimits(6, 0.05, 0.15);
-    fitFctCB2VWG->FixParameter(7, 0.93);   
-    fitFctCB2VWG->FixParameter(8, 5.59);   
-    fitFctCB2VWG->FixParameter(9, 2.32);   
-    fitFctCB2VWG->FixParameter(10, 3.39);
+    fitFctCB2VWG->FixParameter(7, 1.12);
+    fitFctCB2VWG->FixParameter(8, 3.96);
+    fitFctCB2VWG->FixParameter(9, 2.5);
+    fitFctCB2VWG->FixParameter(10, 2.48);
     hJPsi->Fit(fitFctCB2VWG,"IER","e0");
     fitFctCB2VWG->Draw("same");
   } else {
-    fitFctCB2VWG = new TF1("fitFctCB2VWG", fitFunction2CB2VWG, 2.2, 5., 12);
+    fitFctCB2VWG = new TF1("fitFctCB2VWG", fitFunction2CB2VWG, 2., 5., 12);
     fitFctCB2VWG->SetLineColor(2);
     fitFctCB2VWG->SetParNames("kVWG","mVWG","sVWG1","sVWG2","kPsi","mPsi","sPsi","alPsi","nlPsi","auPsi","nuPsi");
     fitFctCB2VWG->SetParName(11, "kPsi'");
@@ -282,11 +281,15 @@ void Fit(TString fileName = "AnalysisResults.root", TString containerName = "His
     fitFctCB2VWG->SetParLimits(5, 3.08, 3.2);  
     fitFctCB2VWG->SetParameter(6, 0.08);
     fitFctCB2VWG->SetParLimits(6, 0.05, 0.15);
-    fitFctCB2VWG->FixParameter(7, 0.93);   
-    fitFctCB2VWG->FixParameter(8, 5.59);   
-    fitFctCB2VWG->FixParameter(9, 2.32);   
-    fitFctCB2VWG->FixParameter(10, 3.39);
-    fitFctCB2VWG->SetParameter(11, 10.); 
+//    fitFctCB2VWG->FixParameter(7, 0.93);
+//    fitFctCB2VWG->FixParameter(8, 5.59);
+//    fitFctCB2VWG->FixParameter(9, 2.32);
+//    fitFctCB2VWG->FixParameter(10, 3.39);
+    fitFctCB2VWG->FixParameter(7, 0.984);
+    fitFctCB2VWG->FixParameter(8, 5.839);
+    fitFctCB2VWG->FixParameter(9, 1.972);
+    fitFctCB2VWG->FixParameter(10, 3.444);
+    fitFctCB2VWG->SetParameter(11, 10.);
     hJPsi->Fit(fitFctCB2VWG,"IER","e0");
     fitFctCB2VWG->Draw("same");
   }
