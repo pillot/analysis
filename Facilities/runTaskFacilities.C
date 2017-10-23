@@ -547,6 +547,7 @@ void CreateAAFExecutable(TString aaf, TString dataset, Bool_t splitDataset, Bool
   /// Create the executable to run on AAF
   ofstream outFile("runAnalysis.sh");
   outFile << "#!/bin/bash" << endl;
+  outFile << "ln -s -f $HOME/Work/Alice/Macros/Facilities/runTaskFacilities.C" << endl;
   outFile << "vafctl start" << endl;
   Int_t nWorkers = (aaf == "saf3") ? 88 : 48;
   outFile << "nWorkers=" << nWorkers << endl;
