@@ -73,8 +73,9 @@ void Compare(TString sfile1, TString sfile2, Bool_t rebin = kFALSE)
 	return;
       }
       for (Int_t i = 0; i < 8; i++) {
-	hRes[i][j] = static_cast<TH1*>(list->FindObject(sRes[i].Data())->Clone(Form("%s%d",sRes[i].Data(),j+1)));
-        if (hRes[i][j]) {
+        TObject *o = list->FindObject(sRes[i].Data());
+        if (o) {
+          hRes[i][j] = static_cast<TH1*>(o->Clone(Form("%s%d",sRes[i].Data(),j+1)));
           hRes[i][j]->SetDirectory(0);
           if (rebin) {
             if (i == 0 || i == 4) hRes[i][j]->Rebin(10);
