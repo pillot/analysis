@@ -7,15 +7,20 @@
  *
  */
 
+#if __has_include("/Users/pillot/Work/Alice/Macros/Facilities/runTaskFacilities.C")
+#include "/Users/pillot/Work/Alice/Macros/Facilities/runTaskFacilities.C"
+#else
+#include "runTaskFacilities.C"
+#endif
+
+void ShowResults(Int_t nStep);
 
 //______________________________________________________________________________
-void runGenTunerLoop(TString smode = "local", TString inputFileName = "AliAOD.root", Int_t nStep)
+void runGenTunerLoop(TString smode = "local", TString inputFileName = "AliAOD.root", Int_t nStep = 5)
 {
   /// run the generator tuner in a loop
   
   if (nStep <= 0) return;
-  
-  gROOT->LoadMacro("$HOME/Work/Alice/Macros/Facilities/runTaskFacilities.C");
   
   // --- copy files needed for this analysis ---
   TList pathList; pathList.SetOwner();
@@ -23,9 +28,6 @@ void runGenTunerLoop(TString smode = "local", TString inputFileName = "AliAOD.ro
   TList fileList; fileList.SetOwner();
   fileList.Add(new TObjString("runGenTunerLoop.C"));
   fileList.Add(new TObjString("runGenTuner.C"));
-  fileList.Add(new TObjString("AddTaskGenTuner.C"));
-  fileList.Add(new TObjString("AliAnalysisTaskGenTuner.cxx"));
-  fileList.Add(new TObjString("AliAnalysisTaskGenTuner.h"));
   CopyFileLocally(pathList, fileList);
   TString referenceDataFile = gSystem->GetFromPipe("egrep '^[ ]*TString referenceDataFile' runGenTuner.C | cut -d'\"' -f2");
   CopyInputFileLocally(referenceDataFile.Data(), "ReferenceResults.root");
@@ -38,7 +40,7 @@ void runGenTunerLoop(TString smode = "local", TString inputFileName = "AliAOD.ro
   
   // --- saf3 specific setup ---
   Bool_t splitDataset = kFALSE;
-  Bool_t overwriteDataset = kTRUE;
+  Bool_t overwriteDataset = kFALSE;
   
   // --- Check runing mode ---
   Int_t mode = GetMode(smode, inputFileName);
@@ -50,7 +52,8 @@ void runGenTunerLoop(TString smode = "local", TString inputFileName = "AliAOD.ro
   // --- run the analysis (saf3 is a special case as the analysis is launched on the server) ---
   if (mode == kSAF3Connect && !splitDataset) {
     
-    if (!RunAnalysisOnSAF3(fileList, aliphysicsVersion, inputFileName, splitDataset)) return;
+    if (smode == "saf3" && !RunAnalysisOnSAF3(fileList, aliphysicsVersion, inputFileName, splitDataset)) return;
+    else if (smode == "vaf" && !RunAnalysisOnVAF(fileList, aliphysicsVersion, inputFileName, splitDataset)) return;
     
   } else {
     
@@ -73,11 +76,11 @@ void runGenTunerLoop(TString smode = "local", TString inputFileName = "AliAOD.ro
         } else resume = "n";
       }
       
-      // synchronize the existing results in case each step is run one-by-one on saf3
+      // synchronize the existing results in case each step is run one-by-one on aaf
       if (iStep == 0 && mode == kSAF3Connect) {
-        TString saf3dir = gSystem->ExpandPathName("$HOME/saf3");
+        TString aafdir = gSystem->ExpandPathName(Form("$HOME/%s", smode.Data()));
         TString remoteLocation = gSystem->pwd();
-        remoteLocation.ReplaceAll(gSystem->Getenv("HOME"),saf3dir.Data());
+        remoteLocation.ReplaceAll(gSystem->Getenv("HOME"),aafdir.Data());
         gSystem->Exec(Form("rm -f %s/Results_step*.root", remoteLocation.Data()));
         gSystem->Exec(Form("cp Results_step*.root %s/.", remoteLocation.Data()));
       }
