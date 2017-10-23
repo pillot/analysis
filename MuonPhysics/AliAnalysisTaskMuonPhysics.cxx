@@ -74,7 +74,8 @@ fCentMin(-FLT_MAX),
 fCentMax(FLT_MAX),
 fEvVsRun(kFALSE),
 fTrkVsRun(kFALSE),
-fTrgVsRun(kFALSE)
+fTrgVsRun(kFALSE),
+fSPDVtxQA(kFALSE)
 {
   // Dummy constructor
 }
@@ -98,7 +99,8 @@ fCentMin(-FLT_MAX),
 fCentMax(FLT_MAX),
 fEvVsRun(kFALSE),
 fTrkVsRun(kFALSE),
-fTrgVsRun(kFALSE)
+fTrgVsRun(kFALSE),
+fSPDVtxQA(kFALSE)
 {
   /// Constructor
   
@@ -361,6 +363,18 @@ void AliAnalysisTaskMuonPhysics::UserExec(Option_t *)
   if (ievent == 8678) return;
   if (ievent == 8705) return;
   */
+  
+  // apply SPD vertex quality cuts
+  const AliVVertex* vert = evt->GetPrimaryVertexSPD();
+  if (fSPDVtxQA) {
+    if (!vert || vert->GetNContributors() < 1) return;
+    Double_t cov[6]={0};
+    vert->GetCovarianceMatrix(cov);
+    if (TMath::Sqrt(cov[5]) > 0.25) return;
+    Double_t zVtx = vert->GetZ();
+    if (zVtx <= -10. || zVtx >= 10.) return;
+  }
+  
   // get the centrality percentile
   AliMultSelection *multSelection = static_cast<AliMultSelection*>(evt->FindListObject("MultSelection"));
   Float_t centrality = multSelection ? multSelection->GetMultiplicityPercentile("V0M") : -1.;
@@ -382,7 +396,6 @@ void AliAnalysisTaskMuonPhysics::UserExec(Option_t *)
   // get the SPD vertex
   TString vtxSPD = "spdvtx:";
   Double_t vertex[3] = {0., 0., 0.};
-  const AliVVertex* vert = evt->GetPrimaryVertexSPD();
   if (vert && GetVtxStatus(*vert)) {
     vert->GetXYZ(vertex);
     vtxSPD += "yes";
@@ -721,6 +734,9 @@ Bool_t AliAnalysisTaskMuonPhysics::IsSelected(AliVParticle& track, Bool_t isESD,
   
   //select tracks on left/right side of the spectrometer
   //if (isESD && track.Px() < 0. && static_cast<AliESDMuonTrack&>(track).GetNonBendingCoorUncorrected() < 0.) return kFALSE;
+  
+  // select tracks matching a particular local board
+  //if (AliAnalysisMuonUtility::GetLoCircuit(&track) != 121) return kFALSE;
   
   UInt_t selectionMask = fMuonTrackCuts->GetSelectionMask(&track);
   

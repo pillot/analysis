@@ -52,6 +52,9 @@ public:
   /// Fill counters versus run (the size of the counters may explode!)
   void VersusRun(Bool_t ev, Bool_t trk, Bool_t trg) {fEvVsRun = ev; fTrkVsRun = trk; fTrgVsRun = trg;}
   
+  /// Appy SPD vertex quality cuts
+  void ApplySPDVtxQA() {fSPDVtxQA = kTRUE;}
+  
 private:
   
   /// Not implemented
@@ -122,8 +125,9 @@ private:
   Bool_t   fEvVsRun;                ///< Fill event counters versus run
   Bool_t   fTrkVsRun;               ///< Fill track counters versus run
   Bool_t   fTrgVsRun;               ///< Fill trigger counters versus run
+  Bool_t   fSPDVtxQA;               ///< Appy SPD vertex quality cuts
   
-  ClassDef(AliAnalysisTaskMuonPhysics, 4);
+  ClassDef(AliAnalysisTaskMuonPhysics, 5);
 };
 
 //________________________________________________________________________
