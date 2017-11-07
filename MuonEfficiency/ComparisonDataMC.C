@@ -78,8 +78,8 @@ TGraphAsymmErrors* CreateRatioGraph(const char* name, const char* title, TGraphA
     if (effD > 0. && effS > 0.)
     {
       rat = effD/effS;
-      ratErrh = rat*TMath::Sqrt(effDErrh*effDErrh/effD*effD + effSErrl*effSErrl/effS*effS);
-      ratErrl = rat*TMath::Sqrt(effDErrl*effDErrl/effD*effD + effSErrh*effSErrh/effS*effS);
+      ratErrh = rat*TMath::Sqrt(effDErrh*effDErrh/effD/effD + effSErrl*effSErrl/effS/effS);
+      ratErrl = rat*TMath::Sqrt(effDErrl*effDErrl/effD/effD + effSErrh*effSErrh/effS/effS);
     }
     if (effD == 0 && effS == 0)
     {
