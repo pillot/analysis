@@ -27,8 +27,8 @@
 void DrawExpectedRes(TCanvas *cRes, Bool_t atFirstCluster);
 void DrawResolutionFromData(TCanvas *cRes, TCanvas *cResX, TCanvas *cResY, TString fileResMeas, Bool_t atFirstCluster);
 void DrawResolutionFromMC(TCanvas *cRes, TCanvas *cResX, TCanvas *cResY, TString fileResSim,
-                          Bool_t atFirstCluster, Bool_t refitResVsP, Bool_t drawResPVsP);
-void DrawResolutionFromSmearing(TCanvas *cRes, TString fileResQA, Bool_t atFirstCluster, Bool_t drawResPVsP);
+                          Bool_t atFirstCluster, Bool_t refitResVsP, Bool_t drawResPVsP, Int_t rebinP);
+void DrawResolutionFromSmearing(TCanvas *cRes, TString fileResQA, Bool_t atFirstCluster, Bool_t drawResPVsP, Int_t rebinP);
 Double_t GetSigma(TH1 *h, Double_t *sigmaErr = 0x0);
 Double_t GetSigmaCrystalBall(TH1 *h, Double_t *sigmaErr = 0x0);
 Double_t GetSigmaGaus(TH1 *h, Double_t *sigmaErr = 0x0);
@@ -43,7 +43,8 @@ AliMuonTrackSmearing muonTrackSmearing(AliMuonTrackSmearing::kCrystalBall);
 
 //-----------------------------------------------------------------------
 void ControlResolution(TString fileResQA = "AnalysisResults.root", TString fileResMeas = "", TString fileResSim = "",
-                       Bool_t atFirstCluster = kFALSE, Bool_t refitResVsP = kTRUE, Bool_t drawResPVsP = kFALSE)
+                       Bool_t atFirstCluster = kFALSE, Bool_t refitResVsP = kTRUE, Bool_t drawResPVsP = kFALSE,
+                       Int_t rebinP = 2)
 {
   /// Extract the resolutions vs p from the results of the smearing QA task
   /// and compare them to the expected shape from the smearing settings
@@ -52,8 +53,12 @@ void ControlResolution(TString fileResQA = "AnalysisResults.root", TString fileR
   /// the performance task with the same function as for the smeared results.
   
   setbuf(stdout, NULL);
-  TCanvas *dummy = new TCanvas("dummy","dummy",10,10,68,1);
-  
+  /*
+  muonTrackSmearing.SetSigmaxChSt1(0.000519);
+  muonTrackSmearing.SetSigmayChSt1(0.000064);
+  muonTrackSmearing.SetSigmayCh(0.000105);
+  muonTrackSmearing.SetCrystalBallParams(3.671484,4.590817,2.453060,1.715218,2.145035,1.782320);
+  */
   // momentum and slope resolution versus p
   TCanvas *cRes = new TCanvas("cRes","cRes",10,10,1200,300);
   cRes->Divide(3,1);
@@ -68,9 +73,9 @@ void ControlResolution(TString fileResQA = "AnalysisResults.root", TString fileR
   }
   
   DrawResolutionFromData(cRes, cResX, cResY, fileResMeas, atFirstCluster);
-  DrawResolutionFromMC(cRes, cResX, cResY, fileResSim, atFirstCluster, refitResVsP, drawResPVsP);
+  DrawResolutionFromMC(cRes, cResX, cResY, fileResSim, atFirstCluster, refitResVsP, drawResPVsP, rebinP);
   DrawExpectedRes(cRes, atFirstCluster);
-  DrawResolutionFromSmearing(cRes, fileResQA, atFirstCluster, drawResPVsP);
+  DrawResolutionFromSmearing(cRes, fileResQA, atFirstCluster, drawResPVsP, rebinP);
 
 }
 
@@ -275,7 +280,7 @@ void DrawResolutionFromData(TCanvas *cRes, TCanvas *cResX, TCanvas *cResY, TStri
 
 //-----------------------------------------------------------------------
 void DrawResolutionFromMC(TCanvas *cRes, TCanvas *cResX, TCanvas *cResY, TString fileResSim,
-                          Bool_t atFirstCluster, Bool_t refitResVsP, Bool_t drawResPVsP)
+                          Bool_t atFirstCluster, Bool_t refitResVsP, Bool_t drawResPVsP, Int_t rebinP)
 {
   /// Draw the resolutions vs p and cluster resolution from the task AliAnalysisTaskMuonPerformance
 
@@ -328,7 +333,6 @@ void DrawResolutionFromMC(TCanvas *cRes, TCanvas *cResX, TCanvas *cResY, TString
       TH2F *hResPAt1stClVsP = static_cast<TH2F*>(trackerResolutionList->FindObject("hResPAt1stClVsP"));
       if (!hResPAt1stClVsP) return;
       dummy->cd();
-      Int_t rebinP = 2;
       gSigmaResPVsP2 = new TGraphAsymmErrors(hResPAt1stClVsP->GetNbinsX()/rebinP);
       gSigmaResPVsP2->SetName("gSigmaResPAt1stClVsP2");
       gSigmaResPVsP2->SetTitle("#sigma_{p}/p at 1st cluster versus p;p (GeV/c);#sigma_{p}/p (%)");
@@ -359,7 +363,6 @@ void DrawResolutionFromMC(TCanvas *cRes, TCanvas *cResX, TCanvas *cResY, TString
       TH2F *hResPAtVtxVsPIn310deg = static_cast<TH2F*>(trackerResolutionList->FindObject("hResPAtVtxVsPIn310deg"));
       if (!hResPAtVtxVsPIn02deg || !hResPAtVtxVsPIn23deg || !hResPAtVtxVsPIn310deg) return;
       dummy->cd();
-      Int_t rebinP = 2;
       gSigmaResPAtVtxVsPIn02deg = new TGraphAsymmErrors(hResPAtVtxVsPIn02deg->GetNbinsX()/rebinP);
       gSigmaResPAtVtxVsPIn02deg->SetName("gSigmaResPAtVtxVsPIn02deg");
       gSigmaResPAtVtxVsPIn02deg->SetTitle("#sigma_{p}/p at vertex versus p in [0,2[ deg MC;p (GeV/c);#sigma_{p}/p (%)");
@@ -459,7 +462,7 @@ void DrawResolutionFromMC(TCanvas *cRes, TCanvas *cResX, TCanvas *cResY, TString
 }
 
 //-----------------------------------------------------------------------
-void DrawResolutionFromSmearing(TCanvas *cRes, TString fileResQA, Bool_t atFirstCluster, Bool_t drawResPVsP)
+void DrawResolutionFromSmearing(TCanvas *cRes, TString fileResQA, Bool_t atFirstCluster, Bool_t drawResPVsP, Int_t rebinP)
 {
   /// Draw the resolutions vs p from the task AliTaskMuonTrackSmearingQA
   
@@ -483,7 +486,6 @@ void DrawResolutionFromSmearing(TCanvas *cRes, TString fileResQA, Bool_t atFirst
     // compute momentum resolution versus p
      TH2F *hPPP = static_cast<TH2F*>(resHistoList->FindObject("hPPP"));
      if (!hPPP) return;
-    Int_t rebinP = 2;
     dummy->cd();
     gSigmaResPVsP = new TGraphAsymmErrors(hPPP->GetNbinsX()/rebinP);
     gSigmaResPVsP->SetName("gSigmaResPAt1stClVsP3");
@@ -514,7 +516,6 @@ void DrawResolutionFromSmearing(TCanvas *cRes, TString fileResQA, Bool_t atFirst
     TH2F *hResPAtVtxVsPIn23deg = static_cast<TH2F*>(resHistoList->FindObject("hResPAtVtxVsPIn23deg"));
     TH2F *hResPAtVtxVsPIn310deg = static_cast<TH2F*>(resHistoList->FindObject("hResPAtVtxVsPIn310deg"));
     if (!hResPAtVtxVsPIn02degMC || !hResPAtVtxVsPIn23deg || !hResPAtVtxVsPIn310deg) return;
-    Int_t rebinP = 2;
     dummy->cd();
     gSigmaResPAtVtxVsPIn02deg = new TGraphAsymmErrors(hResPAtVtxVsPIn02degMC->GetNbinsX()/rebinP);
     gSigmaResPAtVtxVsPIn02deg->SetName("gSigmaResPAtVtxVsPIn02deg2");
