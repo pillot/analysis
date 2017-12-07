@@ -19,14 +19,19 @@
 #include <TList.h>
 
 #include "AliMUONTrackerHV.h"
+#include "AliCDBManager.h"
+#include "AliMUONCDB.h"
+#include "AliMUONRecoParam.h"
 
 Double_t yRange[2] = {-1., 1700.};
 
 Int_t nRuns = 0;
 UInt_t (*runBoundaries)[3] = 0x0;
+Double_t hvLimits[10];
 
 void GetRunBoundaries(TGraph *gRunBoudaries, TString &runList);
-Bool_t Find1400VIssues(TGraph *g);
+void GetHVLimits(TString &runList, TString &ocdbPath);
+Bool_t Find1400VIssues(TGraph *g, Int_t iCh);
 void Print1400VIssues(TString dcsName, UInt_t t0, UInt_t t1);
 TString FindRuns(UInt_t t0, UInt_t t1);
 void DrawRunBoudaries(TCanvas *c2);
@@ -38,7 +43,7 @@ void ScanHV(TString runList, TString ocdbPath = "raw://")
   
   AliMUONTrackerHV hv(runList.Data(), ocdbPath.Data());
   
-  hv.Plot("",kFALSE,kTRUE);
+  hv.Plot("");
   
   TCanvas *c = static_cast<TCanvas*>(gROOT->GetListOfCanvases()->Last());
   if (!c) return;
@@ -50,6 +55,8 @@ void ScanHV(TString runList, TString ocdbPath = "raw://")
   
   TGraph *gRunBoudaries = static_cast<TGraph*>(mg->GetListOfGraphs()->FindObject("runBoundaries"));
   GetRunBoundaries(gRunBoudaries, runList);
+  
+  GetHVLimits(runList, ocdbPath);
   
   TIter nextg(mg->GetListOfGraphs());
   TGraph *g = 0x0;
@@ -72,7 +79,7 @@ void ScanHV(TString runList, TString ocdbPath = "raw://")
         g->SetMinimum(yRange[0]);
         g->SetMaximum(yRange[1]);
       } else g->Draw("lp");
-      if (Find1400VIssues(g)) {
+      if (Find1400VIssues(g, iCh-1)) {
         issues = kTRUE;
         printf("----------------------------\n");
       }
@@ -146,12 +153,40 @@ void GetRunBoundaries(TGraph *gRunBoudaries, TString &runList)
 }
 
 //----------------------------------------------------------------------------
-Bool_t Find1400VIssues(TGraph *g)
+void GetHVLimits(TString &runList, TString &ocdbPath)
+{
+  /// get the HV limits per chamber from the RecoParam
+  
+  for (Int_t i = 0; i < 10; ++i) hvLimits[i] = -1.;
+  
+  ifstream inFile(runList.Data());
+  if (!inFile.is_open()) return;
+  TString run;
+  do run.ReadLine(inFile,kTRUE);
+  while (run.IsNull() && !inFile.eof());
+  if (!run.IsDec()) return;
+  inFile.close();
+  
+  AliCDBManager* cdbm = AliCDBManager::Instance();
+  cdbm->SetDefaultStorage(ocdbPath.Data());
+  cdbm->SetRun(run.Atoi());
+  AliMUONRecoParam* recoParam = AliMUONCDB::LoadRecoParam();
+  if (!recoParam) return;
+  
+  for (Int_t i = 0; i < 10; ++i) {
+    hvLimits[i] = recoParam->HVLimit(i);
+    printf("hvLimits[%d] = %f\n",i,hvLimits[i]);
+  }
+
+}
+
+//----------------------------------------------------------------------------
+Bool_t Find1400VIssues(TGraph *g, Int_t iCh)
 {
   /// look for HV struggling at ~1400V.
   /// return kTRUE if problem found
   
-  static const UInt_t minStrugglingTime = 60; // s
+  static const UInt_t minStrugglingTime = 30; // s
   
   Bool_t issues = kFALSE;
   
@@ -162,7 +197,7 @@ Bool_t Find1400VIssues(TGraph *g)
   UInt_t t0 = 0;
   UInt_t dt = 0;
   for (Int_t i = 0; i < n; ++i) {
-    if (hv[i] > 1250. && hv[i] < 1550.) {
+    if (hv[i] > 1210. && hv[i] < hvLimits[iCh]) {
       if (t0 < 1) t0 = t[i];
       else dt = t[i] - t0;
     } else {
