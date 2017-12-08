@@ -29,6 +29,7 @@ Double_t yRange[2] = {-1., 1700.};
 
 Int_t nRuns = 0;
 UInt_t (*runBoundaries)[3] = 0x0;
+Double_t hvMin = 1210.;
 Double_t hvLimits[10];
 
 void GetRunBoundaries(TGraph *gRunBoudaries, TString &runList);
@@ -40,9 +41,10 @@ Bool_t isKnown(Int_t run, TString dcsName);
 void DrawRunBoudaries(TCanvas *c2);
 
 //----------------------------------------------------------------------------
-void ScanHV(TString runList, TString ocdbPath = "raw://")
+void ScanHV(TString runList, TString ocdbPath = "raw://", Bool_t allIssues = kFALSE)
 {
-  /// Scan the HV of every sectors to check for "1400V issues"
+  /// Scan the HV of every sectors to check for "1400V issues".
+  /// if allIssues = kTRUE, look for all cases where HV < RecoParam limit more than 15s
   
   AliMUONTrackerHV hv(runList.Data(), ocdbPath.Data());
   
@@ -60,6 +62,7 @@ void ScanHV(TString runList, TString ocdbPath = "raw://")
   GetRunBoundaries(gRunBoudaries, runList);
   
   GetHVLimits(runList, ocdbPath);
+  if (allIssues) hvMin = -1.;
   
   if (!gSystem->AccessPathName("CheckHVLogs")) {
     printf("\n\e[0;31m!!! The search for know issues is done from log files in CheckHVLogs. !!!\e[0m\n");
@@ -206,7 +209,7 @@ Bool_t Find1400VIssues(TGraph *g, Int_t iCh)
   UInt_t t0 = 0;
   UInt_t dt = 0;
   for (Int_t i = 0; i < n; ++i) {
-    if (hv[i] > 1210. && hv[i] < hvLimits[iCh]) {
+    if (hv[i] > hvMin && hv[i] < hvLimits[iCh]) {
       if (t0 < 1) t0 = t[i];
       else dt = t[i] - t0;
     } else {
