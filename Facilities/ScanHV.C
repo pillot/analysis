@@ -8,6 +8,7 @@
 
 #include <Riostream.h>
 #include <TROOT.h>
+#include <TSystem.h>
 #include <TString.h>
 #include <TCanvas.h>
 #include <TMultiGraph.h>
@@ -18,6 +19,7 @@
 #include <TLine.h>
 #include <TList.h>
 
+#include "AliMpDCSNamer.h"
 #include "AliMUONTrackerHV.h"
 #include "AliCDBManager.h"
 #include "AliMUONCDB.h"
@@ -32,8 +34,9 @@ Double_t hvLimits[10];
 void GetRunBoundaries(TGraph *gRunBoudaries, TString &runList);
 void GetHVLimits(TString &runList, TString &ocdbPath);
 Bool_t Find1400VIssues(TGraph *g, Int_t iCh);
-void Print1400VIssues(TString dcsName, UInt_t t0, UInt_t t1);
-TString FindRuns(UInt_t t0, UInt_t t1);
+void Print1400VIssues(TString dcsName, UInt_t t0, UInt_t t1, Bool_t first);
+TString FindRuns(TString dcsName, UInt_t t0, UInt_t t1);
+Bool_t isKnown(Int_t run, TString dcsName);
 void DrawRunBoudaries(TCanvas *c2);
 
 //----------------------------------------------------------------------------
@@ -57,6 +60,12 @@ void ScanHV(TString runList, TString ocdbPath = "raw://")
   GetRunBoundaries(gRunBoudaries, runList);
   
   GetHVLimits(runList, ocdbPath);
+  
+  if (!gSystem->AccessPathName("CheckHVLogs")) {
+    printf("\n\e[0;31m!!! The search for know issues is done from log files in CheckHVLogs. !!!\e[0m\n");
+    printf("\e[0;31m!!! If you want to recreate the logs (because of e.g. an OCDB update) !!!\e[0m\n");
+    printf("\e[0;31m!!! you have to erase them first.                                     !!!\e[0m\n");
+  }
   
   TIter nextg(mg->GetListOfGraphs());
   TGraph *g = 0x0;
@@ -186,7 +195,7 @@ Bool_t Find1400VIssues(TGraph *g, Int_t iCh)
   /// look for HV struggling at ~1400V.
   /// return kTRUE if problem found
   
-  static const UInt_t minStrugglingTime = 30; // s
+  static const UInt_t minStrugglingTime = 15; // s
   
   Bool_t issues = kFALSE;
   
@@ -201,16 +210,17 @@ Bool_t Find1400VIssues(TGraph *g, Int_t iCh)
       if (t0 < 1) t0 = t[i];
       else dt = t[i] - t0;
     } else {
+      if (t0 > 0) dt = t[i] - t0;
       if (dt > minStrugglingTime) {
+        Print1400VIssues(g->GetName(), t0, t0+dt, !issues);
         issues = kTRUE;
-        Print1400VIssues(g->GetName(), t0, t0+dt);
       }
       t0 = dt = 0;
     }
   }
   if (dt > minStrugglingTime) {
+    Print1400VIssues(g->GetName(), t0, t0+dt, !issues);
     issues = kTRUE;
-    Print1400VIssues(g->GetName(), t0, t0+dt);
   }
   
   return issues;
@@ -218,17 +228,18 @@ Bool_t Find1400VIssues(TGraph *g, Int_t iCh)
 }
 
 //----------------------------------------------------------------------------
-void Print1400VIssues(TString dcsName, UInt_t t0, UInt_t t1)
+void Print1400VIssues(TString dcsName, UInt_t t0, UInt_t t1, Bool_t first)
 {
   /// print "1400V issues"
+  if (first) printf("Problem found for %s:\n", dcsName.Data());
   TTimeStamp st0(t0);
   TTimeStamp st1(t1);
-  TString runs = FindRuns(t0, t1);
-  printf("Problem found for %s between %s and %s --> run(s) %s\n", dcsName.Data(), st0.AsString("s"), st1.AsString("s"), runs.Data());
+  TString runs = FindRuns(dcsName, t0, t1);
+  printf("- between %s and %s --> run(s) %s\n", st0.AsString("s"), st1.AsString("s"), runs.Data());
 }
 
 //----------------------------------------------------------------------------
-TString FindRuns(UInt_t t0, UInt_t t1)
+TString FindRuns(TString dcsName, UInt_t t0, UInt_t t1)
 {
   /// Find the list of affected runs in this time range
   
@@ -241,7 +252,8 @@ TString FindRuns(UInt_t t0, UInt_t t1)
     
     if (runBoundaries[i][2] <= t0 || runBoundaries[i][1] >= t1) continue;
     
-    affectedRuns += runBoundaries[i][0];
+    if (isKnown(runBoundaries[i][0], dcsName)) affectedRuns += runBoundaries[i][0];
+    else affectedRuns += TString::Format("\e[0;31;103m%d\e[0m",runBoundaries[i][0]);
     affectedRuns += ",";
     
   }
@@ -249,6 +261,24 @@ TString FindRuns(UInt_t t0, UInt_t t1)
   affectedRuns.Remove(TString::kTrailing, ',');
   return affectedRuns;
   
+}
+
+//----------------------------------------------------------------------------
+Bool_t isKnown(Int_t run, TString dcsName)
+{
+  /// return kTRUE if the problematic sector is already identified
+  
+  static AliMpDCSNamer dcsHelper;
+  
+  if (gSystem->AccessPathName("CheckHVLogs")) gSystem->Exec("mkdir -p CheckHVLogs");
+  
+  TString log(TString::Format("CheckHVLogs/%d.log",run));
+  if (gSystem->AccessPathName(log.Data()))
+    gROOT->ProcessLineSync(TString::Format("AliMUONCDB::CheckHV(%d); > %s",run,log.Data()));
+  
+  TString dcsAlias = dcsHelper.DCSAliasFromName(dcsName);
+  return (!gSystem->Exec(TString::Format("grep -c %s %s > /dev/null",dcsAlias.Data(),log.Data())));
+
 }
 
 //----------------------------------------------------------------------------
