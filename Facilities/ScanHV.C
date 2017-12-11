@@ -35,7 +35,7 @@ Double_t hvLimits[10];
 void GetRunBoundaries(TGraph *gRunBoudaries, TString &runList);
 void GetHVLimits(TString &runList, TString &ocdbPath);
 Bool_t Find1400VIssues(TGraph *g, Int_t iCh);
-void Print1400VIssues(TString dcsName, UInt_t t0, UInt_t t1, Bool_t first);
+void Print1400VIssues(TString dcsName, UInt_t t0, UInt_t t1, Double_t meanHV, Bool_t first);
 TString FindRuns(TString dcsName, UInt_t t0, UInt_t t1);
 Bool_t isKnown(Int_t run, TString dcsName);
 void DrawRunBoudaries(TCanvas *c2);
@@ -65,9 +65,9 @@ void ScanHV(TString runList, TString ocdbPath = "raw://", Bool_t allIssues = kFA
   if (allIssues) hvMin = -1.;
   
   if (!gSystem->AccessPathName("CheckHVLogs")) {
-    printf("\n\e[0;31m!!! The search for know issues is done from log files in CheckHVLogs. !!!\e[0m\n");
-    printf("\e[0;31m!!! If you want to recreate the logs (because of e.g. an OCDB update) !!!\e[0m\n");
-    printf("\e[0;31m!!! you have to erase them first.                                     !!!\e[0m\n");
+    printf("\n\e[0;31m!!! The search for known issues is done from log files in CheckHVLogs. !!!\e[0m\n");
+    printf("\e[0;31m!!! If you want to recreate the logs (because of e.g. an OCDB update)  !!!\e[0m\n");
+    printf("\e[0;31m!!! you have to erase them first.                                      !!!\e[0m\n");
   }
   
   TIter nextg(mg->GetListOfGraphs());
@@ -208,21 +208,31 @@ Bool_t Find1400VIssues(TGraph *g, Int_t iCh)
   
   UInt_t t0 = 0;
   UInt_t dt = 0;
+  Double_t meanHV = 0.;
   for (Int_t i = 0; i < n; ++i) {
     if (hv[i] > hvMin && hv[i] < hvLimits[iCh]) {
       if (t0 < 1) t0 = t[i];
-      else dt = t[i] - t0;
+      else {
+        dt = t[i] - t0;
+        meanHV += hv[i-1] * (t[i] - t[i-1]);
+      }
     } else {
-      if (t0 > 0) dt = t[i] - t0;
+      if (t0 > 0) {
+        dt = t[i] - t0;
+        meanHV += hv[i-1] * (t[i] - t[i-1]);
+      }
       if (dt > minStrugglingTime) {
-        Print1400VIssues(g->GetName(), t0, t0+dt, !issues);
+        meanHV /= (Double_t) (t[i] - t0);
+        Print1400VIssues(g->GetName(), t0, t0+dt, meanHV, !issues);
         issues = kTRUE;
       }
       t0 = dt = 0;
+      meanHV = 0.;
     }
   }
   if (dt > minStrugglingTime) {
-    Print1400VIssues(g->GetName(), t0, t0+dt, !issues);
+    meanHV /= (Double_t) (t[n-1] - t0);
+    Print1400VIssues(g->GetName(), t0, t0+dt, meanHV, !issues);
     issues = kTRUE;
   }
   
@@ -231,14 +241,14 @@ Bool_t Find1400VIssues(TGraph *g, Int_t iCh)
 }
 
 //----------------------------------------------------------------------------
-void Print1400VIssues(TString dcsName, UInt_t t0, UInt_t t1, Bool_t first)
+void Print1400VIssues(TString dcsName, UInt_t t0, UInt_t t1, Double_t meanHV, Bool_t first)
 {
   /// print "1400V issues"
   if (first) printf("Problem found for %s:\n", dcsName.Data());
   TTimeStamp st0(t0);
   TTimeStamp st1(t1);
   TString runs = FindRuns(dcsName, t0, t1);
-  printf("- between %s and %s --> run(s) %s\n", st0.AsString("s"), st1.AsString("s"), runs.Data());
+  printf("- between %s and %s (~%d V) --> run(s) %s\n", st0.AsString("s"), st1.AsString("s"), (Int_t) (meanHV+0.5), runs.Data());
 }
 
 //----------------------------------------------------------------------------
