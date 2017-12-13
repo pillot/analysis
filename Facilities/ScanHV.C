@@ -41,7 +41,7 @@ Bool_t isKnown(Int_t run, TString dcsName);
 void DrawRunBoudaries(TCanvas *c2);
 
 //----------------------------------------------------------------------------
-void ScanHV(TString runList, TString ocdbPath = "raw://", Bool_t allIssues = kFALSE)
+void ScanHV(TString runList, TString ocdbPath = "raw://", Bool_t allIssues = kFALSE, TString channels = "")
 {
   /// Scan the HV of every sectors to check for "1400V issues".
   /// if allIssues = kTRUE, look for all cases where HV < RecoParam limit more than 15s
@@ -77,6 +77,7 @@ void ScanHV(TString runList, TString ocdbPath = "raw://", Bool_t allIssues = kFA
   printf("\n------ list of issues ------\n");
   while ((g = static_cast<TGraph*>(nextg()))) {
     TString gName = g->GetName();
+    if (!channels.IsNull() && !channels.Contains(gName)) continue;
     TString chName = gName(reChName);
     Int_t iCh = chName.Remove(0,7).Atoi();
     if (iCh > 0) {
@@ -290,7 +291,7 @@ Bool_t isKnown(Int_t run, TString dcsName)
     gROOT->ProcessLineSync(TString::Format("AliMUONCDB::CheckHV(%d); > %s",run,log.Data()));
   
   TString dcsAlias = dcsHelper.DCSAliasFromName(dcsName);
-  return (!gSystem->Exec(TString::Format("grep -c %s %s > /dev/null",dcsAlias.Data(),log.Data())));
+  return (!gSystem->Exec(TString::Format("grep -c \"Problem at %s\" %s > /dev/null",dcsAlias.Data(),log.Data())));
 
 }
 
