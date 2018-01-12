@@ -30,6 +30,9 @@ public:
   
   void SetMeanNtrkVsZvtxRef(TProfile &meanNtrkVsZvtxRef, Double_t meanNtrkRef = -1.);
   
+  /// use a binomial instead of poissonian distribution to correct Ntrk when fMeanNtrkRef < <Ntrk>
+  void UseBinomial(Bool_t flag = kTRUE) {fUseBinomial = flag;}
+  
   /// select a specific trigger class
   void SelectTrigger(TString trigger) {fTrigger = trigger;}
   
@@ -41,6 +44,9 @@ public:
   
   /// disable SPD vertex QA selection
   void DisableSPDVtxQA() {fSelectSPDVtxQA = kFALSE;}
+  
+  /// reject events with 0 (corrected) tracklets in -1 < eta < 1
+  void Reject0Tracklet() {fReject0Tracklet = kTRUE;}
   
 private:
   
@@ -62,14 +68,16 @@ private:
   
   TProfile *fpMeanNtrkVsZvtxRef;  /// <Ntrk> vs Z profile used to correct Ntrk
   Double_t fMeanNtrkRef;          /// <Ntrk> value used as a reference
+  Bool_t   fUseBinomial;          /// use a binomial distribution to correct Ntrk when fMeanNtrkRef < <Ntrk>
   TRandom3 *fRandom;              //!< random number generator
   
   TString fTrigger;               /// select a specific trigger class
   Bool_t fRejectNSD;              /// reject NSD MC events
   Bool_t fRejectPUFromSPD;        /// reject pile-up from SPD
   Bool_t fSelectSPDVtxQA;         /// select events with a good SPD vertex
+  Bool_t fReject0Tracklet;        /// reject events with 0 (corrected) tracklets in -1 < eta < 1
   
-  ClassDef(AliAnalysisTaskMeanTracklets, 1);
+  ClassDef(AliAnalysisTaskMeanTracklets, 2);
 };
 
 //________________________________________________________________________

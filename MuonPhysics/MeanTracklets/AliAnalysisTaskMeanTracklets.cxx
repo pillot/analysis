@@ -50,11 +50,13 @@ fpMeanNtrkVsZvtx(0x0),
 fpMeanNtrkVsZvtxCorr(0x0),
 fpMeanNtrkVsZvtxRef(0x0),
 fMeanNtrkRef(-1.),
+fUseBinomial(kFALSE),
 fRandom(new TRandom3(0)),
 fTrigger(""),
 fRejectNSD(kFALSE),
 fRejectPUFromSPD(kFALSE),
-fSelectSPDVtxQA(kTRUE)
+fSelectSPDVtxQA(kTRUE),
+fReject0Tracklet(kFALSE)
 {
   // Dummy constructor
 }
@@ -69,11 +71,13 @@ fpMeanNtrkVsZvtx(0x0),
 fpMeanNtrkVsZvtxCorr(0x0),
 fpMeanNtrkVsZvtxRef(0x0),
 fMeanNtrkRef(-1.),
+fUseBinomial(kFALSE),
 fRandom(new TRandom3(0)),
 fTrigger(""),
 fRejectNSD(kFALSE),
 fRejectPUFromSPD(kFALSE),
-fSelectSPDVtxQA(kTRUE)
+fSelectSPDVtxQA(kTRUE),
+fReject0Tracklet(kFALSE)
 {
   /// Constructor
   
@@ -220,6 +224,9 @@ void AliAnalysisTaskMeanTracklets::UserExec(Option_t *)
     ++nTrkInEtaRange;
   }
   
+  // reject events with 0 tracklet measured in the considered eta range
+  if (fReject0Tracklet && nTrkInEtaRange == 0) return;
+  
   // get the corrected number of SPD tracklets (no correction without a good SPD vertex)
   Int_t nTrkInEtaRangeCorr = nTrkInEtaRange;
   if (vtxQA) nTrkInEtaRangeCorr = fpMeanNtrkVsZvtxRef ? GetCorrectedNtrk(nTrkInEtaRange,zVtx) : GetCorrectedNtrkFromMultSel();
@@ -232,7 +239,7 @@ void AliAnalysisTaskMeanTracklets::UserExec(Option_t *)
   EventInfo[3] = NMCpartInEtaRange;
   fhNtrk->Fill(EventInfo);
   fpMeanNtrkVsZvtx->Fill(zVtx,nTrkInEtaRange);
-  if (nTrkInEtaRangeCorr >= 0) {
+  if (nTrkInEtaRangeCorr > 0 || (nTrkInEtaRangeCorr == 0 && !fReject0Tracklet)) {
     EventInfo[0] = nTrkInEtaRangeCorr;
     fhNtrkCorr->Fill(EventInfo);
     fpMeanNtrkVsZvtxCorr->Fill(zVtx,nTrkInEtaRangeCorr);
@@ -256,17 +263,25 @@ Int_t AliAnalysisTaskMeanTracklets::GetCorrectedNtrk(Int_t nTrkInEtaRange, Doubl
   Double_t meanNtrk = fpMeanNtrkVsZvtxRef->GetBinContent(fpMeanNtrkVsZvtxRef->FindBin(zVtx));
   if (meanNtrk < 1.e-6) return -999;
   
-  Double_t dN = nTrkInEtaRange*fMeanNtrkRef/meanNtrk - nTrkInEtaRange;
-  Int_t sign = (dN > 0.) ? 1 : -1;
-  /*
-   Int_t nTrkInEtaRangeCorr = -1;
-   do {
-   nTrkInEtaRangeCorr = nTrkInEtaRange + sign*fRandom->Poisson(TMath::Abs(dN));
-   } while (nTrkInEtaRangeCorr < 0);
-   
-   return nTrkInEtaRangeCorr;
-   */
-  return TMath::Max(nTrkInEtaRange + sign*fRandom->Poisson(TMath::Abs(dN)), 0);
+  if (fUseBinomial && fMeanNtrkRef <= meanNtrk) {
+    
+    return fRandom->Binomial(nTrkInEtaRange, fMeanNtrkRef/meanNtrk);
+    
+  } else {
+    
+    Double_t dN = nTrkInEtaRange*fMeanNtrkRef/meanNtrk - nTrkInEtaRange;
+    Int_t sign = (dN > 0.) ? 1 : -1;
+    /*
+     Int_t nTrkInEtaRangeCorr = -1;
+     do {
+     nTrkInEtaRangeCorr = nTrkInEtaRange + sign*fRandom->Poisson(TMath::Abs(dN));
+     } while (nTrkInEtaRangeCorr < 0);
+     
+     return nTrkInEtaRangeCorr;
+     */
+    return TMath::Max(nTrkInEtaRange + sign*fRandom->Poisson(TMath::Abs(dN)), 0);
+    
+  }
   
 }
 

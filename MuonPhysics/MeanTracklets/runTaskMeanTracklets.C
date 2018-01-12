@@ -17,7 +17,7 @@ void runTaskMeanTracklets(TString smode = "local", TString inputFileName = "AliA
   // --- general analysis setup ---
   TString rootVersion = "";
   TString alirootVersion = "";
-  TString aliphysicsVersion = "vAN-20170621-1";
+  TString aliphysicsVersion = "vAN-20180105-1";
   TString extraLibs="";
   TString extraIncs="include";
   TString extraTasks="AliAnalysisTaskMeanTracklets";
@@ -114,7 +114,9 @@ void CreateAnalysisTrain(Bool_t applyPS, Bool_t applyPileupCuts, Bool_t isMC, TS
   if (isMC) meanTracklets->RejectNSD();
 //  meanTracklets->RejectPUFromSPD();
 //  meanTracklets->DisableSPDVtxQA();
+//  meanTracklets->Reject0Tracklet();
   if (!refInput.IsNull() && !SetMeanNtrkVsZvtxRef(meanTracklets)) return;
+  meanTracklets->UseBinomial();
   
 }
 
