@@ -41,6 +41,8 @@ void FitPResVsP(TH2 *h, TGraphAsymmErrors *gSigma, Int_t rebinP, Double_t pSwitc
 // smearing class with settings used in MC
 AliMuonTrackSmearing muonTrackSmearing(AliMuonTrackSmearing::kCrystalBall);
 
+Int_t centralityBin[2] = {-1, 13};
+
 //-----------------------------------------------------------------------
 void ControlResolution(TString fileResQA = "AnalysisResults.root", TString fileResMeas = "", TString fileResSim = "",
                        Bool_t atFirstCluster = kFALSE, Bool_t refitResVsP = kTRUE, Bool_t drawResPVsP = kFALSE,
@@ -53,12 +55,18 @@ void ControlResolution(TString fileResQA = "AnalysisResults.root", TString fileR
   /// the performance task with the same function as for the smeared results.
   
   setbuf(stdout, NULL);
-  /*
-  muonTrackSmearing.SetSigmaxChSt1(0.000519);
-  muonTrackSmearing.SetSigmayChSt1(0.000064);
-  muonTrackSmearing.SetSigmayCh(0.000105);
-  muonTrackSmearing.SetCrystalBallParams(3.671484,4.590817,2.453060,1.715218,2.145035,1.782320);
-  */
+  
+//  muonTrackSmearing.SetSigmaxChSt1(0.000519);
+//  muonTrackSmearing.SetSigmayChSt1(0.000064);
+//  muonTrackSmearing.SetSigmayCh(0.000105);
+//  muonTrackSmearing.SetCrystalBallParams(3.671484,4.590817,2.453060,1.715218,2.145035,1.782320);
+//  muonTrackSmearing.SetSigmaxChSt1(0.000512);
+//  muonTrackSmearing.SetSigmayChSt1(0.000065);
+//  muonTrackSmearing.SetSigmayCh(0.000126);
+//  muonTrackSmearing.SetCrystalBallParams(3.13205,0.813714,2.554298,1.479729,2.356118,1.695968);
+//  muonTrackSmearing.SetSigmayCh(0.000195);
+//  muonTrackSmearing.SetCrystalBallParams(2.017293,1.890778,1.514588,1.938707,1.331549,1.941949);
+
   // momentum and slope resolution versus p
   TCanvas *cRes = new TCanvas("cRes","cRes",10,10,1200,300);
   cRes->Divide(3,1);
@@ -199,38 +207,83 @@ void DrawResolutionFromData(TCanvas *cRes, TCanvas *cResX, TCanvas *cResY, TStri
   hSlopeYRes->SetDirectory(0);
   
   // get the cluster-track residuals to control their parameterization
-  TObjArray* residualsList = static_cast<TObjArray*>(fResMeas->FindObjectAny("Residuals"));
-  if (!residualsList) return;
-  TH2F *hResidualXPerCh_ClusterIn = static_cast<TH2F*>(residualsList->FindObject("hResidualXPerCh_ClusterIn"));
-  TH2F *hResidualXPerCh_ClusterOut = static_cast<TH2F*>(residualsList->FindObject("hResidualXPerCh_ClusterOut"));
-  TH2F *hResidualYPerCh_ClusterIn = static_cast<TH2F*>(residualsList->FindObject("hResidualYPerCh_ClusterIn"));
-  TH2F *hResidualYPerCh_ClusterOut = static_cast<TH2F*>(residualsList->FindObject("hResidualYPerCh_ClusterOut"));
-  if (!hResidualXPerCh_ClusterIn || !hResidualXPerCh_ClusterOut || !hResidualYPerCh_ClusterIn || !hResidualYPerCh_ClusterOut) return;
-  printf("\nmeasured resolution (m):\n");
-  dummy->cd();
-  for (Int_t iSt = 0; iSt < 5; ++iSt) {
-    hXResSt_clIn[iSt] = hResidualXPerCh_ClusterIn->ProjectionY(Form("hXResSt%d_clIn",iSt+1),2*iSt+1,2*iSt+2,"e");
-    hXResSt_clIn[iSt]->SetDirectory(0);
-    hXResSt_clOut[iSt] = hResidualXPerCh_ClusterOut->ProjectionY(Form("hXResSt%d_clOut",iSt+1),2*iSt+1,2*iSt+2,"e");
-    hXResSt_clOut[iSt]->SetDirectory(0);
-    printf("- sigma x st%d = %.6f\n", iSt+1, 0.01*TMath::Sqrt(GetSigma(hXResSt_clIn[iSt])*GetSigma(hXResSt_clOut[iSt])));
-    hYResSt_clIn[iSt] = hResidualYPerCh_ClusterIn->ProjectionY(Form("hYResSt%d_clIn",iSt+1),2*iSt+1,2*iSt+2,"e");
-    hYResSt_clIn[iSt]->SetDirectory(0);
-    hYResSt_clOut[iSt] = hResidualYPerCh_ClusterOut->ProjectionY(Form("hYResSt%d_clOut",iSt+1),2*iSt+1,2*iSt+2,"e");
-    hYResSt_clOut[iSt]->SetDirectory(0);
-    printf("- sigma y st%d = %.6f\n", iSt+1, 0.01*TMath::Sqrt(GetSigma(hYResSt_clIn[iSt])*GetSigma(hYResSt_clOut[iSt])));
+  if (centralityBin[0] > 0 && centralityBin[1] < 13) {
+
+    TObjArray* residualsList = static_cast<TObjArray*>(fResMeas->FindObjectAny("ResidualsVsCent"));
+    if (!residualsList) return;
+    printf("\nmeasured resolution (m):\n");
+    dummy->cd();
+    for (Int_t iSt = 0; iSt < 5; ++iSt) {
+      TH2F *h = static_cast<TH2F*>(residualsList->FindObject(Form("hResidualXInCh%dVsCent_ClusterIn",2*iSt+1)));
+      h->Add(static_cast<TH2F*>(residualsList->FindObject(Form("hResidualXInCh%dVsCent_ClusterIn",2*iSt+2))));
+      hXResSt_clIn[iSt] = h->ProjectionY(Form("hXResSt%d_clIn",iSt+1),centralityBin[0],centralityBin[1],"e");
+      hXResSt_clIn[iSt]->SetDirectory(0);
+      h = static_cast<TH2F*>(residualsList->FindObject(Form("hResidualXInCh%dVsCent_ClusterOut",2*iSt+1)));
+      h->Add(static_cast<TH2F*>(residualsList->FindObject(Form("hResidualXInCh%dVsCent_ClusterOut",2*iSt+2))));
+      hXResSt_clOut[iSt] = h->ProjectionY(Form("hXResSt%d_clOut",iSt+1),centralityBin[0],centralityBin[1],"e");
+      hXResSt_clOut[iSt]->SetDirectory(0);
+      printf("- sigma x st%d = %.6f\n", iSt+1, 0.01*TMath::Sqrt(GetSigma(hXResSt_clIn[iSt])*GetSigma(hXResSt_clOut[iSt])));
+      h = static_cast<TH2F*>(residualsList->FindObject(Form("hResidualYInCh%dVsCent_ClusterIn",2*iSt+1)));
+      h->Add(static_cast<TH2F*>(residualsList->FindObject(Form("hResidualYInCh%dVsCent_ClusterIn",2*iSt+2))));
+      hYResSt_clIn[iSt] = h->ProjectionY(Form("hYResSt%d_clIn",iSt+1),centralityBin[0],centralityBin[1],"e");
+      hYResSt_clIn[iSt]->SetDirectory(0);
+      h = static_cast<TH2F*>(residualsList->FindObject(Form("hResidualYInCh%dVsCent_ClusterOut",2*iSt+1)));
+      h->Add(static_cast<TH2F*>(residualsList->FindObject(Form("hResidualYInCh%dVsCent_ClusterOut",2*iSt+2))));
+      hYResSt_clOut[iSt] = h->ProjectionY(Form("hYResSt%d_clOut",iSt+1),centralityBin[0],centralityBin[1],"e");
+      hYResSt_clOut[iSt]->SetDirectory(0);
+      printf("- sigma y st%d = %.6f\n", iSt+1, 0.01*TMath::Sqrt(GetSigma(hYResSt_clIn[iSt])*GetSigma(hYResSt_clOut[iSt])));
+    }
+    TH2F *hResidualXPerCh_ClusterIn = static_cast<TH2F*>(residualsList->FindObject("hResidualXVsCent_ClusterIn"));
+    TH2F *hResidualXPerCh_ClusterOut = static_cast<TH2F*>(residualsList->FindObject("hResidualXVsCent_ClusterOut"));
+    TH2F *hResidualYPerCh_ClusterIn = static_cast<TH2F*>(residualsList->FindObject("hResidualYVsCent_ClusterIn"));
+    TH2F *hResidualYPerCh_ClusterOut = static_cast<TH2F*>(residualsList->FindObject("hResidualYVsCent_ClusterOut"));
+    hXRes_clIn = hResidualXPerCh_ClusterIn->ProjectionY("hXRes_clIn",centralityBin[0],centralityBin[1],"e");
+    hXRes_clIn->SetDirectory(0);
+    hXRes_clOut = hResidualXPerCh_ClusterOut->ProjectionY("hXRes_clOut",centralityBin[0],centralityBin[1],"e");
+    hXRes_clOut->SetDirectory(0);
+    printf("- sigma x = %.6f\n", 0.01*TMath::Sqrt(GetSigma(hXRes_clIn)*GetSigma(hXRes_clOut)));
+    hYRes_clIn = hResidualYPerCh_ClusterIn->ProjectionY("hYRes_clIn",centralityBin[0],centralityBin[1],"e");
+    hYRes_clIn->SetDirectory(0);
+    hYRes_clOut = hResidualYPerCh_ClusterOut->ProjectionY("hYRes_clOut",centralityBin[0],centralityBin[1],"e");
+    hYRes_clOut->SetDirectory(0);
+    printf("- sigma y = %.6f\n\n", 0.01*TMath::Sqrt(GetSigma(hYRes_clIn)*GetSigma(hYRes_clOut)));
+
+  } else {
+
+    TObjArray* residualsList = static_cast<TObjArray*>(fResMeas->FindObjectAny("Residuals"));
+    if (!residualsList) return;
+    TH2F *hResidualXPerCh_ClusterIn = static_cast<TH2F*>(residualsList->FindObject("hResidualXPerCh_ClusterIn"));
+    TH2F *hResidualXPerCh_ClusterOut = static_cast<TH2F*>(residualsList->FindObject("hResidualXPerCh_ClusterOut"));
+    TH2F *hResidualYPerCh_ClusterIn = static_cast<TH2F*>(residualsList->FindObject("hResidualYPerCh_ClusterIn"));
+    TH2F *hResidualYPerCh_ClusterOut = static_cast<TH2F*>(residualsList->FindObject("hResidualYPerCh_ClusterOut"));
+    if (!hResidualXPerCh_ClusterIn || !hResidualXPerCh_ClusterOut || !hResidualYPerCh_ClusterIn || !hResidualYPerCh_ClusterOut) return;
+    printf("\nmeasured resolution (m):\n");
+    dummy->cd();
+    for (Int_t iSt = 0; iSt < 5; ++iSt) {
+      hXResSt_clIn[iSt] = hResidualXPerCh_ClusterIn->ProjectionY(Form("hXResSt%d_clIn",iSt+1),2*iSt+1,2*iSt+2,"e");
+      hXResSt_clIn[iSt]->SetDirectory(0);
+      hXResSt_clOut[iSt] = hResidualXPerCh_ClusterOut->ProjectionY(Form("hXResSt%d_clOut",iSt+1),2*iSt+1,2*iSt+2,"e");
+      hXResSt_clOut[iSt]->SetDirectory(0);
+      printf("- sigma x st%d = %.6f\n", iSt+1, 0.01*TMath::Sqrt(GetSigma(hXResSt_clIn[iSt])*GetSigma(hXResSt_clOut[iSt])));
+      hYResSt_clIn[iSt] = hResidualYPerCh_ClusterIn->ProjectionY(Form("hYResSt%d_clIn",iSt+1),2*iSt+1,2*iSt+2,"e");
+      hYResSt_clIn[iSt]->SetDirectory(0);
+      hYResSt_clOut[iSt] = hResidualYPerCh_ClusterOut->ProjectionY(Form("hYResSt%d_clOut",iSt+1),2*iSt+1,2*iSt+2,"e");
+      hYResSt_clOut[iSt]->SetDirectory(0);
+      printf("- sigma y st%d = %.6f\n", iSt+1, 0.01*TMath::Sqrt(GetSigma(hYResSt_clIn[iSt])*GetSigma(hYResSt_clOut[iSt])));
+    }
+    hXRes_clIn = hResidualXPerCh_ClusterIn->ProjectionY("hXRes_clIn",1,10,"e");
+    hXRes_clIn->SetDirectory(0);
+    hXRes_clOut = hResidualXPerCh_ClusterOut->ProjectionY("hXRes_clOut",1,10,"e");
+    hXRes_clOut->SetDirectory(0);
+    printf("- sigma x = %.6f\n", 0.01*TMath::Sqrt(GetSigma(hXRes_clIn)*GetSigma(hXRes_clOut)));
+    hYRes_clIn = hResidualYPerCh_ClusterIn->ProjectionY("hYRes_clIn",1,10,"e");
+    hYRes_clIn->SetDirectory(0);
+    hYRes_clOut = hResidualYPerCh_ClusterOut->ProjectionY("hYRes_clOut",1,10,"e");
+    hYRes_clOut->SetDirectory(0);
+    printf("- sigma y = %.6f\n\n", 0.01*TMath::Sqrt(GetSigma(hYRes_clIn)*GetSigma(hYRes_clOut)));
+
   }
-  hXRes_clIn = hResidualXPerCh_ClusterIn->ProjectionY("hXRes_clIn",1,10,"e");
-  hXRes_clIn->SetDirectory(0);
-  hXRes_clOut = hResidualXPerCh_ClusterOut->ProjectionY("hXRes_clOut",1,10,"e");
-  hXRes_clOut->SetDirectory(0);
-  printf("- sigma x = %.6f\n", 0.01*TMath::Sqrt(GetSigma(hXRes_clIn)*GetSigma(hXRes_clOut)));
-  hYRes_clIn = hResidualYPerCh_ClusterIn->ProjectionY("hYRes_clIn",1,10,"e");
-  hYRes_clIn->SetDirectory(0);
-  hYRes_clOut = hResidualYPerCh_ClusterOut->ProjectionY("hYRes_clOut",1,10,"e");
-  hYRes_clOut->SetDirectory(0);
-  printf("- sigma y = %.6f\n\n", 0.01*TMath::Sqrt(GetSigma(hYRes_clIn)*GetSigma(hYRes_clOut)));
-  
+
   fResMeas->Close();
   
   // draw momentum and slope resolution versus p
@@ -836,13 +889,18 @@ void FitPResVsP(TH2 *h, TGraphAsymmErrors *gSigma, Int_t rebinP, Double_t pSwitc
       if (c) {
         TH1D *tmp0 = static_cast<TH1D*>(c->GetListOfPrimitives()->FindObject(Form("%s%s_%d",h->GetName(),mc.Data(),i/rebinP)));
         tmp->Scale(tmp0->GetSumOfWeights()*tmp0->GetBinWidth(1)/tmp->GetSumOfWeights()/tmp->GetBinWidth(1));
+        Int_t color = c->GetLineColor() + 1;
+        if (color == 5 || color == 10) ++color;
         c->cd();
-        tmp->SetLineColor(4);
-        fLandauGaus->SetLineColor(4);
-        fGausInvP->SetLineColor(4);
+        c->SetLineColor(color);
+        tmp->SetLineColor(color);
+        fLandauGaus->SetLineColor(color);
+        fGausInvP->SetLineColor(color);
         tmp->Draw("sames");
       } else {
         c = new TCanvas(Form("c%s_%d",h->GetName(),i/rebinP),Form("c%s_%d",h->GetName(),i/rebinP));
+        gPad->SetLogy();
+        c->SetLineColor(2);
         tmp->SetLineColor(2);
         fLandauGaus->SetLineColor(2);
         fGausInvP->SetLineColor(2);
