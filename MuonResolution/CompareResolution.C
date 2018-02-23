@@ -112,12 +112,16 @@ void CompareResolution(const char* fileName1, const char* fileName2,
     
   }
   
+  // open outfile to save displays
+  TFile* o = TFile::Open("compare.root","RECREATE");
+  if (!o || !o->IsOpen()) return;
+  
   // display
 //  TString legend[3] = {"before", "after", ""};
 //  TString legend[3] = {"old", "new", ""};
 //  TString legend[3] = {"no match", "match", ""};
 //  TString legend[3] = {"ref", "4cf", "5cf"};
-//  TString legend[3] = {"ref", "new_0", "new_1"};
+//  TString legend[3] = {"ref", "v4", "v5"};
 //  TString legend[3] = {"w/o GMS", "w/ GMS", ""};
 //  TString legend[3] = {"Align BOFF", "Align BON", ""};
 //  TString legend[3] = {"p-p", "Pb-Pb", ""};
@@ -133,7 +137,9 @@ void CompareResolution(const char* fileName1, const char* fileName2,
 //  TString legend[4] = {"pp GMSRuben", "PbPb GMSRuben", "PbPb GMSJavier", "PbPb GMSJavier2"};
 //  TString legend[3] = {"Javier1", "Javier2", "Javier"};
 //  TString legend[2] = {"w/ mono-cathodes", "w/o mono-cathodes"};
-  TString legend[3] = {"no cut", "> 20 GeV/c"};
+//  TString legend[2] = {"no cut", "> 20 GeV/c"};
+//  TString legend[2] = {"LCH16r", "LHC16e"};
+  TString legend[2] = {"v5", "v6"};
   TLegend *lRes = new TLegend(0.70,0.80,0.99,0.99);
   for (Int_t i=0; i<nFiles; i++) {
     if (!gObj[0][0][i]) continue;
@@ -172,6 +178,8 @@ void CompareResolution(const char* fileName1, const char* fileName2,
 	if (drawLegend) lRes->DrawClone();
       }
     }
+    o->cd();
+    c->Write();
   }
   
   // comparison versus P and angle per chamber
@@ -181,7 +189,7 @@ void CompareResolution(const char* fileName1, const char* fileName2,
   Int_t divide2[2][2] = {{5, 5}, {4, 4}};
   Float_t titleSize2[2][2] = {{0.05, 0.05}, {0.05, 0.05}};
   Float_t labelSize2[2][2] = {{0.06, 0.06}, {0.06, 0.06}};
-//  Float_t range2[2][2] = {{-0.05, -0.1}, {0.05, 0.1}};
+//  Float_t range2[2][2] = {{-0.5, -0.5}, {0.5, 0.5}};
   Float_t range2[2][2] = {{-0.025, -0.05}, {0.025, 0.05}};
   for (Int_t i=0; i<2; i++) {
     TCanvas* c = new TCanvas(cName2[i].Data(), cName2[i].Data(), size2[0][i], size2[1][i]);
@@ -207,6 +215,8 @@ void CompareResolution(const char* fileName1, const char* fileName2,
 	}
       }
     }
+    o->cd();
+    c->Write();
   }
   
   // comparison versus angle per half-chamber
@@ -217,7 +227,7 @@ void CompareResolution(const char* fileName1, const char* fileName2,
   Int_t divide3[2][2] = {{5, 5}, {4, 4}};
   Float_t titleSize3[2][2] = {{0.05, 0.05}, {0.05, 0.05}};
   Float_t labelSize3[2][2] = {{0.06, 0.06}, {0.06, 0.06}};
-//  Float_t range3[2][2] = {{-0.1, -0.1}, {0.1, 0.1}};
+//  Float_t range3[2][2] = {{-0.5, -0.5}, {0.5, 0.5}};
   Float_t range3[2][2] = {{-0.05, -0.05}, {0.05, 0.05}};
   for (Int_t i=0; i<2; i++) {
     TCanvas* c = new TCanvas(cName3[i].Data(), cName3[i].Data(), size3[0][i], size3[1][i]);
@@ -243,9 +253,13 @@ void CompareResolution(const char* fileName1, const char* fileName2,
 	}
       }
     }
+    o->cd();
+    c->Write();
   }
   
   // close file and clean memory
+  o->Close();
+  delete o;
   delete lRes;
   for (Int_t i=0; i<3; i++) for (Int_t j=0; j<nObjs; j++) delete[] gObj[i][j];
   for (Int_t i=0; i<6; i++) delete[] mgObj[i];
