@@ -24,19 +24,20 @@ void runMuonTrackSmearingQA(TString smode = "local", TString inputFileName = "Al
   // --- general analysis setup ---
   TString rootVersion = "";
   TString alirootVersion = "";
-  TString aliphysicsVersion = "vAN-20171030-1";
+  TString aliphysicsVersion = "vAN-20180105-1";
   TString extraLibs="";
   TString extraIncs="include";
   TString extraTasks="";
-  TString extraPkgs="PWGmuon";
+  TString extraPkgs="";
+//  TString extraPkgs="PWGmuon";
   TList pathList; pathList.SetOwner();
   pathList.Add(new TObjString("$WORK/Macros/MuonResolution"));
-  pathList.Add(new TObjString("$WORK2/devphys/AliPhysics/PWG/muon"));
-  pathList.Add(new TObjString("$ALICE_PHYSICS/PARfiles"));
+//  pathList.Add(new TObjString("$WORK2/devphys/AliPhysics/PWG/muon"));
+  //pathList.Add(new TObjString("$ALICE_PHYSICS/PARfiles"));
   TList fileList; fileList.SetOwner();
   fileList.Add(new TObjString("runMuonTrackSmearingQA.C"));
-  fileList.Add(new TObjString("AddTaskMuonTrackSmearingQA.C"));
-  fileList.Add(new TObjString("PWGmuon.par"));
+//  fileList.Add(new TObjString("AddTaskMuonTrackSmearingQA.C"));
+  //fileList.Add(new TObjString("PWGmuon.par"));
 
   // --- grid specific setup ---
   TString dataDir = "/alice/data/2017/LHC17n";
@@ -124,25 +125,79 @@ TObject* CreateAnalysisTrain(TString dataType)
   // track selection
   AliMuonTrackCuts trackCuts("stdCuts", "stdCuts");
   trackCuts.SetAllowDefaultParams();
-  trackCuts.SetFilterMask(/*AliMuonTrackCuts::kMuMatchLpt | */AliMuonTrackCuts::kMuEta |
+  trackCuts.SetFilterMask(AliMuonTrackCuts::kMuMatchHpt | AliMuonTrackCuts::kMuEta |
 			  AliMuonTrackCuts::kMuThetaAbs);
   trackCuts.SetIsMC(kTRUE);
   
   // muon track smearing task
   gROOT->LoadMacro("$ALICE_PHYSICS/PWG/muon/AddTaskMuonTrackSmearing.C");
-  AliTaskMuonTrackSmearing* muonSmearing = reinterpret_cast<AliTaskMuonTrackSmearing*>(gROOT->ProcessLineSync("AddTaskMuonTrackSmearing()"));
+  AliTaskMuonTrackSmearing* muonSmearing = reinterpret_cast<AliTaskMuonTrackSmearing*>(gROOT->ProcessLineSync(Form("AddTaskMuonTrackSmearing(%d)",AliMuonTrackSmearing::kCrystalBall)));
   if(!muonSmearing) {
     Error("CreateAnalysisTrain","AliTaskMuonTrackSmearing not created!");
     return;
   }
+//  muonSmearing->GetMuonTrackSmearing().SetSigmaTrk(0.004);
+  muonSmearing->GetMuonTrackSmearing().SetSigmaTrkCut(6.);
+//  muonSmearing->GetMuonTrackSmearing().SetNSigmaShift(1.2);
+  // CB Data2
+//  muonSmearing->GetMuonTrackSmearing().SetCrystalBallParams(2.017293,1.890778,1.514588,1.938707,1.331549,1.941949);
+  // CB Data3 /Users/pillot/Work/Alice/Data/2015/LHC15n/muon_calo_pass1/244540/MuonResolution/AlignHugoV4_20GeV/results.root
+  muonSmearing->GetMuonTrackSmearing().SetSigmaxChSt1(0.000430);
+  muonSmearing->GetMuonTrackSmearing().SetSigmayChSt1(0.000095);
+  muonSmearing->GetMuonTrackSmearing().SetSigmayCh(0.000125);
+  muonSmearing->GetMuonTrackSmearing().SetCrystalBallParams(1.907786,1.846464,1.587050,1.750238,1.331549,1.941949);
+  // gauss MC
+//  muonSmearing->GetMuonTrackSmearing().SetSigmaxChSt1(0.000506);
+//  muonSmearing->GetMuonTrackSmearing().SetSigmayChSt1(0.000065);
+//  muonSmearing->GetMuonTrackSmearing().SetSigmayCh(0.000112);
+  // CB MC
 //  muonSmearing->GetMuonTrackSmearing().SetSigmaxChSt1(0.000519);
 //  muonSmearing->GetMuonTrackSmearing().SetSigmayChSt1(0.000064);
 //  muonSmearing->GetMuonTrackSmearing().SetSigmayCh(0.000105);
 //  muonSmearing->GetMuonTrackSmearing().SetCrystalBallParams(3.671484,4.590817,2.453060,1.715218,2.145035,1.782320);
+  // /Users/pillot/Work/Alice/Sim/LHC16r/muon_calo_pass1/mu/TuneCMSH1/pT5GeV/MuonEfficiency/AnalysisResults.root
+//  muonSmearing->GetMuonTrackSmearing().SetSigmayCh(0.000125);
+//  muonSmearing->GetMuonTrackSmearing().SetCrystalBallParams(3.671484,4.590817,2.453060,1.715218,2.498486,1.364013);
+  // CB MC Station 3 /Users/pillot/Work/Alice/Sim/LHC15o/muon_calo_pass1/mu/TuneCMSH7/MuonEfficiency/AnalysisResults.root
+//  muonSmearing->GetMuonTrackSmearing().SetSigmaxChSt1(0.000512);
+//  muonSmearing->GetMuonTrackSmearing().SetSigmayChSt1(0.000065);
+//  muonSmearing->GetMuonTrackSmearing().SetSigmayCh(0.000126);
+//  muonSmearing->GetMuonTrackSmearing().SetCrystalBallParams(3.13205,0.813714,2.554298,1.479729,2.356118,1.695968);
+  // CB Data Station 3 /Users/pillot/Work/Alice/Data/2015/LHC15n/muon_calo_pass1/244540/MuonResolution/AlignHugoV4_20GeV/results.root
+//  muonSmearing->GetMuonTrackSmearing().SetSigmaxChSt1(0.000430);
+//  muonSmearing->GetMuonTrackSmearing().SetSigmayChSt1(0.000095);
+//  muonSmearing->GetMuonTrackSmearing().SetSigmayCh(0.000195);
+//  muonSmearing->GetMuonTrackSmearing().SetCrystalBallParams(1.907786,1.846464,1.587050,1.750238,1.421882,2.139755);
+//  muonSmearing->GetMuonTrackSmearing().SetCrystalBallParams(1.907786,1.846464,1.587050,1.750238,1.221338,2.599482); // step0
+  //  CB MC measured /Users/pillot/Work/Alice/Sim/LHC15o/muon_calo_pass1/EmbedV2b/MuonResolution/20GeV/chamberResolution_step2.root
+//  muonSmearing->GetMuonTrackSmearing().SetSigmaxChSt1(0.000656);
+//  muonSmearing->GetMuonTrackSmearing().SetSigmayChSt1(0.000082);
+//  muonSmearing->GetMuonTrackSmearing().SetSigmayCh(0.000122);
+//  muonSmearing->GetMuonTrackSmearing().SetCrystalBallParams(2.817940,1.475378,1.551441,2.679521,1.756194,2.128461);
+  //  CB MC measured 0-10% /Users/pillot/Work/Alice/Sim/LHC15o/muon_calo_pass1/EmbedV2b/MuonResolution/20GeV/chamberResolution_step2.root
+//  muonSmearing->GetMuonTrackSmearing().SetSigmaxChSt1(0.000671);
+//  muonSmearing->GetMuonTrackSmearing().SetSigmayChSt1(0.000085);
+//  muonSmearing->GetMuonTrackSmearing().SetSigmayCh(0.000124);
+//  muonSmearing->GetMuonTrackSmearing().SetCrystalBallParams(2.635614,1.436419,1.563039,2.210707,1.690065,1.936893);
+  //  CB MC measured 80-90% /Users/pillot/Work/Alice/Sim/LHC15o/muon_calo_pass1/EmbedV2b/MuonResolution/20GeV/chamberResolution_step2.root
+//  muonSmearing->GetMuonTrackSmearing().SetSigmaxChSt1(0.000649);
+//  muonSmearing->GetMuonTrackSmearing().SetSigmayChSt1(0.000080);
+//  muonSmearing->GetMuonTrackSmearing().SetSigmayCh(0.000121);
+//  muonSmearing->GetMuonTrackSmearing().SetCrystalBallParams(2.907202,1.564498,1.477585,3.277859,1.772329,2.276131);
+  //  CB MC measured Station 3 /Users/pillot/Work/Alice/Sim/LHC15o/muon_calo_pass1/EmbedV2b/MuonResolution/20GeV/chamberResolution_step2.root
+//  muonSmearing->GetMuonTrackSmearing().SetSigmaxChSt1(0.000656);
+//  muonSmearing->GetMuonTrackSmearing().SetSigmayChSt1(0.000082);
+//  muonSmearing->GetMuonTrackSmearing().SetSigmayCh(0.000158);
+//  muonSmearing->GetMuonTrackSmearing().SetCrystalBallParams(2.817940,1.475378,1.551441,2.679521,1.923223,1.951717);
+  //  CB MC measured Station 3 /Users/pillot/Work/Alice/Sim/LHC15o/muon_calo_pass1/EmbedV2b/MuonResolution/20GeV/chamberResolution_step0.root
+//  muonSmearing->GetMuonTrackSmearing().SetSigmaxChSt1(0.000695);
+//  muonSmearing->GetMuonTrackSmearing().SetSigmayChSt1(0.000109);
+//  muonSmearing->GetMuonTrackSmearing().SetSigmayCh(0.000162);
+//  muonSmearing->GetMuonTrackSmearing().SetCrystalBallParams(2.74320,1.61658,1.532941,2.487253,1.773199,2.291951);
 
   // muon track smearing QA task
-//  gROOT->LoadMacro("$ALICE_PHYSICS/PWG/muon/AddTaskMuonTrackSmearingQA.C");
-  gROOT->LoadMacro("AddTaskMuonTrackSmearingQA.C");
+  gROOT->LoadMacro("$ALICE_PHYSICS/PWG/muon/AddTaskMuonTrackSmearingQA.C");
+//  gROOT->LoadMacro("AddTaskMuonTrackSmearingQA.C");
   AliTaskMuonTrackSmearingQA* muonSmearingQA = reinterpret_cast<AliTaskMuonTrackSmearingQA*>(gROOT->ProcessLineSync("AddTaskMuonTrackSmearingQA()"));
   if(!muonSmearingQA) {
     Error("CreateAnalysisTrain","AliTaskMuonTrackSmearingQA not created!");
