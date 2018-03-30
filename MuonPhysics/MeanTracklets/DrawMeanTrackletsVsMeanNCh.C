@@ -42,12 +42,19 @@ void DrawMeanTrackletsVsMeanNCh(TString fileNameData = "AnalysisResults.root", B
   // <Nch> vs Zvtx per tracklet bin
   Int_t nBins = (Int_t)(sizeof(trkBin) / sizeof(Int_t)) - 1;
   TProfile **pMeanNchVsZvtx = new TProfile*[nBins+1];
+  TH1D **hRMSNchVsZvtx = new TH1D*[nBins+1];
   for (Int_t i = 0; i < nBins; ++i) {
     fhNtrk->GetAxis(0)->SetRangeUser(trkBin[i], trkBin[i+1]-1);
     TH2D *hNchVsZvtxInBin = fhNtrk->Projection(3,1,"e");
     pMeanNchVsZvtx[i] = hNchVsZvtxInBin->ProfileX(Form("pMeanNchVsZvtx%d",i+1));
     pMeanNchVsZvtx[i]->SetTitle(Form("<Nch>(Zvtx)/<Nch> in %sNtrk bin %d;Zvtx;<Nch>(Zvtx)/<Nch>",corr?"corrected ":"",i+1));
     pMeanNchVsZvtx[i]->SetDirectory(0);
+    hRMSNchVsZvtx[i] = new TH1D(Form("hRMSNchVsZvtx%d",i+1), Form("Nch RMS(Zvtx)/RMS in %sNtrk bin %d;Zvtx;Nch RMS(Zvtx)/RMS",corr?"corrected ":"",i+1), pMeanNchVsZvtx[i]->GetNbinsX(), pMeanNchVsZvtx[i]->GetXaxis()->GetXmin(), pMeanNchVsZvtx[i]->GetXaxis()->GetXmax());
+    for (Int_t iz = 1; iz <= pMeanNchVsZvtx[i]->GetNbinsX(); ++iz) {
+      hRMSNchVsZvtx[i]->SetBinContent(iz, pMeanNchVsZvtx[i]->GetBinError(iz)*TMath::Sqrt(pMeanNchVsZvtx[i]->GetBinEntries(iz)));
+      hRMSNchVsZvtx[i]->SetBinError(iz, 0.);
+    }
+    hRMSNchVsZvtx[i]->SetDirectory(0);
     delete hNchVsZvtxInBin;
   }
   fhNtrk->GetAxis(0)->SetRange();
@@ -57,6 +64,12 @@ void DrawMeanTrackletsVsMeanNCh(TString fileNameData = "AnalysisResults.root", B
   pMeanNchVsZvtx[nBins] = hNchVsZvtx->ProfileX("pMeanNchVsZvtx");
   pMeanNchVsZvtx[nBins]->SetTitle("<Nch> versus Zvtx;Zvtx;<Nch>");
   pMeanNchVsZvtx[nBins]->SetDirectory(0);
+  hRMSNchVsZvtx[nBins] = new TH1D("hRMSNchVsZvtx", "Nch dispersion vs Zvtx;Zvtx;Nch dispersion", pMeanNchVsZvtx[nBins]->GetNbinsX(), pMeanNchVsZvtx[nBins]->GetXaxis()->GetXmin(), pMeanNchVsZvtx[nBins]->GetXaxis()->GetXmax());
+  for (Int_t iz = 1; iz <= pMeanNchVsZvtx[nBins]->GetNbinsX(); ++iz) {
+    hRMSNchVsZvtx[nBins]->SetBinContent(iz, pMeanNchVsZvtx[nBins]->GetBinError(iz)*TMath::Sqrt(pMeanNchVsZvtx[nBins]->GetBinEntries(iz)));
+    hRMSNchVsZvtx[nBins]->SetBinError(iz, 0.);
+  }
+  hRMSNchVsZvtx[nBins]->SetDirectory(0);
 
   file->Close();
   delete file;
@@ -125,14 +138,17 @@ void DrawMeanTrackletsVsMeanNCh(TString fileNameData = "AnalysisResults.root", B
   fMeanNchVsNtrk->Draw("same");
 
   TCanvas *c2 = new TCanvas("cNchVsZvtx", "cNchVsZvtx");
-  c2->Divide(2,1);
+  c2->Divide(3,1);
   c2->cd(1);
   gPad->SetLogz();
   hNchVsZvtx->Draw("colz");
   c2->cd(2);
   pMeanNchVsZvtx[nBins]->Draw("");
-  
-  TCanvas *c22 = new TCanvas("cNchVsZvtxInNtrkBin", "cNchVsZvtxInNtrkBin", 0, 0, 1500, 600);
+  c2->cd(3);
+  hRMSNchVsZvtx[nBins]->SetMarkerStyle(20);
+  hRMSNchVsZvtx[nBins]->Draw("p");
+
+  TCanvas *c22 = new TCanvas("cMeanNchVsZvtxInNtrkBin", "cMeanNchVsZvtxInNtrkBin", 0, 0, 1500, 600);
   c22->Divide((nBins+1)/2,2);
   for (Int_t i = 0; i < nBins; ++i) {
     c22->cd(i+1);
@@ -140,6 +156,18 @@ void DrawMeanTrackletsVsMeanNCh(TString fileNameData = "AnalysisResults.root", B
     pMeanNchVsZvtx[i]->GetYaxis()->SetLabelSize(0.05);
     pMeanNchVsZvtx[i]->GetYaxis()->SetTitleOffset(1.5);
     pMeanNchVsZvtx[i]->Draw("");
+    gPad->SetGridy();
+  }
+
+  TCanvas *c23 = new TCanvas("cRMSNchVsZvtxInNtrkBin", "cRMSNchVsZvtxInNtrkBin", 0, 0, 1500, 600);
+  c23->Divide((nBins+1)/2,2);
+  for (Int_t i = 0; i < nBins; ++i) {
+    c23->cd(i+1);
+    hRMSNchVsZvtx[i]->Scale(1./hMult[i]->GetRMS());
+    hRMSNchVsZvtx[i]->GetYaxis()->SetLabelSize(0.05);
+    hRMSNchVsZvtx[i]->GetYaxis()->SetTitleOffset(1.5);
+    hRMSNchVsZvtx[i]->SetMarkerStyle(20);
+    hRMSNchVsZvtx[i]->Draw("p");
     gPad->SetGridy();
   }
 
