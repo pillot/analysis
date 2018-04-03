@@ -31,15 +31,29 @@ void DrawMeanTrackletsVsMeanNCh(TString fileNameData = "AnalysisResults.root", B
   
 //  fhNtrk->GetAxis(0)->SetRangeUser(30, 40);
   
-  // Nch vs Ntrk
-  TH2D *hNchVsNtrk = fhNtrk->Projection(3,0,"e");
-  hNchVsNtrk->SetTitle(corr?"Nch versus corrected Ntrk;Ntrk^{corr};Nch":"Nch versus Ntrk;Ntrk;Nch");
-  hNchVsNtrk->SetDirectory(0);
-  TString pName = corr ? "pMeanNchVsNtrkCorr" : "pMeanNchVsNtrk";
-  TProfile *pMeanNchVsNtrk = hNchVsNtrk->ProfileX(pName.Data());
-  pMeanNchVsNtrk->SetDirectory(0);
+  // Nch vs Ntrk in bins of Zvtx and integrated
+  const Int_t nBinZvtx = 10; // 10 bins of 2 cm
+  Double_t dZvtx = (fhNtrk->GetAxis(1)->GetXmax()-fhNtrk->GetAxis(1)->GetXmin())/nBinZvtx;
+  TH2D *hNchVsNtrk[nBinZvtx+1];
+  TProfile *pMeanNchVsNtrk[nBinZvtx+1];
+  for (Int_t iz = 0; iz < nBinZvtx; ++iz) {
+    Double_t zMin = fhNtrk->GetAxis(1)->GetXmin() + dZvtx*iz;
+    Double_t zMax = fhNtrk->GetAxis(1)->GetXmin() + dZvtx*(iz+1);
+    fhNtrk->GetAxis(1)->SetRangeUser(zMin, zMax);
+    hNchVsNtrk[iz] = fhNtrk->Projection(3,0,"e");
+    hNchVsNtrk[iz]->SetTitle(Form(corr?"Nch versus corrected Ntrk in %g < zVtx < %g;Ntrk^{corr};Nch":"Nch versus Ntrk;Ntrk;Nch",zMin,zMax));
+    hNchVsNtrk[iz]->SetDirectory(0);
+    pMeanNchVsNtrk[iz] = hNchVsNtrk[iz]->ProfileX(Form(corr ? "pMeanNchVsNtrkCorr%d" : "pMeanNchVsNtrk%d",iz+1));
+    pMeanNchVsNtrk[iz]->SetDirectory(0);
+  }
+  fhNtrk->GetAxis(1)->SetRange();
+  hNchVsNtrk[nBinZvtx] = fhNtrk->Projection(3,0,"e");
+  hNchVsNtrk[nBinZvtx]->SetTitle(corr?"Nch versus corrected Ntrk;Ntrk^{corr};Nch":"Nch versus Ntrk;Ntrk;Nch");
+  hNchVsNtrk[nBinZvtx]->SetDirectory(0);
+  pMeanNchVsNtrk[nBinZvtx] = hNchVsNtrk[nBinZvtx]->ProfileX(corr ? "pMeanNchVsNtrkCorr" : "pMeanNchVsNtrk");
+  pMeanNchVsNtrk[nBinZvtx]->SetDirectory(0);
   
-  // <Nch> vs Zvtx per tracklet bin
+  // <Nch> vs Zvtx per tracklet bin and integrated
   Int_t nBins = (Int_t)(sizeof(trkBin) / sizeof(Int_t)) - 1;
   TProfile **pMeanNchVsZvtx = new TProfile*[nBins+1];
   TH1D **hRMSNchVsZvtx = new TH1D*[nBins+1];
@@ -75,67 +89,139 @@ void DrawMeanTrackletsVsMeanNCh(TString fileNameData = "AnalysisResults.root", B
   delete file;
 
   // fit Nch vs Ntrk with y = ax
-  TF1 *fitAlpha = new TF1("fitAlpha","[0]*x",1.,100.);
-  hNchVsNtrk->Fit(fitAlpha,"NR");
+  TF1 *fitAlpha[nBinZvtx+1];
+  for (Int_t iz = 0; iz < nBinZvtx+1; ++iz) {
+    fitAlpha[iz] = new TF1(Form("fitAlpha%d",iz+1),"[0]*x",1.,100.);
+    hNchVsNtrk[iz]->Fit(fitAlpha[iz],"NR");
+  }
 
   // fit <Nch> vs Ntrk profile with an ad-hoc polynomial function
-  TF1 *fMeanNchVsNtrk = new TF1("fMeanNchVsNtrk",MeanNchVsNtrk,1.,100.,5);
-  fMeanNchVsNtrk->SetParameters(1., 1., 1., 1., 10.);
-  TFitResultPtr rfMeanNchVsNtrk = pMeanNchVsNtrk->Fit(fMeanNchVsNtrk,"NRS");
+  TF1 *fMeanNchVsNtrk[nBinZvtx+1];
+  TFitResultPtr rfMeanNchVsNtrk[nBinZvtx+1];
+  for (Int_t iz = 0; iz < nBinZvtx+1; ++iz) {
+    fMeanNchVsNtrk[iz] = new TF1(Form("fMeanNchVsNtrk%d",iz+1),MeanNchVsNtrk,1.,100.,5);
+    fMeanNchVsNtrk[iz]->SetParameters(1., 1., 1., 1., 10.);
+    fMeanNchVsNtrk[iz]->SetParLimits(4, 2., 50.);
+    rfMeanNchVsNtrk[iz] = pMeanNchVsNtrk[iz]->Fit(fMeanNchVsNtrk[iz],"NRS");
+  }
 
   // tracklet distribution
-  TH1D *hTrk = hNchVsNtrk->ProjectionX("hTrk", 0, -1, "e");
+  TH1D *hTrk[nBinZvtx+1];
+  for (Int_t iz = 0; iz < nBinZvtx+1; ++iz) {
+    hTrk[iz] = hNchVsNtrk[iz]->ProjectionX(Form("hTrk%d",iz+1), 0, -1, "e");
+  }
 
   // multiplicity distribution and mean multiplicity per tracklet bin
   TH1D **hMult = new TH1D*[nBins+1];
-  hMult[nBins] = hNchVsNtrk->ProjectionY("hMult", hTrk->FindBin(1), -1, "e");
+  hMult[nBins] = hNchVsNtrk[nBinZvtx]->ProjectionY("hMult", hTrk[nBinZvtx]->FindBin(1), -1, "e");
   hMult[nBins]->SetTitle(Form("Nch distribution in %sNtrk bins;Nch",corr?"corrected ":""));
-  TH1D *hMeanMultVsBin = new TH1D("hMeanMultVsBin", Form("<Nch> versus %sNtrk bin;%sNtrk bin;<Nch>",corr?"corrected ":"",corr?"corrected ":""), nBins, 0.5, nBins+0.5);
-  TH1D *hMeanMultVsBinWithAlpha = new TH1D("hMeanMultVsBinWithAlpha", "hMeanMultVsBinWithAlpha", nBins, 0.5, nBins+0.5);
-  TH1D *hMeanMultVsBinWithAdHocFunc = new TH1D("hMeanMultVsBinWithAdHocFunc", "hMeanMultVsBinWithAdHocFunc", nBins, 0.5, nBins+0.5);
+  TH1D *hMeanMultVsBin[nBinZvtx+1];
+  TH1D *hMeanMultVsBinWithAlpha[nBinZvtx+1][2];
+  TH1D *hMeanMultVsBinWithAdHocFunc[nBinZvtx+1][2];
+  for (Int_t iz = 0; iz < nBinZvtx+1; ++iz) {
+    hMeanMultVsBin[iz] = new TH1D(Form("hMeanMultVsBin%d",iz+1), Form("<Nch> versus %sNtrk bin;%sNtrk bin;<Nch>",corr?"corrected ":"",corr?"corrected ":""), nBins, 0.5, nBins+0.5);
+    hMeanMultVsBinWithAlpha[iz][0] = new TH1D(Form("hMeanMultVsBinWithAlphaFromZvtxBin%d",iz+1), Form("hMeanMultVsBinWithAlphaFromZvtxBin%d",iz+1), nBins, 0.5, nBins+0.5);
+    hMeanMultVsBinWithAdHocFunc[iz][0] = new TH1D(Form("hMeanMultVsBinWithAdHocFuncFromZvtxBin%d",iz+1), Form("hMeanMultVsBinWithAdHocFuncFromZvtxBin%d",iz+1), nBins, 0.5, nBins+0.5);
+    hMeanMultVsBinWithAlpha[iz][1] = new TH1D(Form("hMeanMultVsBinWithAlpha%d",iz+1), Form("hMeanMultVsBinWithAlpha%d",iz+1), nBins, 0.5, nBins+0.5);
+    hMeanMultVsBinWithAdHocFunc[iz][1] = new TH1D(Form("hMeanMultVsBinWithAdHocFunc%d",iz+1), Form("hMeanMultVsBinWithAdHocFunc%d",iz+1), nBins, 0.5, nBins+0.5);
+  }
   for (Int_t i = 0; i < nBins; ++i) {
 
-    hMult[i] = hNchVsNtrk->ProjectionY(Form("hMult%d",i+1), hTrk->FindBin(trkBin[i]), hTrk->FindBin(trkBin[i+1]-1), "e");
+    hMult[i] = hNchVsNtrk[nBinZvtx]->ProjectionY(Form("hMult%d",i+1), hTrk[nBinZvtx]->FindBin(trkBin[i]), hTrk[nBinZvtx]->FindBin(trkBin[i+1]-1), "e");
 
-    // mean multiplicity in each bin from MC truth
-    hMeanMultVsBin->SetBinContent(i+1, hMult[i]->GetMean());
-    hMeanMultVsBin->SetBinError(i+1, hMult[i]->GetMeanError());
-    printf("meanMult = %f\n",hMult[i]->GetMean());
+    for (Int_t iz = 0; iz < nBinZvtx+1; ++iz) {
 
-    // mean multiplicity in each bin computed with constant alpha factor
-    Double_t meanMultErr = 0.;
-    Double_t meanMult = GetMeanMultWithAlpha(hTrk, trkBin[i], trkBin[i+1]-1, fitAlpha, meanMultErr);
-    hMeanMultVsBinWithAlpha->SetBinContent(i+1, meanMult);
-    hMeanMultVsBinWithAlpha->SetBinError(i+1, meanMultErr);
+      // mean Ntrk in zVtx bin "iz" and Ntrk bin "i"
+      hTrk[iz]->SetAxisRange(hTrk[iz]->FindBin(trkBin[i]), hTrk[iz]->FindBin(trkBin[i+1]-1));
+      printf(corr?"<NtrkCorr> = %f":"<Ntrk> = %f",hTrk[iz]->GetMean());
+      hTrk[iz]->GetXaxis()->SetRange();
 
-    // mean multiplicity in each bin computed with the ad-hoc fit of the <Nch> vs Ntrk profile
-    meanMult = GetMeanMultWithAdHocFunc(hTrk, trkBin[i], trkBin[i+1]-1, fMeanNchVsNtrk, rfMeanNchVsNtrk, meanMultErr);
-    printf("meanMultCalc = %f\n",meanMult);
-    hMeanMultVsBinWithAdHocFunc->SetBinContent(i+1, meanMult);
-    hMeanMultVsBinWithAdHocFunc->SetBinError(i+1, meanMultErr);
+      // mean multiplicity in zVtx bin "iz" and Ntrk bin "i" from MC truth
+      TH1D *hTmp = hNchVsNtrk[iz]->ProjectionY("hTmp", hTrk[iz]->FindBin(trkBin[i]), hTrk[iz]->FindBin(trkBin[i+1]-1), "e");
+      hMeanMultVsBin[iz]->SetBinContent(i+1, hTmp->GetMean());
+      hMeanMultVsBin[iz]->SetBinError(i+1, hTmp->GetMeanError());
+      printf(" <Nch>(Calc) = %f",hTmp->GetMean());
+      delete hTmp;
+
+      // mean multiplicity integrated over zVtx in Ntrk bin "i" computed with constant alpha factor from Zvtx bin "iz"
+      Double_t meanMultErr = 0.;
+      Double_t meanMult = GetMeanMultWithAlpha(hTrk[nBinZvtx], trkBin[i], trkBin[i+1]-1, fitAlpha[iz], meanMultErr);
+      printf(" (%f)",meanMult);
+      hMeanMultVsBinWithAlpha[iz][0]->SetBinContent(i+1, meanMult);
+      hMeanMultVsBinWithAlpha[iz][0]->SetBinError(i+1, meanMultErr);
+
+      // mean multiplicity in zVtx bin "iz" and Ntrk bin "i" computed with constant alpha factor integrated over zVtx
+      meanMultErr = 0.;
+      meanMult = GetMeanMultWithAlpha(hTrk[iz], trkBin[i], trkBin[i+1]-1, fitAlpha[nBinZvtx], meanMultErr);
+      printf(" (%f)",meanMult);
+      hMeanMultVsBinWithAlpha[iz][1]->SetBinContent(i+1, meanMult);
+      hMeanMultVsBinWithAlpha[iz][1]->SetBinError(i+1, meanMultErr);
+
+      // mean multiplicity integrated over zVtx in Ntrk bin "i" computed with the ad-hoc fit of the <Nch> vs Ntrk profile from Zvtx bin "iz"
+      meanMult = GetMeanMultWithAdHocFunc(hTrk[nBinZvtx], trkBin[i], trkBin[i+1]-1, fMeanNchVsNtrk[iz], rfMeanNchVsNtrk[iz], meanMultErr);
+      printf(" (%f)",meanMult);
+      hMeanMultVsBinWithAdHocFunc[iz][0]->SetBinContent(i+1, meanMult);
+      hMeanMultVsBinWithAdHocFunc[iz][0]->SetBinError(i+1, meanMultErr);
+
+      // mean multiplicity in zVtx bin "iz" and Ntrk bin "i" computed with the ad-hoc fit of the <Nch> vs Ntrk profile integrated over zVtx
+      meanMult = GetMeanMultWithAdHocFunc(hTrk[iz], trkBin[i], trkBin[i+1]-1, fMeanNchVsNtrk[nBinZvtx], rfMeanNchVsNtrk[nBinZvtx], meanMultErr);
+      printf(" (%f)\n",meanMult);
+      hMeanMultVsBinWithAdHocFunc[iz][1]->SetBinContent(i+1, meanMult);
+      hMeanMultVsBinWithAdHocFunc[iz][1]->SetBinError(i+1, meanMultErr);
+
+    }
 
   }
 
   // ratio of mean multiplicity
-  TH1D *hMeanMultVsBinWithAlphaOverMC = (TH1D*)hMeanMultVsBinWithAlpha->Clone("hMeanMultVsBinWithAlphaOverMC");
-  hMeanMultVsBinWithAlphaOverMC->Divide(hMeanMultVsBin);
-  hMeanMultVsBinWithAlphaOverMC->SetTitle(Form("calculated <Nch> over MC truth versus %sNtrk bin;%sNtrk bin;<Nch>_{calc}/<Nch>_{MC}",corr?"corrected ":"",corr?"corrected ":""));
-  TH1D *hMeanMultVsBinWithAdHocFuncOverMC = (TH1D*)hMeanMultVsBinWithAdHocFunc->Clone("hMeanMultVsBinWithAdHocFuncOverMC");
-  hMeanMultVsBinWithAdHocFuncOverMC->Divide(hMeanMultVsBin);
+  TH1D *hMeanMultVsBinWithAlphaOverMC[nBinZvtx+1][2];
+  TH1D *hMeanMultVsBinWithAdHocFuncOverMC[nBinZvtx+1][2];
+  for (Int_t iz = 0; iz < nBinZvtx+1; ++iz) {
+
+    hMeanMultVsBinWithAlphaOverMC[iz][0] = (TH1D*)hMeanMultVsBinWithAlpha[iz][0]->Clone(Form("hMeanMultVsBinWithAlphaFromZvtxBin%dOverMC",iz+1));
+    hMeanMultVsBinWithAlphaOverMC[iz][0]->Divide(hMeanMultVsBin[nBinZvtx]);
+    hMeanMultVsBinWithAlphaOverMC[iz][0]->SetTitle(Form("calculated <Nch> over MC truth versus %sNtrk bin;%sNtrk bin;<Nch>_{calc}/<Nch>_{MC}",corr?"corrected ":"",corr?"corrected ":""));
+    hMeanMultVsBinWithAdHocFuncOverMC[iz][0] = (TH1D*)hMeanMultVsBinWithAdHocFunc[iz][0]->Clone(Form("hMeanMultVsBinWithAdHocFuncFromZvtxBin%dOverMC",iz+1));
+    hMeanMultVsBinWithAdHocFuncOverMC[iz][0]->Divide(hMeanMultVsBin[nBinZvtx]);
+
+    hMeanMultVsBinWithAlphaOverMC[iz][1] = (TH1D*)hMeanMultVsBinWithAlpha[iz][1]->Clone(Form("hMeanMultVsBinWithAlphaOverMC%d",iz+1));
+    hMeanMultVsBinWithAlphaOverMC[iz][1]->Divide(hMeanMultVsBin[iz]);
+    hMeanMultVsBinWithAlphaOverMC[iz][1]->SetTitle(Form("calculated <Nch> over MC truth versus %sNtrk bin;%sNtrk bin;<Nch>_{calc}/<Nch>_{MC}",corr?"corrected ":"",corr?"corrected ":""));
+    hMeanMultVsBinWithAdHocFuncOverMC[iz][1] = (TH1D*)hMeanMultVsBinWithAdHocFunc[iz][1]->Clone(Form("hMeanMultVsBinWithAdHocFuncOverMC%d",iz+1));
+    hMeanMultVsBinWithAdHocFuncOverMC[iz][1]->Divide(hMeanMultVsBin[iz]);
+
+  }
 
   // draw histograms
   TString cName = corr ? "cDCCorr" : "cDC";
   TCanvas *c = new TCanvas(cName.Data(), cName.Data());
   gPad->SetLogz();
-  hNchVsNtrk->Draw("colz");
-  pMeanNchVsNtrk->SetLineWidth(2);
-  pMeanNchVsNtrk->Draw("sames");
-  fitAlpha->SetLineWidth(1);
-  fitAlpha->SetLineColor(4);
-  fitAlpha->Draw("same");
-  fMeanNchVsNtrk->SetLineWidth(1);
-  fMeanNchVsNtrk->SetLineColor(4);
-  fMeanNchVsNtrk->Draw("same");
+  hNchVsNtrk[nBinZvtx]->Draw("colz");
+  pMeanNchVsNtrk[nBinZvtx]->SetLineWidth(2);
+  pMeanNchVsNtrk[nBinZvtx]->Draw("sames");
+  fitAlpha[nBinZvtx]->SetLineWidth(1);
+  fitAlpha[nBinZvtx]->SetLineColor(4);
+  fitAlpha[nBinZvtx]->Draw("same");
+  fMeanNchVsNtrk[nBinZvtx]->SetLineWidth(1);
+  fMeanNchVsNtrk[nBinZvtx]->SetLineColor(4);
+  fMeanNchVsNtrk[nBinZvtx]->Draw("same");
+
+  TString cName1 = corr ? "cDCCorrInZvtxBin" : "cDCInZvtxBin";
+  TCanvas *c1 = new TCanvas(cName1.Data(), cName1.Data(), 0, 0, 1500, 600);
+  c1->Divide((nBinZvtx+1)/2,2);
+  for (Int_t iz = 0; iz < nBinZvtx; ++iz) {
+    c1->cd(iz+1);
+    gPad->SetLogz();
+    hNchVsNtrk[iz]->Draw("colz");
+    pMeanNchVsNtrk[iz]->SetLineWidth(2);
+    pMeanNchVsNtrk[iz]->Draw("sames");
+    fitAlpha[iz]->SetLineWidth(1);
+    fitAlpha[iz]->SetLineColor(4);
+    fitAlpha[iz]->Draw("same");
+    fMeanNchVsNtrk[iz]->SetLineWidth(1);
+    fMeanNchVsNtrk[iz]->SetLineColor(4);
+    fMeanNchVsNtrk[iz]->Draw("same");
+  }
 
   TCanvas *c2 = new TCanvas("cNchVsZvtx", "cNchVsZvtx");
   c2->Divide(3,1);
@@ -183,18 +269,55 @@ void DrawMeanTrackletsVsMeanNCh(TString fileNameData = "AnalysisResults.root", B
   TCanvas *c4 = new TCanvas("cMeanMultVsBin", "cMeanMultVsBin");
   c4->Divide(1,2);
   c4->cd(1);
-  hMeanMultVsBin->SetLineColor(1);
-  hMeanMultVsBin->Draw();
-  hMeanMultVsBinWithAlpha->SetLineColor(2);
-  hMeanMultVsBinWithAlpha->Draw("esame");
-  hMeanMultVsBinWithAdHocFunc->SetLineColor(4);
-  hMeanMultVsBinWithAdHocFunc->Draw("esame");
+  hMeanMultVsBin[nBinZvtx]->SetLineColor(1);
+  hMeanMultVsBin[nBinZvtx]->Draw();
+  hMeanMultVsBinWithAlpha[nBinZvtx][0]->SetLineColor(2);
+  hMeanMultVsBinWithAlpha[nBinZvtx][0]->Draw("esame");
+  hMeanMultVsBinWithAdHocFunc[nBinZvtx][0]->SetLineColor(4);
+  hMeanMultVsBinWithAdHocFunc[nBinZvtx][0]->Draw("esame");
   c4->cd(2);
-  hMeanMultVsBinWithAlphaOverMC->SetLineColor(2);
-  hMeanMultVsBinWithAlphaOverMC->GetYaxis()->SetLabelSize(0.05);
-  hMeanMultVsBinWithAlphaOverMC->Draw();
-  hMeanMultVsBinWithAdHocFuncOverMC->SetLineColor(4);
-  hMeanMultVsBinWithAdHocFuncOverMC->Draw("same");
+  hMeanMultVsBinWithAlphaOverMC[nBinZvtx][0]->SetLineColor(2);
+  hMeanMultVsBinWithAlphaOverMC[nBinZvtx][0]->GetYaxis()->SetLabelSize(0.05);
+  hMeanMultVsBinWithAlphaOverMC[nBinZvtx][0]->Draw();
+  hMeanMultVsBinWithAdHocFuncOverMC[nBinZvtx][0]->SetLineColor(4);
+  hMeanMultVsBinWithAdHocFuncOverMC[nBinZvtx][0]->Draw("same");
+
+  TCanvas *c42 = new TCanvas("cMeanMultVsBinFromZvtxBin", "cMeanMultVsBinFromZvtxBin");
+  c42->Divide(1,2);
+  c42->cd(1);
+  hMeanMultVsBin[nBinZvtx]->SetLineColor(1);
+  hMeanMultVsBin[nBinZvtx]->Draw();
+  for (Int_t iz = 0; iz < nBinZvtx; ++iz) {
+    c42->cd(1);
+    hMeanMultVsBinWithAlpha[iz][0]->SetLineColor(2);
+    hMeanMultVsBinWithAlpha[iz][0]->Draw("esame");
+    hMeanMultVsBinWithAdHocFunc[iz][0]->SetLineColor(4);
+    hMeanMultVsBinWithAdHocFunc[iz][0]->Draw("esame");
+    c42->cd(2);
+    hMeanMultVsBinWithAlphaOverMC[iz][0]->SetLineColor(2);
+    hMeanMultVsBinWithAlphaOverMC[iz][0]->GetYaxis()->SetLabelSize(0.05);
+    hMeanMultVsBinWithAlphaOverMC[iz][0]->Draw((iz == 0) ? "" : "same");
+    hMeanMultVsBinWithAdHocFuncOverMC[iz][0]->SetLineColor(4);
+    hMeanMultVsBinWithAdHocFuncOverMC[iz][0]->Draw("same");
+  }
+
+  TCanvas *c43 = new TCanvas("cMeanMultVsBinInZvtxBin", "cMeanMultVsBinInZvtxBin");
+  c43->Divide(1,2);
+  for (Int_t iz = 0; iz < nBinZvtx; ++iz) {
+    c43->cd(1);
+    hMeanMultVsBin[iz]->SetLineColor(1);
+    hMeanMultVsBin[iz]->Draw((iz == 0) ? "" : "same");
+    hMeanMultVsBinWithAlpha[iz][1]->SetLineColor(2);
+    hMeanMultVsBinWithAlpha[iz][1]->Draw("esame");
+    hMeanMultVsBinWithAdHocFunc[iz][1]->SetLineColor(4);
+    hMeanMultVsBinWithAdHocFunc[iz][1]->Draw("esame");
+    c43->cd(2);
+    hMeanMultVsBinWithAlphaOverMC[iz][1]->SetLineColor(2);
+    hMeanMultVsBinWithAlphaOverMC[iz][1]->GetYaxis()->SetLabelSize(0.05);
+    hMeanMultVsBinWithAlphaOverMC[iz][1]->Draw((iz == 0) ? "" : "same");
+    hMeanMultVsBinWithAdHocFuncOverMC[iz][1]->SetLineColor(4);
+    hMeanMultVsBinWithAdHocFuncOverMC[iz][1]->Draw("same");
+  }
 
 }
 
@@ -247,17 +370,16 @@ Double_t GetMeanMultWithAdHocFunc(TH1D *hTrk, Int_t minTrk, Int_t maxTrk, TF1 *f
 {
   // mean multiplicity in the given Ntrk range computed with the ad-hoc fit of the <Nch> vs Ntrk profile
 
-  /*
-   hTrk->SetAxisRange(minTrk, maxTrk);
-   Double_t meanTrk = hTrk->GetMean();
-   Double_t meanTrkErr = hTrk->GetMeanError();
-   hTrk->GetXaxis()->SetRange();
+/*
+  hTrk->SetAxisRange(minTrk, maxTrk);
+  Double_t meanTrk = hTrk->GetMean();
+  Double_t meanTrkErr = hTrk->GetMeanError();
+  hTrk->GetXaxis()->SetRange();
 
-   Double_t meanMult = fMeanNchVsNtrk->Eval(meanTrk);
-   printf("meanMult = %f\n", meanMult);
-   meanMultErr = meanTrkErr * meanMult / meanTrk;
-   return meanMult;
-   */
+  Double_t meanMult = fMeanNchVsNtrk->Eval(meanTrk);
+  meanMultErrInt = meanTrkErr * meanMult / meanTrk;
+  return meanMult;
+*/
 
   Double_t SumNEvMeanMult(0.);
   Double_t SumNEvErr2(0.);
