@@ -16,6 +16,7 @@ Double_t MeanNchVsNtrk(Double_t *x, Double_t *par);
 Double_t GetMeanMultWithAlpha(TH1D *hTrk, Int_t minTrk, Int_t maxTrk, TF1 *fitAlpha, Double_t &meanMultErr);
 Double_t GetMeanMultWithAdHocFunc(TH1D *hTrk, Int_t minTrk, Int_t maxTrk, TF1 *fMeanNchVsNtrk,
                                   TFitResultPtr &rfMeanNchVsNtrk, Double_t &meanMultErrInt);
+void DrawMeanTrackletsVsMeanNChFlat(TH2D *hNchVsNtrk, Bool_t corr, TF1 *fitAlpha, TF1 *fMeanNchVsNtrk, TFitResultPtr &rfMeanNchVsNtrk);
 
 //---------------------------------------------------------------------------------------------
 void DrawMeanTrackletsVsMeanNCh(TString fileNameData = "AnalysisResults.root", Bool_t corr = kFALSE)
@@ -319,6 +320,8 @@ void DrawMeanTrackletsVsMeanNCh(TString fileNameData = "AnalysisResults.root", B
     hMeanMultVsBinWithAdHocFuncOverMC[iz][1]->Draw("same");
   }
 
+  DrawMeanTrackletsVsMeanNChFlat(hNchVsNtrk[nBinZvtx], corr, fitAlpha[nBinZvtx], fMeanNchVsNtrk[nBinZvtx], rfMeanNchVsNtrk[nBinZvtx]);
+
 }
 
 //---------------------------------------------------------------------------------------------
@@ -404,5 +407,162 @@ Double_t GetMeanMultWithAdHocFunc(TH1D *hTrk, Int_t minTrk, Int_t maxTrk, TF1 *f
   Double_t meanMultInt = (SumNEv > 0.) ? SumNEvMeanMult/SumNEv : 0.;
   meanMultErrInt = (SumNEv > 0.) ? TMath::Sqrt(SumNEvErr2MeanMult2 + meanMultInt*meanMultInt*SumNEvErr2 - 2.*meanMultInt*SumNEvErr2MeanMult + SumNEv2MeanMultErr2)/SumNEv : 0.;
   return meanMultInt;
+}
+
+//---------------------------------------------------------------------------------------------
+void DrawMeanTrackletsVsMeanNChFlat(TH2D *hNchVsNtrk, Bool_t corr, TF1 *fitAlpha, TF1 *fMeanNchVsNtrk, TFitResultPtr &rfMeanNchVsNtrk)
+{
+  /// Study the Nch vs Ntrk correlation in case of a flat Nch distribution
+
+  // reweight the Nch vs Ntrk 2D-correlation to correspond to a flat Nch distribution
+  TH1D *hMultTot = hNchVsNtrk->ProjectionY("hMultTot", 0, -1, "e");
+  TH2D *hNchVsNtrkFlat = (TH2D*)hNchVsNtrk->Clone("hNchVsNtrkFlat");
+  for (Int_t j = 1; j <= hNchVsNtrkFlat->GetNbinsY(); ++j) {
+    Double_t nEv = hMultTot->GetBinContent(j);
+    if (nEv > 0.) for (Int_t i = 1; i <= hNchVsNtrkFlat->GetNbinsX(); ++i) {
+      hNchVsNtrkFlat->SetBinContent(i,j,hNchVsNtrkFlat->GetBinContent(i,j)/nEv);
+      hNchVsNtrkFlat->SetBinError(i,j,hNchVsNtrkFlat->GetBinError(i,j)/nEv);
+    }
+  }
+  delete hMultTot;
+
+  // <nCh> vs Ntrk profile from reweighted correlation
+  TProfile *pMeanNchVsNtrkFlat = hNchVsNtrkFlat->ProfileX(corr ? "pMeanNchVsNtrkFlatCorr" : "pMeanNchVsNtrkFlat");
+
+  // fit reweighted Nch vs Ntrk with y = ax
+  TF1 *fitAlphaFlat = new TF1("fitAlphaFlat","[0]*x",1.,100.);
+  pMeanNchVsNtrkFlat->Fit(fitAlphaFlat,"NR");
+
+  // fit reweighted <Nch> vs Ntrk profile with an ad-hoc polynomial function
+  TF1 *fMeanNchVsNtrkFlat = new TF1("fMeanNchVsNtrkFlat",MeanNchVsNtrk,1.,100.,5);
+  fMeanNchVsNtrkFlat->SetParameters(1., 1., 1., 1., 10.);
+  fMeanNchVsNtrkFlat->SetParLimits(4, 2., 40.);
+  TFitResultPtr rfMeanNchVsNtrkFlat = pMeanNchVsNtrkFlat->Fit(fMeanNchVsNtrkFlat,"NRS");
+
+  // reweigthed tracklet distribution
+  TH1D *hTrkFlat = hNchVsNtrkFlat->ProjectionX("hTrkFlat", 0, -1, "e");
+
+  // reweighted multiplicity distribution and mean multiplicity per tracklet bin
+  Int_t nBins = (Int_t)(sizeof(trkBin) / sizeof(Int_t)) - 1;
+  TH1D **hMultFlat = new TH1D*[nBins+1];
+  hMultFlat[nBins] = hNchVsNtrkFlat->ProjectionY("hMultFlat", hTrkFlat->FindBin(0), -1, "e");
+  hMultFlat[nBins]->SetTitle(Form("Nch distribution in %sNtrk bins;Nch",corr?"corrected ":""));
+  TH1D *hMeanMultFlatVsBin = new TH1D("hMeanMultFlatVsBin", Form("<Nch> versus %sNtrk bin;%sNtrk bin;<Nch>",corr?"corrected ":"",corr?"corrected ":""), nBins, 0.5, nBins+0.5);;
+  TH1D *hMeanMultFlatVsBinWithAlpha[2];
+  TH1D *hMeanMultFlatVsBinWithAdHocFunc[2];
+  hMeanMultFlatVsBinWithAlpha[0] = new TH1D("hMeanMultFlatVsBinWithAlphaFlat", "hMeanMultFlatVsBinWithAlphaFlat", nBins, 0.5, nBins+0.5);
+  hMeanMultFlatVsBinWithAdHocFunc[0] = new TH1D("hMeanMultFlatVsBinWithAdHocFuncFlat", "hMeanMultFlatVsBinWithAdHocFuncFlat", nBins, 0.5, nBins+0.5);
+  hMeanMultFlatVsBinWithAlpha[1] = new TH1D("hMeanMultFlatVsBinWithAlpha", "hMeanMultFlatVsBinWithAlpha", nBins, 0.5, nBins+0.5);
+  hMeanMultFlatVsBinWithAdHocFunc[1] = new TH1D("hMeanMultFlatVsBinWithAdHocFunc", "hMeanMultFlatVsBinWithAdHocFunc", nBins, 0.5, nBins+0.5);
+  for (Int_t i = 0; i < nBins; ++i) {
+
+    hMultFlat[i] = hNchVsNtrkFlat->ProjectionY(Form("hMultFlat%d",i+1), hTrkFlat->FindBin(trkBin[i]), hTrkFlat->FindBin(trkBin[i+1]-1), "e");
+
+    // mean Ntrk in zVtx bin "iz" and Ntrk bin "i"
+    hTrkFlat->SetAxisRange(hTrkFlat->FindBin(trkBin[i]), hTrkFlat->FindBin(trkBin[i+1]-1));
+    printf(corr?"<NtrkCorr> = %f":"<Ntrk> = %f",hTrkFlat->GetMean());
+    hTrkFlat->GetXaxis()->SetRange();
+
+    // mean multiplicity in zVtx bin "iz" and Ntrk bin "i" from MC truth
+    hMeanMultFlatVsBin->SetBinContent(i+1, hMultFlat[i]->GetMean());
+    hMeanMultFlatVsBin->SetBinError(i+1, hMultFlat[i]->GetMeanError());
+    printf(" <Nch>(Calc) = %f",hMultFlat[i]->GetMean());
+
+    // mean multiplicity in Ntrk bin "i" computed with constant alpha factor from the weighted correlation
+    Double_t meanMultErr = 0.;
+    Double_t meanMult = GetMeanMultWithAlpha(hTrkFlat, trkBin[i], trkBin[i+1]-1, fitAlphaFlat, meanMultErr);
+    printf(" (%f)",meanMult);
+    hMeanMultFlatVsBinWithAlpha[0]->SetBinContent(i+1, meanMult);
+    hMeanMultFlatVsBinWithAlpha[0]->SetBinError(i+1, meanMultErr);
+
+    // mean multiplicity in Ntrk bin "i" computed with constant alpha factor from original correlation
+    meanMultErr = 0.;
+    meanMult = GetMeanMultWithAlpha(hTrkFlat, trkBin[i], trkBin[i+1]-1, fitAlpha, meanMultErr);
+    printf(" (%f)",meanMult);
+    hMeanMultFlatVsBinWithAlpha[1]->SetBinContent(i+1, meanMult);
+    hMeanMultFlatVsBinWithAlpha[1]->SetBinError(i+1, meanMultErr);
+
+    // mean multiplicity in Ntrk bin "i" computed with the ad-hoc fit of the weighted <Nch> vs Ntrk profile
+    meanMult = GetMeanMultWithAdHocFunc(hTrkFlat, trkBin[i], trkBin[i+1]-1, fMeanNchVsNtrkFlat, rfMeanNchVsNtrkFlat, meanMultErr);
+    printf(" (%f)",meanMult);
+    hMeanMultFlatVsBinWithAdHocFunc[0]->SetBinContent(i+1, meanMult);
+    hMeanMultFlatVsBinWithAdHocFunc[0]->SetBinError(i+1, meanMultErr);
+
+    // mean multiplicity in Ntrk bin "i" computed with the ad-hoc fit of the original <Nch> vs Ntrk profile
+    meanMult = GetMeanMultWithAdHocFunc(hTrkFlat, trkBin[i], trkBin[i+1]-1, fMeanNchVsNtrk, rfMeanNchVsNtrk, meanMultErr);
+    printf(" (%f)\n",meanMult);
+    hMeanMultFlatVsBinWithAdHocFunc[1]->SetBinContent(i+1, meanMult);
+    hMeanMultFlatVsBinWithAdHocFunc[1]->SetBinError(i+1, meanMultErr);
+
+  }
+
+  // ratio of mean multiplicity from reweighted distribution
+  TH1D *hMeanMultFlatVsBinWithAlphaOverMC[2];
+  TH1D *hMeanMultFlatVsBinWithAdHocFuncOverMC[2];
+  hMeanMultFlatVsBinWithAlphaOverMC[0] = (TH1D*)hMeanMultFlatVsBinWithAlpha[0]->Clone("hMeanMultFlatVsBinWithAlphaFlatOverMC");
+  hMeanMultFlatVsBinWithAlphaOverMC[0]->Divide(hMeanMultFlatVsBin);
+  hMeanMultFlatVsBinWithAlphaOverMC[0]->SetTitle(Form("calculated <Nch> over MC truth versus %sNtrk bin;%sNtrk bin;<Nch>_{calc}/<Nch>_{MC}",corr?"corrected ":"",corr?"corrected ":""));
+  hMeanMultFlatVsBinWithAdHocFuncOverMC[0] = (TH1D*)hMeanMultFlatVsBinWithAdHocFunc[0]->Clone("hMeanMultFlatVsBinWithAdHocFuncFlatOverMC");
+  hMeanMultFlatVsBinWithAdHocFuncOverMC[0]->Divide(hMeanMultFlatVsBin);
+  hMeanMultFlatVsBinWithAlphaOverMC[1] = (TH1D*)hMeanMultFlatVsBinWithAlpha[1]->Clone("hMeanMultFlatVsBinWithAlphaOverMC");
+  hMeanMultFlatVsBinWithAlphaOverMC[1]->Divide(hMeanMultFlatVsBin);
+  hMeanMultFlatVsBinWithAlphaOverMC[1]->SetTitle(Form("calculated <Nch> over MC truth versus %sNtrk bin;%sNtrk bin;<Nch>_{calc}/<Nch>_{MC}",corr?"corrected ":"",corr?"corrected ":""));
+  hMeanMultFlatVsBinWithAdHocFuncOverMC[1] = (TH1D*)hMeanMultFlatVsBinWithAdHocFunc[1]->Clone("hMeanMultFlatVsBinWithAdHocFuncOverMC");
+  hMeanMultFlatVsBinWithAdHocFuncOverMC[1]->Divide(hMeanMultFlatVsBin);
+
+  // draw histograms
+  TCanvas *c5 = new TCanvas("cMultFlat", "cMultFlat");
+  gPad->SetLogy();
+  hMultFlat[nBins]->SetLineColor(1);
+  hMultFlat[nBins]->Draw();
+  for (Int_t i = 0; i < nBins; ++i) {
+    hMultFlat[i]->SetLineColor(i+2);
+    hMultFlat[i]->Draw("sames");
+  }
+
+  TCanvas *c51 = new TCanvas("cNchVsNtrkFlat", "cNchVsNtrkFlat");
+  gPad->SetLogz();
+  hNchVsNtrkFlat->Draw("colz");
+  pMeanNchVsNtrkFlat->SetLineWidth(2);
+  pMeanNchVsNtrkFlat->Draw("sames");
+  fitAlphaFlat->SetLineWidth(1);
+  fitAlphaFlat->SetLineColor(4);
+  fitAlphaFlat->Draw("same");
+  fMeanNchVsNtrkFlat->SetLineWidth(1);
+  fMeanNchVsNtrkFlat->SetLineColor(4);
+  fMeanNchVsNtrkFlat->Draw("same");
+
+  TCanvas *c6 = new TCanvas("cMeanMultFlatVsBin", "cMeanMultFlatVsBin");
+  c6->Divide(1,2);
+  c6->cd(1);
+  hMeanMultFlatVsBin->SetLineColor(1);
+  hMeanMultFlatVsBin->Draw();
+  hMeanMultFlatVsBinWithAlpha[0]->SetLineColor(2);
+  hMeanMultFlatVsBinWithAlpha[0]->Draw("esame");
+  hMeanMultFlatVsBinWithAdHocFunc[0]->SetLineColor(4);
+  hMeanMultFlatVsBinWithAdHocFunc[0]->Draw("esame");
+  c6->cd(2);
+  hMeanMultFlatVsBinWithAlphaOverMC[0]->SetLineColor(2);
+  hMeanMultFlatVsBinWithAlphaOverMC[0]->GetYaxis()->SetLabelSize(0.05);
+  hMeanMultFlatVsBinWithAlphaOverMC[0]->Draw();
+  hMeanMultFlatVsBinWithAdHocFuncOverMC[0]->SetLineColor(4);
+  hMeanMultFlatVsBinWithAdHocFuncOverMC[0]->Draw("same");
+
+  TCanvas *c62 = new TCanvas("cMeanMultFlatVsBinFromOriginal", "cMeanMultFlatVsBinFromOriginal");
+  c62->Divide(1,2);
+  c62->cd(1);
+  hMeanMultFlatVsBin->SetLineColor(1);
+  hMeanMultFlatVsBin->Draw();
+  hMeanMultFlatVsBinWithAlpha[1]->SetLineColor(2);
+  hMeanMultFlatVsBinWithAlpha[1]->Draw("esame");
+  hMeanMultFlatVsBinWithAdHocFunc[1]->SetLineColor(4);
+  hMeanMultFlatVsBinWithAdHocFunc[1]->Draw("esame");
+  c62->cd(2);
+  hMeanMultFlatVsBinWithAlphaOverMC[1]->SetLineColor(2);
+  hMeanMultFlatVsBinWithAlphaOverMC[1]->GetYaxis()->SetLabelSize(0.05);
+  hMeanMultFlatVsBinWithAlphaOverMC[1]->Draw();
+  hMeanMultFlatVsBinWithAdHocFuncOverMC[1]->SetLineColor(4);
+  hMeanMultFlatVsBinWithAdHocFuncOverMC[1]->Draw("same");
+
 }
 
