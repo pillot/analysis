@@ -8,6 +8,7 @@
 #include "TF1.h"
 #include "TFitResult.h"
 
+// define the binning in term of (corrected) number of tracklet
 Int_t trkBin[] = {1, 8, 13, 19, 30, 49, 60, 100}; // binning for <Ntrk> equalized to the maximum
 //Int_t trkBin[] = {1, 7, 12, 17, 28, 45, 55, 92}; // binning for <Ntrk> equalized to the average
 //Int_t trkBin[] = {1, 6, 9, 13, 21, 34, 42, 70}; // binning for <Ntrk> equalized to the minimum
@@ -133,7 +134,7 @@ void DrawMeanTrackletsVsMeanNCh(TString fileNameData = "AnalysisResults.root", B
     for (Int_t iz = 0; iz < nBinZvtx+1; ++iz) {
 
       // mean Ntrk in zVtx bin "iz" and Ntrk bin "i"
-      hTrk[iz]->SetAxisRange(hTrk[iz]->FindBin(trkBin[i]), hTrk[iz]->FindBin(trkBin[i+1]-1));
+      hTrk[iz]->SetAxisRange(trkBin[i], trkBin[i+1]-1);
       printf(corr?"<NtrkCorr> = %f":"<Ntrk> = %f",hTrk[iz]->GetMean());
       hTrk[iz]->GetXaxis()->SetRange();
 
@@ -459,7 +460,7 @@ void DrawMeanTrackletsVsMeanNChFlat(TH2D *hNchVsNtrk, Bool_t corr, TF1 *fitAlpha
     hMultFlat[i] = hNchVsNtrkFlat->ProjectionY(Form("hMultFlat%d",i+1), hTrkFlat->FindBin(trkBin[i]), hTrkFlat->FindBin(trkBin[i+1]-1), "e");
 
     // mean Ntrk in zVtx bin "iz" and Ntrk bin "i"
-    hTrkFlat->SetAxisRange(hTrkFlat->FindBin(trkBin[i]), hTrkFlat->FindBin(trkBin[i+1]-1));
+    hTrkFlat->SetAxisRange(trkBin[i], trkBin[i+1]-1);
     printf(corr?"<NtrkCorr> = %f":"<Ntrk> = %f",hTrkFlat->GetMean());
     hTrkFlat->GetXaxis()->SetRange();
 
