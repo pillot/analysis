@@ -14,6 +14,8 @@ Int_t trkBin[] = {1, 8, 13, 19, 30, 49, 60, 100}; // binning for <Ntrk> equalize
 //Int_t trkBin[] = {1, 6, 9, 13, 21, 34, 42, 70}; // binning for <Ntrk> equalized to the minimum
 
 Double_t MeanNchVsNtrk(Double_t *x, Double_t *par);
+Double_t RelativeTrkOverRelativeMeanNchWithAlpha(Double_t *x, Double_t *par);
+Double_t RelativeTrkOverRelativeMeanNchWithAdHocFunc(Double_t *x, Double_t *par);
 Double_t GetMeanMultWithAlpha(TH1D *hTrk, Int_t minTrk, Int_t maxTrk, TF1 *fitAlpha, Double_t &meanMultErr);
 Double_t GetMeanMultWithAdHocFunc(TH1D *hTrk, Int_t minTrk, Int_t maxTrk, TF1 *fMeanNchVsNtrk,
                                   TFitResultPtr &rfMeanNchVsNtrk, Double_t &meanMultErrInt);
@@ -54,7 +56,9 @@ void DrawMeanTrackletsVsMeanNCh(TString fileNameData = "AnalysisResults.root", B
   hNchVsNtrk[nBinZvtx]->SetDirectory(0);
   pMeanNchVsNtrk[nBinZvtx] = hNchVsNtrk[nBinZvtx]->ProfileX(corr ? "pMeanNchVsNtrkCorr" : "pMeanNchVsNtrk");
   pMeanNchVsNtrk[nBinZvtx]->SetDirectory(0);
-  
+  TProfile *pMeanNtrkVsNch = hNchVsNtrk[nBinZvtx]->ProfileY(corr ? "pMeanNtrCorrVsNch" : "pMeanNtrkVsNch");
+  pMeanNtrkVsNch->SetDirectory(0);
+
   // <Nch> vs Zvtx per tracklet bin and integrated
   Int_t nBins = (Int_t)(sizeof(trkBin) / sizeof(Int_t)) - 1;
   TProfile **pMeanNchVsZvtx = new TProfile*[nBins+1];
@@ -107,10 +111,69 @@ void DrawMeanTrackletsVsMeanNCh(TString fileNameData = "AnalysisResults.root", B
     rfMeanNchVsNtrk[iz] = pMeanNchVsNtrk[iz]->Fit(fMeanNchVsNtrk[iz],"NRS");
   }
 
-  // tracklet distribution
+  // tracklet distribution and integrated <Ntrk> for Ntrk >= 1 versus Zvtx
   TH1D *hTrk[nBinZvtx+1];
+  Double_t meanNtrkInt[nBinZvtx+1];
   for (Int_t iz = 0; iz < nBinZvtx+1; ++iz) {
     hTrk[iz] = hNchVsNtrk[iz]->ProjectionX(Form("hTrk%d",iz+1), 0, -1, "e");
+    hTrk[iz]->SetAxisRange(1, hTrk[iz]->GetXaxis()->GetXmax());
+    meanNtrkInt[iz] = hTrk[iz]->GetMean();
+    printf(corr?"integrated <NtrkCorr> = %f\n":"<Ntrk> = %f\n",meanNtrkInt[iz]);
+    hTrk[iz]->GetXaxis()->SetRange();
+  }
+
+  // integrated <Nch> for Ntrk >= 1 versus Zvtx
+  Double_t meanNchInt[nBinZvtx+1];
+  Double_t meanNchIntWithAlpha[nBinZvtx+1];
+  Double_t meanNchIntWithAdHocFunc[nBinZvtx+1];
+  for (Int_t iz = 0; iz < nBinZvtx+1; ++iz) {
+    TH1D *hTmp = hNchVsNtrk[iz]->ProjectionY("hTmp", hTrk[iz]->FindBin(1), -1, "e");
+    meanNchInt[iz] = hTmp->GetMean();
+    printf(corr?"integrated <Nch> = %f\n":"<Nch> = %f\n",meanNchInt[iz]);
+    delete hTmp;
+    Double_t err;
+    meanNchIntWithAlpha[iz] = GetMeanMultWithAlpha(hTrk[iz], 1., hTrk[iz]->GetBinCenter(hTrk[iz]->GetNbinsX()), fitAlpha[iz], err);
+    meanNchIntWithAdHocFunc[iz] = GetMeanMultWithAdHocFunc(hTrk[iz], 1., hTrk[iz]->GetBinCenter(hTrk[iz]->GetNbinsX()), fMeanNchVsNtrk[iz], rfMeanNchVsNtrk[iz], err);
+  }
+
+  // relative Ntrk over relative <Nch> ((Ntrk^i/<Ntrk>) / (<Nch>^i/<Nch>)) versus Zvtx
+  TH1D *hRelativeTrkOverRelativeMeanNch[nBinZvtx+1];
+  TF1 *fRelativeTrkOverRelativeMeanNchWithAlpha[nBinZvtx+1];
+  TF1 *fRelativeTrkOverRelativeMeanNchWithAdHocFunc[nBinZvtx+1];
+  for (Int_t iz = 0; iz < nBinZvtx+1; ++iz) {
+    hRelativeTrkOverRelativeMeanNch[iz] = new TH1D(Form("hRelativeTrk%sOverRelativeMeanNch%d",corr?"Corr":"",iz+1), Form("relative Ntrk%s over relative <Nch>;Ntrk^{%s};(Ntrk%s^{i}/<Ntrk%s>)/(<Nch>^{i}/<Nch>)",corr?"Corr":"",corr?"corr":"",corr?"Corr":"",corr?"Corr":""), hTrk[iz]->GetNbinsX(), hTrk[iz]->GetXaxis()->GetXmin(), hTrk[iz]->GetXaxis()->GetXmax());
+    for (Int_t i = 1; i <= hTrk[iz]->GetNbinsX(); ++i) {
+      if (pMeanNchVsNtrk[iz]->GetBinContent(i) > 0. && pMeanNchVsNtrk[iz]->GetBinError(i) > 0.) {
+        Double_t relativeTrkOverRelativeMeanNch = hTrk[iz]->GetBinCenter(i)/meanNtrkInt[iz]*meanNchInt[iz]/pMeanNchVsNtrk[iz]->GetBinContent(i);
+        hRelativeTrkOverRelativeMeanNch[iz]->SetBinContent(i,relativeTrkOverRelativeMeanNch);
+        hRelativeTrkOverRelativeMeanNch[iz]->SetBinError(i,pMeanNchVsNtrk[iz]->GetBinError(i)/pMeanNchVsNtrk[iz]->GetBinContent(i)*relativeTrkOverRelativeMeanNch);
+      }
+      fRelativeTrkOverRelativeMeanNchWithAlpha[iz] = new TF1(Form("fRelativeTrkOverRelativeMeanNchWithAlpha%d",iz+1), RelativeTrkOverRelativeMeanNchWithAlpha,1.,100.,3);
+      fRelativeTrkOverRelativeMeanNchWithAlpha[iz]->SetParameters(fitAlpha[iz]->GetParameter(0), meanNtrkInt[iz], meanNchIntWithAlpha[iz]);
+      fRelativeTrkOverRelativeMeanNchWithAdHocFunc[iz] = new TF1(Form("fRelativeTrkOverRelativeMeanNchWithAdHocFunc%d",iz+1), RelativeTrkOverRelativeMeanNchWithAdHocFunc,1.,100.,7);
+      fRelativeTrkOverRelativeMeanNchWithAdHocFunc[iz]->SetParameters(fMeanNchVsNtrk[iz]->GetParameter(0), fMeanNchVsNtrk[iz]->GetParameter(1), fMeanNchVsNtrk[iz]->GetParameter(2), fMeanNchVsNtrk[iz]->GetParameter(3), fMeanNchVsNtrk[iz]->GetParameter(4), meanNtrkInt[iz], meanNchIntWithAdHocFunc[iz]);
+    }
+  }
+
+  // integrate <Ntrk> for Nch >= 1
+  TH1D *hTmp = hNchVsNtrk[nBinZvtx]->ProjectionX("hTmp", hNchVsNtrk[nBinZvtx]->GetYaxis()->FindBin(1), -1, "e");
+  Double_t meanNtrkIntNchPos = hTmp->GetMean();
+  delete hTmp;
+
+  // Nch distribution and integrated <Nch> for Nch >= 1
+  TH1D *hMultInt = hNchVsNtrk[nBinZvtx]->ProjectionY("hMultInt", 0, -1, "e");
+  hMultInt->SetAxisRange(1, hMultInt->GetXaxis()->GetXmax());
+  Double_t meanNchIntNchPos = hMultInt->GetMean();
+  hMultInt->GetXaxis()->SetRange();
+
+  // relative <Ntrk> over relative Nch ((<Ntrk>^i/<Ntrk>) / (Nch^i/<Nch>))
+  TH1D *hRelativeMeanTrkOverRelativeNch = new TH1D(Form("hRelativeMeanTrk%sOverRelativeNch",corr?"Corr":""), Form("relative <Ntrk%s> over relative Nch;Nch;(<Ntrk%s>^{i}/<Ntrk%s>)/(Nch^{i}/<Nch>)",corr?"Corr":"",corr?"Corr":"",corr?"Corr":""), hMultInt->GetNbinsX(), hMultInt->GetXaxis()->GetXmin(), hMultInt->GetXaxis()->GetXmax());
+  for (Int_t i = 2; i <= hMultInt->GetNbinsX(); ++i) {
+    if (pMeanNtrkVsNch->GetBinContent(i) > 0. && pMeanNtrkVsNch->GetBinError(i) > 0.) {
+      Double_t relativeMeanTrkOverRelativeNch = pMeanNtrkVsNch->GetBinContent(i)/meanNtrkIntNchPos*meanNchIntNchPos/hMultInt->GetBinCenter(i);
+      hRelativeMeanTrkOverRelativeNch->SetBinContent(i,relativeMeanTrkOverRelativeNch);
+      hRelativeMeanTrkOverRelativeNch->SetBinError(i,pMeanNtrkVsNch->GetBinError(i)/pMeanNtrkVsNch->GetBinContent(i)*relativeMeanTrkOverRelativeNch);
+    }
   }
 
   // multiplicity distribution and mean multiplicity per tracklet bin
@@ -139,7 +202,7 @@ void DrawMeanTrackletsVsMeanNCh(TString fileNameData = "AnalysisResults.root", B
       hTrk[iz]->GetXaxis()->SetRange();
 
       // mean multiplicity in zVtx bin "iz" and Ntrk bin "i" from MC truth
-      TH1D *hTmp = hNchVsNtrk[iz]->ProjectionY("hTmp", hTrk[iz]->FindBin(trkBin[i]), hTrk[iz]->FindBin(trkBin[i+1]-1), "e");
+      hTmp = hNchVsNtrk[iz]->ProjectionY("hTmp", hTrk[iz]->FindBin(trkBin[i]), hTrk[iz]->FindBin(trkBin[i+1]-1), "e");
       hMeanMultVsBin[iz]->SetBinContent(i+1, hTmp->GetMean());
       hMeanMultVsBin[iz]->SetBinError(i+1, hTmp->GetMeanError());
       printf(" <Nch>(Calc) = %f",hTmp->GetMean());
@@ -321,6 +384,35 @@ void DrawMeanTrackletsVsMeanNCh(TString fileNameData = "AnalysisResults.root", B
     hMeanMultVsBinWithAdHocFuncOverMC[iz][1]->Draw("same");
   }
 
+  TCanvas *c7 = new TCanvas("cRelativeTrkOverRelativeMeanNch", "cRelativeTrkOverRelativeMeanNch");
+  Int_t color = 2;
+  for (Int_t iz = 0; iz < nBinZvtx; ++iz) {
+    hRelativeTrkOverRelativeMeanNch[iz]->SetLineColor(color);
+    hRelativeTrkOverRelativeMeanNch[iz]->Draw((iz == 0) ? "" : "same");
+    fRelativeTrkOverRelativeMeanNchWithAlpha[iz]->SetLineWidth(1);
+    fRelativeTrkOverRelativeMeanNchWithAlpha[iz]->SetLineColor(color);
+    fRelativeTrkOverRelativeMeanNchWithAlpha[iz]->Draw("same");
+    fRelativeTrkOverRelativeMeanNchWithAdHocFunc[iz]->SetLineWidth(1);
+    fRelativeTrkOverRelativeMeanNchWithAdHocFunc[iz]->SetLineColor(color);
+    fRelativeTrkOverRelativeMeanNchWithAdHocFunc[iz]->Draw("same");
+    ++color;
+    if (color == 5 || color == 10) ++color;
+  }
+  hRelativeTrkOverRelativeMeanNch[nBinZvtx]->SetLineColor(1);
+  hRelativeTrkOverRelativeMeanNch[nBinZvtx]->SetLineWidth(2);
+  hRelativeTrkOverRelativeMeanNch[nBinZvtx]->Draw("same");
+  fRelativeTrkOverRelativeMeanNchWithAlpha[nBinZvtx]->SetLineWidth(2);
+  fRelativeTrkOverRelativeMeanNchWithAlpha[nBinZvtx]->SetLineColor(1);
+  fRelativeTrkOverRelativeMeanNchWithAlpha[nBinZvtx]->Draw("same");
+  fRelativeTrkOverRelativeMeanNchWithAdHocFunc[nBinZvtx]->SetLineWidth(2);
+  fRelativeTrkOverRelativeMeanNchWithAdHocFunc[nBinZvtx]->SetLineColor(1);
+  fRelativeTrkOverRelativeMeanNchWithAdHocFunc[nBinZvtx]->Draw("same");
+
+  TCanvas *c9 = new TCanvas("cRelativeMeanTrkOverRelativeNch", "cRelativeMeanTrkOverRelativeNch");
+  hRelativeMeanTrkOverRelativeNch->SetLineColor(1);
+  hRelativeMeanTrkOverRelativeNch->SetLineWidth(2);
+  hRelativeMeanTrkOverRelativeNch->Draw();
+
   DrawMeanTrackletsVsMeanNChFlat(hNchVsNtrk[nBinZvtx], corr, fitAlpha[nBinZvtx], fMeanNchVsNtrk[nBinZvtx], rfMeanNchVsNtrk[nBinZvtx]);
 
 }
@@ -349,6 +441,34 @@ Double_t MeanNchVsNtrk(Double_t *x, Double_t *par)
     // 2) dy/dx(x0) = dy'/dx(x0)
     return a2*TMath::Power(nTrk,c2) + b2;
   }
+}
+
+//---------------------------------------------------------------------------------------------
+Double_t RelativeTrkOverRelativeMeanNchWithAlpha(Double_t *x, Double_t *par)
+{
+  // function to compute (Ntrk^i/<Ntrk>) / (<Nch>^i/<Nch>)
+  // with MeanNchVsNtrk fitted with y = alpha * x
+
+  Double_t nTrk = *x;
+  Double_t meanNch = par[0] * nTrk;
+  Double_t meanNtrkInt = par[1];
+  Double_t meanNchInt = par[2];
+
+  return nTrk/meanNtrkInt*meanNchInt/meanNch;
+}
+
+//---------------------------------------------------------------------------------------------
+Double_t RelativeTrkOverRelativeMeanNchWithAdHocFunc(Double_t *x, Double_t *par)
+{
+  // function to compute (Ntrk^i/<Ntrk>) / (<Nch>^i/<Nch>)
+  // with MeanNchVsNtrk fitted with ad-hoc function
+
+  Double_t nTrk = *x;
+  Double_t meanNch = MeanNchVsNtrk(x,par);
+  Double_t meanNtrkInt = par[5];
+  Double_t meanNchInt = par[6];
+
+  return nTrk/meanNtrkInt*meanNchInt/meanNch;
 }
 
 //---------------------------------------------------------------------------------------------
@@ -440,8 +560,36 @@ void DrawMeanTrackletsVsMeanNChFlat(TH2D *hNchVsNtrk, Bool_t corr, TF1 *fitAlpha
   fMeanNchVsNtrkFlat->SetParLimits(4, 2., 40.);
   TFitResultPtr rfMeanNchVsNtrkFlat = pMeanNchVsNtrkFlat->Fit(fMeanNchVsNtrkFlat,"NRS");
 
-  // reweigthed tracklet distribution
+  // reweigthed tracklet distribution and integrated <Ntrk>
+  Double_t maxNtrkFlat = 30.; // beyond this point we don't have enought stat to get reliable results
   TH1D *hTrkFlat = hNchVsNtrkFlat->ProjectionX("hTrkFlat", 0, -1, "e");
+  hTrkFlat->SetAxisRange(1, maxNtrkFlat);
+  Double_t meanNtrkIntFlat = hTrkFlat->GetMean();
+  printf(corr?"integrated <NtrkCorr> = %f\n":"<Ntrk> = %f\n",meanNtrkIntFlat);
+  hTrkFlat->GetXaxis()->SetRange();
+
+  // integrated <Nch> from reweigthed distribution
+  TH1D *hTmp = hNchVsNtrkFlat->ProjectionY("hTmp", hTrkFlat->FindBin(1), hTrkFlat->FindBin(maxNtrkFlat), "e");
+  Double_t meanNchIntFlat = hTmp->GetMean();
+  printf(corr?"integrated <Nch> = %f\n":"<Nch> = %f\n",meanNchIntFlat);
+  delete hTmp;
+  Double_t err;
+  Double_t meanNchIntFlatWithAlpha = GetMeanMultWithAlpha(hTrkFlat, 1., maxNtrkFlat, fitAlphaFlat, err);
+  Double_t meanNchIntFlatWithAdHocFunc = GetMeanMultWithAdHocFunc(hTrkFlat, 1., maxNtrkFlat, fMeanNchVsNtrkFlat, rfMeanNchVsNtrkFlat, err);
+
+  // relative Ntrk over relative <Nch> ((Ntrk^i/<Ntrk>) / (<Nch>^i/<Nch>)) from reweigthed correlated
+  TH1D *hRelativeTrkOverRelativeMeanNchFlat = new TH1D(Form("hRelativeTrk%sOverRelativeMeanNchFlat",corr?"Corr":""), Form("relative Ntrk%s over relative <Nch>;Ntrk^{%s};(Ntrk%s^{i}/<Ntrk%s>)/(<Nch>^{i}/<Nch>)",corr?"corr":"",corr?"Corr":"",corr?"Corr":"",corr?"Corr":""), hTrkFlat->GetNbinsX(), hTrkFlat->GetXaxis()->GetXmin(), hTrkFlat->GetXaxis()->GetXmax());
+  for (Int_t i = 1; i <= hTrkFlat->GetNbinsX(); ++i) {
+    if (pMeanNchVsNtrkFlat->GetBinContent(i) > 0. && pMeanNchVsNtrkFlat->GetBinError(i) > 0.) {
+      Double_t relativeTrkOverRelativeMeanNch = hTrkFlat->GetBinCenter(i)/meanNtrkIntFlat*meanNchIntFlat/pMeanNchVsNtrkFlat->GetBinContent(i);
+      hRelativeTrkOverRelativeMeanNchFlat->SetBinContent(i,relativeTrkOverRelativeMeanNch);
+      hRelativeTrkOverRelativeMeanNchFlat->SetBinError(i,pMeanNchVsNtrkFlat->GetBinError(i)/pMeanNchVsNtrkFlat->GetBinContent(i)*relativeTrkOverRelativeMeanNch);
+    }
+  }
+  TF1 *fRelativeTrkOverRelativeMeanNchFlatWithAlpha = new TF1("fRelativeTrkOverRelativeMeanNchFlatWithAlpha", RelativeTrkOverRelativeMeanNchWithAlpha,1.,100.,3);
+  fRelativeTrkOverRelativeMeanNchFlatWithAlpha->SetParameters(fitAlphaFlat->GetParameter(0), meanNtrkIntFlat, meanNchIntFlatWithAlpha);
+  TF1 *fRelativeTrkOverRelativeMeanNchFlatWithAdHocFunc = new TF1("fRelativeTrkOverRelativeMeanNchFlatWithAdHocFunc", RelativeTrkOverRelativeMeanNchWithAdHocFunc,1.,100.,7);
+  fRelativeTrkOverRelativeMeanNchFlatWithAdHocFunc->SetParameters(fMeanNchVsNtrkFlat->GetParameter(0), fMeanNchVsNtrkFlat->GetParameter(1), fMeanNchVsNtrkFlat->GetParameter(2), fMeanNchVsNtrkFlat->GetParameter(3), fMeanNchVsNtrkFlat->GetParameter(4), meanNtrkIntFlat, meanNchIntFlatWithAdHocFunc);
 
   // reweighted multiplicity distribution and mean multiplicity per tracklet bin
   Int_t nBins = (Int_t)(sizeof(trkBin) / sizeof(Int_t)) - 1;
@@ -564,6 +712,17 @@ void DrawMeanTrackletsVsMeanNChFlat(TH2D *hNchVsNtrk, Bool_t corr, TF1 *fitAlpha
   hMeanMultFlatVsBinWithAlphaOverMC[1]->Draw();
   hMeanMultFlatVsBinWithAdHocFuncOverMC[1]->SetLineColor(4);
   hMeanMultFlatVsBinWithAdHocFuncOverMC[1]->Draw("same");
+
+  TCanvas *c8 = new TCanvas("cRelativeTrkOverRelativeMeanNchFlat", "cRelativeTrkOverRelativeMeanNchFlat");
+  hRelativeTrkOverRelativeMeanNchFlat->SetLineColor(1);
+  hRelativeTrkOverRelativeMeanNchFlat->SetLineWidth(2);
+  hRelativeTrkOverRelativeMeanNchFlat->Draw();
+  fRelativeTrkOverRelativeMeanNchFlatWithAlpha->SetLineWidth(2);
+  fRelativeTrkOverRelativeMeanNchFlatWithAlpha->SetLineColor(1);
+  fRelativeTrkOverRelativeMeanNchFlatWithAlpha->Draw("same");
+  fRelativeTrkOverRelativeMeanNchFlatWithAdHocFunc->SetLineWidth(2);
+  fRelativeTrkOverRelativeMeanNchFlatWithAdHocFunc->SetLineColor(1);
+  fRelativeTrkOverRelativeMeanNchFlatWithAdHocFunc->Draw("same");
 
 }
 
