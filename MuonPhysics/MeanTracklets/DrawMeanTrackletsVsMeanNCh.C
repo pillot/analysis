@@ -45,7 +45,7 @@ void DrawMeanTrackletsVsMeanNCh(TString fileNameData = "AnalysisResults.root", B
     Double_t zMax = fhNtrk->GetAxis(1)->GetXmin() + dZvtx*(iz+1);
     fhNtrk->GetAxis(1)->SetRangeUser(zMin, zMax);
     hNchVsNtrk[iz] = fhNtrk->Projection(3,0,"e");
-    hNchVsNtrk[iz]->SetTitle(Form(corr?"Nch versus corrected Ntrk in %g < zVtx < %g;Ntrk^{corr};Nch":"Nch versus Ntrk;Ntrk;Nch",zMin,zMax));
+    hNchVsNtrk[iz]->SetTitle(Form(corr?"Nch versus corrected Ntrk in %g < zVtx < %g;Ntrk^{corr};Nch":"Nch versus Ntrk in %g < zVtx < %g;Ntrk;Nch",zMin,zMax));
     hNchVsNtrk[iz]->SetDirectory(0);
     pMeanNchVsNtrk[iz] = hNchVsNtrk[iz]->ProfileX(Form(corr ? "pMeanNchVsNtrkCorr%d" : "pMeanNchVsNtrk%d",iz+1));
     pMeanNchVsNtrk[iz]->SetDirectory(0);
