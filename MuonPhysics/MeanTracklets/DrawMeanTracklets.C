@@ -68,7 +68,26 @@ void DrawMeanTracklets(TString fileNameData = "AnalysisResults.root", Bool_t cor
   hMeanTrkVsRun->GetXaxis()->SetRange(1,iBin);
   hMeanZvtxVsRun->GetXaxis()->SetRange(1,iBin);
   hRMSZvtxVsRun->GetXaxis()->SetRange(1,iBin);
-  
+
+  // Ntrk distribution in bins of zVtx
+  const Int_t nBinZvtx = 10; // 10 bins of 2 cm
+  Double_t dZvtx = (hNtrkVsZvtx->GetXaxis()->GetXmax()-hNtrkVsZvtx->GetXaxis()->GetXmin())/nBinZvtx;
+  TH1D *hNtrk[nBinZvtx+1];
+  TH1D *hNtrkRatio[nBinZvtx];
+  hNtrk[nBinZvtx] = hNtrkVsZvtx->ProjectionY("hNtrk", 0, -1, "e");
+  hNtrk[nBinZvtx]->SetTitle(corr?"corrected Ntrk;Ntrk^{corr}":"Ntrk;Ntrk");
+  hNtrk[nBinZvtx]->Scale(1./hNtrk[nBinZvtx]->GetEntries());
+  for (Int_t iz = 0; iz < nBinZvtx; ++iz) {
+    Double_t zMin = hNtrkVsZvtx->GetXaxis()->GetXmin() + dZvtx*iz;
+    Double_t zMax = hNtrkVsZvtx->GetXaxis()->GetXmin() + dZvtx*(iz+1);
+    hNtrk[iz] = hNtrkVsZvtx->ProjectionY(Form("hNtrk%d",iz+1), hNtrkVsZvtx->GetXaxis()->FindBin(zMin+0.1), hNtrkVsZvtx->GetXaxis()->FindBin(zMax-0.1), "e");
+    hNtrk[iz]->SetTitle(Form(corr?"corrected Ntrk in %g < zVtx < %g;Ntrk^{corr}":"Ntrk in %g < zVtx < %g;Ntrk",zMin,zMax));
+    hNtrk[iz]->Scale(1./hNtrk[iz]->GetEntries());
+    hNtrkRatio[iz] = (TH1D*)hNtrk[iz]->Clone(Form("hNtrkRatio%d",iz+1));
+    hNtrkRatio[iz]->SetTitle("ratio to zVtx-integrated distribution");
+    hNtrkRatio[iz]->Divide(hNtrk[nBinZvtx]);
+  }
+
   // draw histogram
   TString cName = corr ? "cDCorr" : "cD";
   
@@ -110,5 +129,20 @@ void DrawMeanTracklets(TString fileNameData = "AnalysisResults.root", Bool_t cor
   pMeanZvtxVsTrk->SetLineColor(color);
   pMeanZvtxVsTrk->Draw(same ? "sames" : 0x0);
   
+  TCanvas *c2 = new TCanvas("cNtrk", "cNtrk", 10, 10, 800, 800);
+  c2->Divide(1,2);
+  color = 2;
+  for (Int_t iz = 0; iz < nBinZvtx; ++iz) {
+    c2->cd(1);
+    gPad->SetLogy();
+    hNtrk[iz]->SetLineColor(color);
+    hNtrk[iz]->Draw((iz==0)?"":"sames");
+    c2->cd(2);
+    hNtrkRatio[iz]->SetLineColor(color);
+    hNtrkRatio[iz]->Draw((iz==0)?"":"same");
+    ++color;
+    if (color == 5 || color == 10) ++color;
+  }
+
 }
 
