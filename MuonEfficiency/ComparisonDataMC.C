@@ -289,35 +289,37 @@ TCanvas* DrawRatio(TString name,
   c->Divide(2,4);
   
   // versus run
-  c->cd(1);
-  
-  gPad->SetPad(0., 0.5+fracOfHeight, 0.5, 1.);
-  gPad->SetTopMargin(0.03);
-  gPad->SetBottomMargin(0.);
-  gPad->SetRightMargin(rightMargin);
-  
-  GraphDataRun->Draw("AP");
-  GraphSimRun->Draw("Psame");
-  TLegend *legend = new TLegend (0.79, 0.8, 0.97, 0.95);
-  legend->SetTextSize(0.06);
-  legend->AddEntry(GraphSimRun, Form(" %s",simName.Data()), "ep");
-  legend->AddEntry(GraphDataRun, Form(" %s",dataName.Data()), "ep");
-  legend->Draw("same");
-  
-  c->cd(3);
-  
-  gPad->SetPad(0., 0.5, 0.5, 0.5+fracOfHeight);
-  gPad->SetTopMargin(0.);
-  gPad->SetBottomMargin(bottomMargin);
-  gPad->SetRightMargin(rightMargin);
-  gPad->SetGridy();
-  
-  GraphRatioRun->Draw("ap");
-  
-  TLegend *legend2 = new TLegend (0.69, 0.8, 0.97, 0.97);
-  legend2->AddEntry(GraphRatioRun, Form(" %s / %s ",dataName.Data(), simName.Data()), "ep");
-  legend2->Draw("same");
-  
+  if (GraphDataRun && GraphSimRun && GraphRatioRun) {
+    c->cd(1);
+
+    gPad->SetPad(0., 0.5+fracOfHeight, 0.5, 1.);
+    gPad->SetTopMargin(0.03);
+    gPad->SetBottomMargin(0.);
+    gPad->SetRightMargin(rightMargin);
+
+    GraphDataRun->Draw("AP");
+    GraphSimRun->Draw("Psame");
+    TLegend *legend = new TLegend (0.79, 0.8, 0.97, 0.95);
+    legend->SetTextSize(0.06);
+    legend->AddEntry(GraphSimRun, Form(" %s",simName.Data()), "ep");
+    legend->AddEntry(GraphDataRun, Form(" %s",dataName.Data()), "ep");
+    legend->Draw("same");
+
+    c->cd(3);
+
+    gPad->SetPad(0., 0.5, 0.5, 0.5+fracOfHeight);
+    gPad->SetTopMargin(0.);
+    gPad->SetBottomMargin(bottomMargin);
+    gPad->SetRightMargin(rightMargin);
+    gPad->SetGridy();
+
+    GraphRatioRun->Draw("ap");
+
+    TLegend *legend2 = new TLegend (0.69, 0.8, 0.97, 0.97);
+    legend2->AddEntry(GraphRatioRun, Form(" %s / %s ",dataName.Data(), simName.Data()), "ep");
+    legend2->Draw("same");
+  }
+
   // versus pT
   c->cd(2);
   
@@ -387,7 +389,7 @@ TCanvas* DrawRatio(TString name,
 }
 
 //-------------------------------------------------------------------------------------------------------------------------------------------
-void ComparisonDataMC(TString fileNameData, TString fileNameSim, Bool_t integrated = kFALSE)
+void ComparisonDataMC(TString fileNameData, TString fileNameSim, Bool_t integrated = kFALSE, Bool_t singleRun = kFALSE)
 {
   // Open input Data files
   TFile *fileData = new TFile(fileNameData.Data(), "read");
@@ -416,18 +418,22 @@ void ComparisonDataMC(TString fileNameData, TString fileNameSim, Bool_t integrat
     printf("Efficiency vs centrality from sim not found\n");
     return;
   }
-  
-  TGraphAsymmErrors *effVSrunData = static_cast<TGraphAsymmErrors*>(fileData->FindObjectAny("trackingEffVsRun"));
-  if (!effVSrunData) {
-    printf("Efficiency vs run from data not found\n");
-    return;
+
+  TGraphAsymmErrors *effVSrunData = 0x0;
+  TGraphAsymmErrors *effVSrunSim = 0x0;
+  if (!singleRun) {
+    effVSrunData = static_cast<TGraphAsymmErrors*>(fileData->FindObjectAny("trackingEffVsRun"));
+    if (!effVSrunData) {
+      printf("Efficiency vs run from data not found\n");
+      return;
+    }
+    effVSrunSim = static_cast<TGraphAsymmErrors*>(fileSim->FindObjectAny("trackingEffVsRun"));
+    if (!effVSrunSim) {
+      printf("Efficiency vs run from sim not found\n");
+      return;
+    }
   }
-  TGraphAsymmErrors *effVSrunSim = static_cast<TGraphAsymmErrors*>(fileSim->FindObjectAny("trackingEffVsRun"));
-  if (!effVSrunSim) {
-    printf("Efficiency vs run from sim not found\n");
-    return;
-  }
-  
+
   TGraphAsymmErrors *effVSyData = static_cast<TGraphAsymmErrors*>(fileData->FindObjectAny(Form("%sEffVsy",hname.Data())));
   if (!effVSyData) {
     printf("Efficiency vs rapidity from data not found\n");
@@ -478,19 +484,24 @@ void ComparisonDataMC(TString fileNameData, TString fileNameSim, Bool_t integrat
   
   globalRatiosAndEff.Add(DrawRatio("RatioEffVSCentAndEff","Comparison Data&MC tracking efficiency versus centrality", effVScentDataCopy,effVScentSimCopy,ratioCentCopy));
   //-----
-  
+
   //---- Eff vs run
-  TGraphAsymmErrors* effVSrunDataCopy = static_cast<TGraphAsymmErrors*>(effVSrunData->Clone()); // We make clones to do not modify them
-  TGraphAsymmErrors* effVSrunSimCopy = static_cast<TGraphAsymmErrors*>(effVSrunSim->Clone());
-  
-  TGraphAsymmErrors *ratioRun = CreateRatioGraph("RatioEffVsRun","data/sim tracking efficiency versus run",*effVSrunData,*effVSrunSim);
-  globalRatios.Add(ratioRun);
-  
-  TGraphAsymmErrors* ratioRunCopy = static_cast<TGraphAsymmErrors*>(ratioRun->Clone());
-  
-  globalRatiosAndEff.Add(DrawRatio("RatioEffVSRunAndEff","Comparison Data&MC tracking efficiency versus run", effVSrunDataCopy,effVSrunSimCopy,ratioRunCopy));
+  TGraphAsymmErrors* effVSrunDataCopy = 0x0;
+  TGraphAsymmErrors* effVSrunSimCopy = 0x0;
+  TGraphAsymmErrors* ratioRunCopy = 0x0;
+  if (!singleRun) {
+    effVSrunDataCopy = static_cast<TGraphAsymmErrors*>(effVSrunData->Clone()); // We make clones to do not modify them
+    effVSrunSimCopy = static_cast<TGraphAsymmErrors*>(effVSrunSim->Clone());
+
+    TGraphAsymmErrors *ratioRun = CreateRatioGraph("RatioEffVsRun","data/sim tracking efficiency versus run",*effVSrunData,*effVSrunSim);
+    globalRatios.Add(ratioRun);
+
+    ratioRunCopy = static_cast<TGraphAsymmErrors*>(ratioRun->Clone());
+
+    globalRatiosAndEff.Add(DrawRatio("RatioEffVSRunAndEff","Comparison Data&MC tracking efficiency versus run", effVSrunDataCopy,effVSrunSimCopy,ratioRunCopy));
+  }
   //-----
-  
+
   //---- Eff vs y
   TGraphAsymmErrors* effVSyDataCopy = static_cast<TGraphAsymmErrors*>(effVSyData->Clone()); // We make clones to do not modify them
   TGraphAsymmErrors* effVSySimCopy = static_cast<TGraphAsymmErrors*>(effVSySim->Clone());
@@ -526,98 +537,99 @@ void ComparisonDataMC(TString fileNameData, TString fileNameSim, Bool_t integrat
   
   globalRatiosAndEff.Add(DrawRatio("RatioEffVSphiAndEff","Comparison Data&MC tracking efficiency versus phi",effVSphiDataCopy,effVSphiSimCopy,ratioPhiCopy));
   //-------
-  
+
   //----Eff vs y vs phi
+  if (!singleRun) {
 
-  TH2F *effVSyVSphiData = static_cast<TH2F*>(fileData->FindObjectAny("trackingEffVsphi-y"));
-  if (!effVSyVSphiData) {
-    printf("Efficiency vs rapidity vs phi from data not found\n");
-    return;
-  }
-  TH2F *effVSyVSphiSim = static_cast<TH2F*>(fileSim->FindObjectAny("trackingEffVsphi-y"));
-  if (!effVSyVSphiSim) {
-    printf("Efficiency vs rapidity vs phi from sim not found\n");
-    return;
-  }
-  Int_t nBins2dX = effVSyVSphiData->GetXaxis()->GetNbins();
-  Int_t nBins2dY = effVSyVSphiData->GetYaxis()->GetNbins();
-  Double_t effData2D,effSim2D,ratio2D;
-  
-  TH2F *effVSphiVSyRatio = new TH2F("RatioEffVSphiVSy","EffData/EffSim vs phi vs y",nBins2dX, effVSyVSphiData->GetXaxis()->GetBinLowEdge(1), effVSyVSphiData->GetXaxis()->GetBinUpEdge(nBins2dX),nBins2dY, effVSyVSphiData->GetYaxis()->GetBinLowEdge(1), effVSyVSphiData->GetYaxis()->GetBinUpEdge(nBins2dY));
-  effVSphiVSyRatio->GetXaxis()->SetTitle("phi");
-  effVSphiVSyRatio->GetYaxis()->SetTitle("y");
-    
-  for (Int_t i = 1 ; i <= nBins2dX ; i++ )
-  {
-    for (Int_t j = 1 ; j <= nBins2dY ; j++ )
-    {
-      effData2D = effVSyVSphiData->GetBinContent(i,j);
-      effSim2D = effVSyVSphiSim->GetBinContent(i,j);
-
-      if (effData2D > 0. && effSim2D > 0.)
-      {
-        ratio2D = effData2D/effSim2D;
-//        ratio2DErrh = rat*TMath::Sqrt(effDErrh*effDErrh/effD*effD + effSErrl*effSErrl/effS*effS);
-//        ratio2DErrl = rat*TMath::Sqrt(effDErrl*effDErrl/effD*effD + effSErrh*effSErrh/effS*effS);
-      }
-      if (effData2D == 0 && effSim2D == 0)
-      {
-        ratio2D = 1.;
-//        ratio2DErrh = 0.;
-//        ratio2DErrl = 0.;
-      }
-      if (effData2D == 0 && effSim2D > 0.)
-      {
-        ratio2D = 0.;
-//        ratio2DErrh = 0.;
-//        ratio2DErrl = 0.;
-      }
-      if (effData2D > 0. && effSim2D == 0)
-      {
-        ratio2D = 2.;
-//        ratio2DErrh = 0.;
-//        ratio2DErrl = 0.;
-      }
-      effVSphiVSyRatio->SetBinContent(i,j,ratio2D);
+    TH2F *effVSyVSphiData = static_cast<TH2F*>(fileData->FindObjectAny("trackingEffVsphi-y"));
+    if (!effVSyVSphiData) {
+      printf("Efficiency vs rapidity vs phi from data not found\n");
+      return;
     }
-  }
-  
-  
-  TH2F *effVSphiVSyRatioRapBins = new TH2F();
-  effVSphiVSyRatioRapBins->GetXaxis()->SetTitle("phi");
-  effVSphiVSyRatioRapBins->GetYaxis()->SetTitle("y");
-  effVSphiVSyRatioRapBins->SetName("RatioEffVSphiVSyRapBins");
-  effVSphiVSyRatioRapBins->SetTitle("EffData/EffSim vs phi vs y");
-
-  
-  Int_t nxBins = effVSphiVSyRatio->GetXaxis()->GetNbins();
-  Int_t nyBins = effVSphiVSyRatio->GetYaxis()->GetNbins();
-  
-  Double_t xBinEdge[nxBins+1];
-  Double_t yBinEdge[nyBins+1];
-  
-  for (Int_t ybin = 0 ; ybin <= nyBins ; ybin++)
-  {
-    yBinEdge[ybin] = 2*TMath::ATan(TMath::Exp((effVSphiVSyRatio->GetYaxis()->GetBinLowEdge(ybin+1))));
-  }
-  for (Int_t xbin = 0 ; xbin <= nxBins ; xbin++)
-  {
-    xBinEdge[xbin] = effVSphiVSyRatio->GetXaxis()->GetBinLowEdge(xbin+1);
-  }
-  
-  effVSphiVSyRatioRapBins->SetBins(nxBins,xBinEdge,nyBins,yBinEdge);
-  
-  for (Int_t xbin = 1 ; xbin <= nxBins ; xbin++)
-  {
-    for (Int_t ybin = 1 ; ybin <= nyBins ; ybin++)
-    {
-      effVSphiVSyRatioRapBins->SetBinContent(xbin,ybin,effVSphiVSyRatio->GetBinContent(xbin,ybin));
+    TH2F *effVSyVSphiSim = static_cast<TH2F*>(fileSim->FindObjectAny("trackingEffVsphi-y"));
+    if (!effVSyVSphiSim) {
+      printf("Efficiency vs rapidity vs phi from sim not found\n");
+      return;
     }
-  }
-  globalRatiosAndEff.Add(effVSphiVSyRatio);
-  globalRatiosAndEff.Add(effVSphiVSyRatioRapBins);
+    Int_t nBins2dX = effVSyVSphiData->GetXaxis()->GetNbins();
+    Int_t nBins2dY = effVSyVSphiData->GetYaxis()->GetNbins();
+    Double_t effData2D,effSim2D,ratio2D;
 
- 
+    TH2F *effVSphiVSyRatio = new TH2F("RatioEffVSphiVSy","EffData/EffSim vs phi vs y",nBins2dX, effVSyVSphiData->GetXaxis()->GetBinLowEdge(1), effVSyVSphiData->GetXaxis()->GetBinUpEdge(nBins2dX),nBins2dY, effVSyVSphiData->GetYaxis()->GetBinLowEdge(1), effVSyVSphiData->GetYaxis()->GetBinUpEdge(nBins2dY));
+    effVSphiVSyRatio->GetXaxis()->SetTitle("phi");
+    effVSphiVSyRatio->GetYaxis()->SetTitle("y");
+
+    for (Int_t i = 1 ; i <= nBins2dX ; i++ )
+    {
+      for (Int_t j = 1 ; j <= nBins2dY ; j++ )
+      {
+        effData2D = effVSyVSphiData->GetBinContent(i,j);
+        effSim2D = effVSyVSphiSim->GetBinContent(i,j);
+
+        if (effData2D > 0. && effSim2D > 0.)
+        {
+          ratio2D = effData2D/effSim2D;
+          //        ratio2DErrh = rat*TMath::Sqrt(effDErrh*effDErrh/effD*effD + effSErrl*effSErrl/effS*effS);
+          //        ratio2DErrl = rat*TMath::Sqrt(effDErrl*effDErrl/effD*effD + effSErrh*effSErrh/effS*effS);
+        }
+        if (effData2D == 0 && effSim2D == 0)
+        {
+          ratio2D = 1.;
+          //        ratio2DErrh = 0.;
+          //        ratio2DErrl = 0.;
+        }
+        if (effData2D == 0 && effSim2D > 0.)
+        {
+          ratio2D = 0.;
+          //        ratio2DErrh = 0.;
+          //        ratio2DErrl = 0.;
+        }
+        if (effData2D > 0. && effSim2D == 0)
+        {
+          ratio2D = 2.;
+          //        ratio2DErrh = 0.;
+          //        ratio2DErrl = 0.;
+        }
+        effVSphiVSyRatio->SetBinContent(i,j,ratio2D);
+      }
+    }
+
+
+    TH2F *effVSphiVSyRatioRapBins = new TH2F();
+    effVSphiVSyRatioRapBins->GetXaxis()->SetTitle("phi");
+    effVSphiVSyRatioRapBins->GetYaxis()->SetTitle("y");
+    effVSphiVSyRatioRapBins->SetName("RatioEffVSphiVSyRapBins");
+    effVSphiVSyRatioRapBins->SetTitle("EffData/EffSim vs phi vs y");
+
+
+    Int_t nxBins = effVSphiVSyRatio->GetXaxis()->GetNbins();
+    Int_t nyBins = effVSphiVSyRatio->GetYaxis()->GetNbins();
+
+    Double_t xBinEdge[nxBins+1];
+    Double_t yBinEdge[nyBins+1];
+
+    for (Int_t ybin = 0 ; ybin <= nyBins ; ybin++)
+    {
+      yBinEdge[ybin] = 2*TMath::ATan(TMath::Exp((effVSphiVSyRatio->GetYaxis()->GetBinLowEdge(ybin+1))));
+    }
+    for (Int_t xbin = 0 ; xbin <= nxBins ; xbin++)
+    {
+      xBinEdge[xbin] = effVSphiVSyRatio->GetXaxis()->GetBinLowEdge(xbin+1);
+    }
+
+    effVSphiVSyRatioRapBins->SetBins(nxBins,xBinEdge,nyBins,yBinEdge);
+
+    for (Int_t xbin = 1 ; xbin <= nxBins ; xbin++)
+    {
+      for (Int_t ybin = 1 ; ybin <= nyBins ; ybin++)
+      {
+        effVSphiVSyRatioRapBins->SetBinContent(xbin,ybin,effVSphiVSyRatio->GetBinContent(xbin,ybin));
+      }
+    }
+    globalRatiosAndEff.Add(effVSphiVSyRatio);
+    globalRatiosAndEff.Add(effVSphiVSyRatioRapBins);
+
+  }
   //--------
   
   TString hname2 = integrated ? "IntegratedChamber" : "Chamber";
@@ -709,16 +721,16 @@ void ComparisonDataMC(TString fileNameData, TString fileNameSim, Bool_t integrat
 //  }
   
   //Load the mapping for the DE histos
-  AliCDBManager::Instance()->SetDefaultStorage("local://$ALIROOT_OCDB_ROOT/OCDB");
-  AliCDBManager::Instance()->SetRun(0);
-  AliMUONCDB::LoadMapping();
-  AliMpDEIterator deit;
+//  AliCDBManager::Instance()->SetDefaultStorage("local://$ALIROOT_OCDB_ROOT/OCDB");
+//  AliCDBManager::Instance()->SetRun(0);
+//  AliMUONCDB::LoadMapping();
+//  AliMpDEIterator deit;
 
   // Loop over Chambers
   for (Int_t ich = 0 ; ich < 10 ; ich++)
   {
     // Compute the ratios for DE vs run
-    deit.First(ich);
+//    deit.First(ich);
   
 //    while ( !deit.IsDone() )
 //    {
@@ -791,7 +803,7 @@ void ComparisonDataMC(TString fileNameData, TString fileNameSim, Bool_t integrat
 //
   
   TCanvas* cRatioEffAndEff = DrawRatio("RatioEffAndEff",effVSrunDataCopy,effVSrunSimCopy,ratioRunCopy,effVSptDataCopy,effVSptSimCopy,ratioPtCopy,effVSyDataCopy,effVSySimCopy,ratioYCopy,effVSphiDataCopy,effVSphiSimCopy,ratioPhiCopy);
-  
+
   // save output
   TFile* file = new TFile("EffComparison.root","update");
   
