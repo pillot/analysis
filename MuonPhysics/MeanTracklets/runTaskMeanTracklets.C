@@ -10,14 +10,14 @@
 //______________________________________________________________________________
 void runTaskMeanTracklets(TString smode = "local", TString inputFileName = "AliAOD.Muons.root",
                           Bool_t applyPS = kTRUE, Bool_t applyPileupCuts = kTRUE,
-                          Bool_t isMC = kFALSE, TString refInput = "")
+                          Bool_t isMC = kTRUE, TString refInput = "Results_PFwPU.root")
 {
   /// Run the baseline task to test the framework
   
   // --- general analysis setup ---
   TString rootVersion = "";
   TString alirootVersion = "";
-  TString aliphysicsVersion = "vAN-20180105-1";
+  TString aliphysicsVersion = "vAN-20180907-1";
   TString extraLibs="";
   TString extraIncs="include";
   TString extraTasks="AliAnalysisTaskMeanTracklets";
@@ -106,17 +106,17 @@ void CreateAnalysisTrain(Bool_t applyPS, Bool_t applyPileupCuts, Bool_t isMC, TS
     Error("CreateAnalysisTrain","AliAnalysisTaskMeanTracklets not created!");
     return;
   }
-  if (applyPS) meanTracklets->SelectCollisionCandidates(AliVEvent::kINT7inMUON | AliVEvent::kINT7);
-//  if (applyPS) meanTracklets->SelectCollisionCandidates(AliVEvent::kMuonUnlikeLowPt7);
+  if (applyPS) meanTracklets->ApplyPhysicsSelection(AliVEvent::kINT7inMUON | AliVEvent::kINT7);
+//  if (applyPS) meanTracklets->ApplyPhysicsSelection(AliVEvent::kMuonUnlikeLowPt7);
 //  meanTracklets->SelectTrigger("MB");
-  meanTracklets->SelectTrigger("CINT7-B-NOPF-");
+//  meanTracklets->SelectTrigger("CINT7-B-NOPF-");
 //  meanTracklets->SelectTrigger("CMUL7-B-NOPF-MUFAST");
-  if (isMC) meanTracklets->RejectNSD();
+//  if (isMC) meanTracklets->RejectSD();
 //  meanTracklets->RejectPUFromSPD();
 //  meanTracklets->DisableSPDVtxQA();
 //  meanTracklets->Reject0Tracklet();
   if (!refInput.IsNull() && !SetMeanNtrkVsZvtxRef(meanTracklets)) return;
-  meanTracklets->UseBinomial();
+//  meanTracklets->UseBinomial();
   
 }
 
@@ -138,7 +138,8 @@ Bool_t SetMeanNtrkVsZvtxRef(TObject* meanTracklets)
   }
   
   AliAnalysisTaskMeanTracklets *mT = static_cast<AliAnalysisTaskMeanTracklets*>(meanTracklets);
-  mT->SetMeanNtrkVsZvtxRef(*p);
+//  mT->SetMeanNtrkVsZvtxRef(*p);
+  mT->SetMeanNtrkVsZvtxRef(*p, p->GetMaximum());
   
   file->Close();
   delete file;

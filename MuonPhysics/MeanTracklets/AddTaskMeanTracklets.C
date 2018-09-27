@@ -40,13 +40,15 @@ AliAnalysisTaskMeanTracklets* AddTaskMeanTracklets()
   AliAnalysisDataContainer *events = mgr->CreateContainer("events", AliCounterCollection::Class(), AliAnalysisManager::kOutputContainer, outputfile.Data());
   AliAnalysisDataContainer *hNtrk = mgr->CreateContainer("hNtrk", THnSparse::Class(), AliAnalysisManager::kOutputContainer, outputfile.Data());
   AliAnalysisDataContainer *hNtrkCorr = mgr->CreateContainer("hNtrkCorr", THnSparse::Class(), AliAnalysisManager::kOutputContainer, outputfile.Data());
-  AliAnalysisDataContainer *pMeanNtrkVsZvtx = mgr->CreateContainer("pMeanNtrkVsZvtx", TProfile::Class(), AliAnalysisManager::kOutputContainer, outputfile.Data());
-  AliAnalysisDataContainer *pMeanNtrkVsZvtxCorr = mgr->CreateContainer("pMeanNtrkVsZvtxCorr", TProfile::Class(), AliAnalysisManager::kOutputContainer, outputfile.Data());
+  AliAnalysisDataContainer *hNtrkCorrVsCuts = mgr->CreateContainer("hNtrkCorrVsCuts", THnSparse::Class(), AliAnalysisManager::kOutputContainer, outputfile.Data());
+  AliAnalysisDataContainer *pMeanNtrkVsZvtx = mgr->CreateContainer("fpMeanNtrkVsZvtx", TProfile::Class(), AliAnalysisManager::kOutputContainer, outputfile.Data());
+  AliAnalysisDataContainer *pMeanNtrkVsZvtxCorr = mgr->CreateContainer("fpMeanNtrkVsZvtxCorr", TProfile::Class(), AliAnalysisManager::kOutputContainer, outputfile.Data());
   mgr->ConnectOutput(task, 1, events);
   mgr->ConnectOutput(task, 2, hNtrk);
   mgr->ConnectOutput(task, 3, hNtrkCorr);
-  mgr->ConnectOutput(task, 4, pMeanNtrkVsZvtx);
-  mgr->ConnectOutput(task, 5, pMeanNtrkVsZvtxCorr);
+  mgr->ConnectOutput(task, 4, hNtrkCorrVsCuts);
+  mgr->ConnectOutput(task, 5, pMeanNtrkVsZvtx);
+  mgr->ConnectOutput(task, 6, pMeanNtrkVsZvtxCorr);
   
   return task;
 }

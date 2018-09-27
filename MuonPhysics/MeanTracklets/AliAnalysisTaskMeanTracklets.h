@@ -35,9 +35,12 @@ public:
   
   /// select a specific trigger class
   void SelectTrigger(TString trigger) {fTrigger = trigger;}
+
+  /// apply physics selection with the given trigger mask
+  void ApplyPhysicsSelection(UInt_t triggerMask) {fPSTriggerMask = triggerMask;}
   
-  /// reject NSD MC events
-  void RejectNSD() {fRejectNSD = kTRUE;}
+  /// reject single-diffractive MC events
+  void RejectSD() {fRejectSD = kTRUE;}
   
   /// reject pile-up from SPD
   void RejectPUFromSPD() {fRejectPUFromSPD = kTRUE;}
@@ -63,6 +66,7 @@ private:
   AliCounterCollection* fEvents;  //!< number of analyzed events
   THnSparse *fhNtrk;              //!< output histogram for number of SPD tracklets
   THnSparse *fhNtrkCorr;          //!< output histogram for corrected number of SPD tracklets
+  THnSparse *fhNtrkCorrVsCuts;    //!< output histogram for corrected number of SPD tracklets versus cuts
   TProfile *fpMeanNtrkVsZvtx;     //!< <Ntrk> vs Z profile before correction
   TProfile *fpMeanNtrkVsZvtxCorr; //!< <Ntrk> vs Z profile after correction
   
@@ -72,12 +76,13 @@ private:
   TRandom3 *fRandom;              //!< random number generator
   
   TString fTrigger;               /// select a specific trigger class
-  Bool_t fRejectNSD;              /// reject NSD MC events
+  UInt_t fPSTriggerMask;          /// apply physics selection with the given trigger mask
+  Bool_t fRejectSD;               /// reject single-diffractive MC events
   Bool_t fRejectPUFromSPD;        /// reject pile-up from SPD
   Bool_t fSelectSPDVtxQA;         /// select events with a good SPD vertex
   Bool_t fReject0Tracklet;        /// reject events with 0 (corrected) tracklets in -1 < eta < 1
   
-  ClassDef(AliAnalysisTaskMeanTracklets, 2);
+  ClassDef(AliAnalysisTaskMeanTracklets, 3);
 };
 
 //________________________________________________________________________

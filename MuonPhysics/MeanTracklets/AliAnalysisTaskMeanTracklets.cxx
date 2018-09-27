@@ -37,6 +37,7 @@
 #include "AliAnalysisDataContainer.h"
 #include "AliInputEventHandler.h"
 #include "AliMultSelection.h"
+#include "AliAnalysisMuonUtility.h"
 
 ClassImp(AliAnalysisTaskMeanTracklets)
 
@@ -46,6 +47,7 @@ AliAnalysisTaskSE(),
 fEvents(0x0),
 fhNtrk(0x0),
 fhNtrkCorr(0x0),
+fhNtrkCorrVsCuts(0x0),
 fpMeanNtrkVsZvtx(0x0),
 fpMeanNtrkVsZvtxCorr(0x0),
 fpMeanNtrkVsZvtxRef(0x0),
@@ -53,7 +55,8 @@ fMeanNtrkRef(-1.),
 fUseBinomial(kFALSE),
 fRandom(new TRandom3(0)),
 fTrigger(""),
-fRejectNSD(kFALSE),
+fPSTriggerMask(0),
+fRejectSD(kFALSE),
 fRejectPUFromSPD(kFALSE),
 fSelectSPDVtxQA(kTRUE),
 fReject0Tracklet(kFALSE)
@@ -67,6 +70,7 @@ AliAnalysisTaskSE(name),
 fEvents(0x0),
 fhNtrk(0x0),
 fhNtrkCorr(0x0),
+fhNtrkCorrVsCuts(0x0),
 fpMeanNtrkVsZvtx(0x0),
 fpMeanNtrkVsZvtxCorr(0x0),
 fpMeanNtrkVsZvtxRef(0x0),
@@ -74,7 +78,8 @@ fMeanNtrkRef(-1.),
 fUseBinomial(kFALSE),
 fRandom(new TRandom3(0)),
 fTrigger(""),
-fRejectNSD(kFALSE),
+fPSTriggerMask(0),
+fRejectSD(kFALSE),
 fRejectPUFromSPD(kFALSE),
 fSelectSPDVtxQA(kTRUE),
 fReject0Tracklet(kFALSE)
@@ -87,10 +92,12 @@ fReject0Tracklet(kFALSE)
   DefineOutput(2,THnSparse::Class());
   // Output slot #3 writes into a THnSparse
   DefineOutput(3,THnSparse::Class());
-  // Output slot #4 writes into a TProfile
-  DefineOutput(4,TProfile::Class());
+  // Output slot #4 writes into a THnSparse
+  DefineOutput(4,THnSparse::Class());
   // Output slot #5 writes into a TProfile
   DefineOutput(5,TProfile::Class());
+  // Output slot #6 writes into a TProfile
+  DefineOutput(6,TProfile::Class());
   
 }
 
@@ -102,6 +109,7 @@ AliAnalysisTaskMeanTracklets::~AliAnalysisTaskMeanTracklets()
     delete fEvents;
     delete fhNtrk;
     delete fhNtrkCorr;
+    delete fhNtrkCorrVsCuts;
     delete fpMeanNtrkVsZvtx;
     delete fpMeanNtrkVsZvtxCorr;
   }
@@ -122,22 +130,40 @@ void AliAnalysisTaskMeanTracklets::UserCreateOutputObjects()
   fEvents->AddRubric("run", 10000);
   fEvents->Init();
   
-  // prepare binning for THnSparse
-  // 1: N SPD tracklets
-  // 2: zVtx
-  // 3: run
-  // 4: N MC particles
+  // prepare binning for THnSparse for N SPD tracklets studies
+  // 0: N SPD tracklets
+  // 1: zVtx
+  // 2: run
+  // 3: N MC particles
   const Int_t nDims = 4;
-  Int_t nBins[nDims] = {350, 80, 200000, 350};
+  Int_t nBins[nDims] = {350, 80, 300000, 350};
   Double_t xMin[nDims] = {-0.5, -10., 99999.5, -0.5};
-  Double_t xMax[nDims] = {349.5, 10., 299999.5, 349.5};
-  
+  Double_t xMax[nDims] = {349.5, 10., 399999.5, 349.5};
+
+  // prepare binning for THnSparse for cut efficiency studies
+  // 0: Corrected (if correction profile is provided) N SPD tracklets
+  // 1: N MC particles
+  // 2: run
+  // 3: flag: physics selection (with or without pile-up rejection)
+  // 4: flag: SPD pile-up
+  // 5: flag: Vtx QA
+  // 6: flag: reconstructed |zVtx| < 10cm
+  // 7: flag: MC |zVtx| < 10cm
+  // 8: flag: NSD
+  // 9: flag: INEL>0
+  const Int_t nDims2 = 10;
+  Int_t nBins2[nDims2] = {350, 350, 300000, 2, 2, 2, 2, 2, 2, 2};
+  Double_t xMin2[nDims2] = {-0.5, -0.5, 99999.5, -0.5, -0.5, -0.5, -0.5, -0.5, -0.5, -0.5};
+  Double_t xMax2[nDims2] = {349.5, 349.5, 399999.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5, 1.5};
+
   // create histogram
   fhNtrk = new THnSparseT<TArrayF>("hNtrk", "N SPD tracklets", nDims, nBins, xMin, xMax);
   fhNtrk->Sumw2();
   fhNtrkCorr = new THnSparseT<TArrayF>("hNtrkCorr", "Corrected N SPD tracklets", nDims, nBins, xMin, xMax);
   fhNtrkCorr->Sumw2();
-  
+  fhNtrkCorrVsCuts = new THnSparseT<TArrayF>("hNtrkCorrVsCuts", "Corrected N SPD tracklets versus cuts", nDims2, nBins2, xMin2, xMax2);
+  fhNtrkCorrVsCuts->Sumw2();
+
   fpMeanNtrkVsZvtx = new TProfile("fpMeanNtrkVsZvtx", "<Ntrk> vs Zvtx", nBins[1], xMin[1], xMax[1]);
   fpMeanNtrkVsZvtxCorr = new TProfile("fpMeanNtrkVsZvtxCorr", "corrected <Ntrk> vs Zvtx", nBins[1], xMin[1], xMax[1]);
   
@@ -145,8 +171,9 @@ void AliAnalysisTaskMeanTracklets::UserCreateOutputObjects()
   PostData(1, fEvents);
   PostData(2, fhNtrk);
   PostData(3, fhNtrkCorr);
-  PostData(4, fpMeanNtrkVsZvtx);
-  PostData(5, fpMeanNtrkVsZvtxCorr);
+  PostData(4, fhNtrkCorrVsCuts);
+  PostData(5, fpMeanNtrkVsZvtx);
+  PostData(6, fpMeanNtrkVsZvtxCorr);
   
 }
 
@@ -165,44 +192,49 @@ void AliAnalysisTaskMeanTracklets::UserExec(Option_t *)
   fEvents->Count(Form("event:any/run:%d", fCurrentRunNumber));
   
   // select NSD MC events (only Pythia case supported)
+  Int_t nsdFlag = 0;
   AliMCEvent *mcEvt = MCEvent();
-  if (fRejectNSD && mcEvt) {
+  if (mcEvt) {
     AliGenEventHeader* mcGenH = fMCEvent->GenEventHeader();
     if (mcGenH && mcGenH->InheritsFrom(AliGenPythiaEventHeader::Class())) {
       AliGenPythiaEventHeader *hPythia = static_cast<AliGenPythiaEventHeader*>(mcGenH);
-      if (hPythia->ProcessType() == 92 || hPythia->ProcessType() == 93) return; // single-diffractive
+      if (hPythia->ProcessType() != 92 && hPythia->ProcessType() != 93) nsdFlag = 1; // non single-diffractive
     }
   }
-  
-  // select a specific trigger
+
+  // select a specific trigger (select all by default)
+  Int_t triggerFlag = 1;
   if (!fTrigger.IsNull()) {
     TString trigger = evt->GetFiredTriggerClasses();
-    if (mcEvt && fTrigger == "MB" && !(trigger.Contains("V0L") && trigger.Contains("V0R"))) return;
-    else if (!trigger.Contains(fTrigger.Data())) return;
+    if (mcEvt && fTrigger == "MB" && !(trigger.Contains("V0L") && trigger.Contains("V0R"))) triggerFlag = 0;
+    else if (!trigger.Contains(fTrigger.Data())) triggerFlag = 0;
   }
-  
+
+  // apply physics selection
+  Int_t psFlag = (fInputHandler->IsEventSelected() & fPSTriggerMask) ? 1 : 0;
+
   // reject events with pile-up from SPD
-  if (fRejectPUFromSPD && evt->IsPileupFromSPDInMultBins()) return;
-  
+  Int_t spdPUFlag = evt->IsPileupFromSPDInMultBins() ? 1 : 0;
+
   // apply vertex QA selection
-  Bool_t vtxQA = kFALSE;
+  Int_t vtxQAFlag = 0;
   const AliVVertex* vtx = evt->GetPrimaryVertexSPD();
   if (vtx && vtx->GetNContributors() > 0) {
     Double_t cov[6]={0};
     vtx->GetCovarianceMatrix(cov);
-    if (TMath::Sqrt(cov[5]) <= 0.25) vtxQA = kTRUE;
+    if (TMath::Sqrt(cov[5]) <= 0.25) vtxQAFlag = 1;
   }
-  if (fSelectSPDVtxQA && !vtxQA) return;
-  
+
   // get and select on vertex position
-  Double_t zVtx = vtxQA ? vtx->GetZ() : 0.;
-  if (zVtx <= -10. || zVtx >= 10.) return;
-  
-  // fill event counters for selected events
-  fEvents->Count(Form("event:selected/run:%d", fCurrentRunNumber));
-  
+  Double_t zVtx = (vtxQAFlag == 1) ? vtx->GetZ() : 0.;
+  Int_t zVtxRangeFlag = (zVtx > -10. && zVtx < 10.) ? 1 : 0;
+
+  // get and select on MC vertex position
+  Double_t zVtxMC = mcEvt ? AliAnalysisMuonUtility::GetMCVertexZ(evt,mcEvt) : 0.;
+  Int_t zVtxMCRangeFlag = (zVtxMC > -10. && zVtxMC < 10.) ? 1 : 0;
+
   // get number of charged particules
-  Int_t NMCpartInEtaRange(0);
+  Int_t nMCpartInEtaRange(0);
   if (mcEvt) {
     Int_t nMCpart = mcEvt->GetNumberOfTracks();
     for (Int_t i = 0; i < nMCpart ; ++i) {
@@ -210,11 +242,14 @@ void AliAnalysisTaskMeanTracklets::UserExec(Option_t *)
       if (!p->IsPhysicalPrimary()) continue;
       if (p->Charge() == 0) continue;
       if (TMath::Abs(p->Eta()) > 1.) continue;
-      ++NMCpartInEtaRange;
+      ++nMCpartInEtaRange;
     }
   }
-  
-  // get the number of SPD tracklets
+
+  // select INEL>0 MC events
+  Int_t inelPosFlag = (nMCpartInEtaRange > 0) ? 1 : 0;
+
+  // get the number of SPD tracklets (WARNING: not reliable without a good SPD vertex)
   AliAODTracklets *tracklets = static_cast<const AliAODEvent*>(evt)->GetTracklets();
   Int_t nTrk = tracklets->GetNumberOfTracklets();
   Int_t nTrkInEtaRange(0);
@@ -224,19 +259,41 @@ void AliAnalysisTaskMeanTracklets::UserExec(Option_t *)
     ++nTrkInEtaRange;
   }
   
-  // reject events with 0 tracklet measured in the considered eta range
+  // get the corrected number of SPD tracklets (WARNING: not reliable without a good SPD vertex)
+  Int_t nTrkInEtaRangeCorr = fpMeanNtrkVsZvtxRef ? GetCorrectedNtrk(nTrkInEtaRange,zVtx) : GetCorrectedNtrkFromMultSel();
+
+  // fill histograms for cut efficiency studies
+  Double_t EventInfoVsCuts[10];
+  EventInfoVsCuts[0] = fpMeanNtrkVsZvtxRef ? nTrkInEtaRangeCorr : nTrkInEtaRange;
+  EventInfoVsCuts[1] = nMCpartInEtaRange;
+  EventInfoVsCuts[2] = fCurrentRunNumber;
+  EventInfoVsCuts[3] = psFlag;
+  EventInfoVsCuts[4] = spdPUFlag;
+  EventInfoVsCuts[5] = vtxQAFlag;
+  EventInfoVsCuts[6] = zVtxRangeFlag;
+  EventInfoVsCuts[7] = zVtxMCRangeFlag;
+  EventInfoVsCuts[8] = nsdFlag;
+  EventInfoVsCuts[9] = inelPosFlag;
+  fhNtrkCorrVsCuts->Fill(EventInfoVsCuts);
+
+  // apply all events selections
+  if (fRejectSD && nsdFlag == 0) return;
+  if (triggerFlag == 0) return;
+  if (fPSTriggerMask != 0 && psFlag == 0) return;
+  if (fRejectPUFromSPD && spdPUFlag == 1) return;
+  if (fSelectSPDVtxQA && vtxQAFlag == 0) return;
+  if (zVtxRangeFlag == 0) return;
   if (fReject0Tracklet && nTrkInEtaRange == 0) return;
   
-  // get the corrected number of SPD tracklets (no correction without a good SPD vertex)
-  Int_t nTrkInEtaRangeCorr = nTrkInEtaRange;
-  if (vtxQA) nTrkInEtaRangeCorr = fpMeanNtrkVsZvtxRef ? GetCorrectedNtrk(nTrkInEtaRange,zVtx) : GetCorrectedNtrkFromMultSel();
-  
-  // fill histograms
+  // fill event counters for selected events
+  fEvents->Count(Form("event:selected/run:%d", fCurrentRunNumber));
+
+  // fill histograms for N SPD tracklets studies
   Double_t EventInfo[4];
   EventInfo[0] = nTrkInEtaRange;
   EventInfo[1] = zVtx;
   EventInfo[2] = fCurrentRunNumber;
-  EventInfo[3] = NMCpartInEtaRange;
+  EventInfo[3] = nMCpartInEtaRange;
   fhNtrk->Fill(EventInfo);
   fpMeanNtrkVsZvtx->Fill(zVtx,nTrkInEtaRange);
   if (nTrkInEtaRangeCorr > 0 || (nTrkInEtaRangeCorr == 0 && !fReject0Tracklet)) {
@@ -244,14 +301,15 @@ void AliAnalysisTaskMeanTracklets::UserExec(Option_t *)
     fhNtrkCorr->Fill(EventInfo);
     fpMeanNtrkVsZvtxCorr->Fill(zVtx,nTrkInEtaRangeCorr);
   }
-  
+
   // Post data
   PostData(1, fEvents);
   PostData(2, fhNtrk);
   PostData(3, fhNtrkCorr);
-  PostData(4, fpMeanNtrkVsZvtx);
-  PostData(5, fpMeanNtrkVsZvtxCorr);
-  
+  PostData(4, fhNtrkCorrVsCuts);
+  PostData(5, fpMeanNtrkVsZvtx);
+  PostData(6, fpMeanNtrkVsZvtxCorr);
+
 }
 
 //________________________________________________________________________
