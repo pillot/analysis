@@ -3,7 +3,7 @@
 #include "TH1D.h"
 #include "TCanvas.h"
 
-Int_t firstMultRange[3] = {1,8}; // limits included
+Int_t firstMultRange[3] = {1,7}; // limits included
 //Int_t firstMultRange[3] = {9,13}; // limits included
 
 void DrawEff(TH1D* numerator, TH1D* denominator, TString name);
@@ -94,7 +94,6 @@ void ComputeEfficiencies(TString fileNameData = "AnalysisResults.root")
 
   // trigger+PS efficiency
   hNtrkCorrVsCuts->GetAxis(7)->SetRangeUser(1, 1); // |Vtx MC| < 10 cm (NtrkCorr = -999 if |Vtx| > 10 cm)
-  //hNtrkCorrVsCuts->GetAxis(5)->SetRangeUser(1, 1);
   TH1D* hNtrk = hNtrkCorrVsCuts->Projection(0,"e");
   hNtrk->SetName("hNtrk");
   hNtrkCorrVsCuts->GetAxis(3)->SetRangeUser(1, 1);
@@ -104,7 +103,13 @@ void ComputeEfficiencies(TString fileNameData = "AnalysisResults.root")
   hNtrkCorrVsCuts->GetAxis(9)->SetRangeUser(1, 1);
   TH1D* hNtrkINELpos = hNtrkCorrVsCuts->Projection(0,"e");
   hNtrkINELpos->SetName("hNtrkINELpos");
+  hNtrkCorrVsCuts->GetAxis(5)->SetRangeUser(1, 1);
+  TH1D* hNtrkINELposVtxQA = hNtrkCorrVsCuts->Projection(0,"e");
+  hNtrkINELposVtxQA->SetName("hNtrkINELposVtxQA");
   hNtrkCorrVsCuts->GetAxis(3)->SetRangeUser(1, 1);
+  TH1D* hNtrkINELposPSVtxQA = hNtrkCorrVsCuts->Projection(0,"e");
+  hNtrkINELposPSVtxQA->SetName("hNtrkINELposPSVtxQA");
+  hNtrkCorrVsCuts->GetAxis(5)->SetRange();
   TH1D* hNtrkINELposPS = hNtrkCorrVsCuts->Projection(0,"e");
   hNtrkINELposPS->SetName("hNtrkINELposPS");
   hNtrkCorrVsCuts->GetAxis(3)->SetRange();
@@ -112,7 +117,13 @@ void ComputeEfficiencies(TString fileNameData = "AnalysisResults.root")
   hNtrkCorrVsCuts->GetAxis(0)->SetRangeUser(firstMultRange[0],firstMultRange[1]);
   TH1D* hNch1stTrkBin = hNtrkCorrVsCuts->Projection(1,"e");
   hNch1stTrkBin->SetName("hNch1stTrkBin");
+  hNtrkCorrVsCuts->GetAxis(5)->SetRangeUser(1, 1);
+  TH1D* hNch1stTrkBinVtxQA = hNtrkCorrVsCuts->Projection(1,"e");
+  hNch1stTrkBinVtxQA->SetName("hNch1stTrkBinVtxQA");
   hNtrkCorrVsCuts->GetAxis(3)->SetRangeUser(1, 1);
+  TH1D* hNch1stTrkBinPSVtxQA = hNtrkCorrVsCuts->Projection(1,"e");
+  hNch1stTrkBinPSVtxQA->SetName("hNch1stTrkBinPSVtxQA");
+  hNtrkCorrVsCuts->GetAxis(5)->SetRange();
   TH1D* hNch1stTrkBinPS = hNtrkCorrVsCuts->Projection(1,"e");
   hNch1stTrkBinPS->SetName("hNch1stTrkBinPS");
   hNtrkCorrVsCuts->GetAxis(0)->SetRange();
@@ -121,6 +132,7 @@ void ComputeEfficiencies(TString fileNameData = "AnalysisResults.root")
   printf("N(Nch in [%d,%d] + INEL>=0 + PS) / N(Nch in [%d,%d] + INEL>=0) = %f\n",firstMultRange[0],firstMultRange[1],firstMultRange[0],firstMultRange[1],hNchPS->Integral(firstMultRange[0]+1,firstMultRange[1]+1)/hNch->Integral(firstMultRange[0]+1,firstMultRange[1]+1));
   printf("N(Ntrk in [%d,%d] + INEL>=0 + PS) / N(Ntrk in [%d,%d] + INEL>=0) = %f\n",firstMultRange[0],firstMultRange[1],firstMultRange[0],firstMultRange[1],hNtrkPS->Integral(firstMultRange[0]+1,firstMultRange[1]+1)/hNtrk->Integral(firstMultRange[0]+1,firstMultRange[1]+1));
   printf("N(Ntrk in [%d,%d] + INEL>0 + PS) / N(Ntrk in [%d,%d] + INEL>0) = %f\n",firstMultRange[0],firstMultRange[1],firstMultRange[0],firstMultRange[1],hNtrkINELposPS->Integral(firstMultRange[0]+1,firstMultRange[1]+1)/hNtrkINELpos->Integral(firstMultRange[0]+1,firstMultRange[1]+1));
+  printf("N(Ntrk in [%d,%d] + INEL>0 + PS + vtxQA) / N(Ntrk in [%d,%d] + INEL>0 + vtxQA) = %f\n",firstMultRange[0],firstMultRange[1],firstMultRange[0],firstMultRange[1],hNtrkINELposPSVtxQA->Integral(firstMultRange[0]+1,firstMultRange[1]+1)/hNtrkINELposVtxQA->Integral(firstMultRange[0]+1,firstMultRange[1]+1));
   printf("------\n");
   hNch->GetXaxis()->SetRangeUser(firstMultRange[0],firstMultRange[1]);
   hNchPS->GetXaxis()->SetRangeUser(firstMultRange[0],firstMultRange[1]);
@@ -133,6 +145,11 @@ void ComputeEfficiencies(TString fileNameData = "AnalysisResults.root")
   printf("<Nch>(Ntrk in [%d,%d] + INEL>0 + PS) / <Nch>(Ntrk in [%d,%d] + INEL>0) = %f\n",firstMultRange[0],firstMultRange[1],firstMultRange[0],firstMultRange[1],hNch1stTrkBinPS->GetMean()/hNch1stTrkBin->GetMean());
   hNch1stTrkBin->GetXaxis()->SetRange();
   hNch1stTrkBinPS->GetXaxis()->SetRange();
+  hNch1stTrkBinVtxQA->GetXaxis()->SetRangeUser(1,hNch1stTrkBinVtxQA->GetXaxis()->GetXmax());
+  hNch1stTrkBinPSVtxQA->GetXaxis()->SetRangeUser(1,hNch1stTrkBinPSVtxQA->GetXaxis()->GetXmax());
+  printf("<Nch>(Ntrk in [%d,%d] + INEL>0 + PS + vtxQA) / <Nch>(Ntrk in [%d,%d] + INEL>0 + vtxQA) = %f\n",firstMultRange[0],firstMultRange[1],firstMultRange[0],firstMultRange[1],hNch1stTrkBinPSVtxQA->GetMean()/hNch1stTrkBinVtxQA->GetMean());
+  hNch1stTrkBinVtxQA->GetXaxis()->SetRange();
+  hNch1stTrkBinPSVtxQA->GetXaxis()->SetRange();
   hNtrk->GetXaxis()->SetRangeUser(firstMultRange[0],firstMultRange[1]);
   hNtrkPS->GetXaxis()->SetRangeUser(firstMultRange[0],firstMultRange[1]);
   printf("<Ntrk>(Ntrk in [%d,%d] + INEL>=0 + PS) / <Ntrk>(Ntrk in [%d,%d] + INEL>=0) = %f\n",firstMultRange[0],firstMultRange[1],firstMultRange[0],firstMultRange[1],hNtrkPS->GetMean()/hNtrk->GetMean());
@@ -145,26 +162,20 @@ void ComputeEfficiencies(TString fileNameData = "AnalysisResults.root")
   hNtrkINELposPS->GetXaxis()->SetRange();
   DrawEff(hNtrkPS, hNtrk, "hTrigEffvsNtrk");
   DrawEff(hNtrkINELposPS, hNtrkINELpos, "hTrigEffINELposvsNtrk");
+  DrawEff(hNtrkINELposPSVtxQA, hNtrkINELposVtxQA, "hTrigEffINELposVtxQAvsNtrk");
 
   // vtxQA efficiency
   hNtrkCorrVsCuts->GetAxis(3)->SetRangeUser(1, 1);
   hNtrkCorrVsCuts->GetAxis(5)->SetRangeUser(1, 1);
   TH1D* hNtrkPSVtxQA = hNtrkCorrVsCuts->Projection(0,"e");
   hNtrkPSVtxQA->SetName("hNtrkPSVtxQA");
-  hNtrkCorrVsCuts->GetAxis(9)->SetRangeUser(1, 1);
-  TH1D* hNtrkINELposPSVtxQA = hNtrkCorrVsCuts->Projection(0,"e");
-  hNtrkINELposPSVtxQA->SetName("hNtrkINELposPSVtxQA");
-  hNtrkCorrVsCuts->GetAxis(9)->SetRange();
-  hNtrkCorrVsCuts->GetAxis(0)->SetRangeUser(firstMultRange[0],firstMultRange[1]);
-  TH1D* hNch1stTrkBinPSVtxQA = hNtrkCorrVsCuts->Projection(1,"e");
-  hNch1stTrkBinPSVtxQA->SetName("hNch1stTrkBinPSVtxQA");
-  hNtrkCorrVsCuts->GetAxis(0)->SetRange();
   hNtrkCorrVsCuts->GetAxis(3)->SetRange();
   hNtrkCorrVsCuts->GetAxis(5)->SetRange();
   printf("\n------ vtxQA efficiency ------\n");
   printf("N(Nch in [%d,%d] + INEL>=0 + PS + vtxQA) / N(Nch in [%d,%d] + INEL>=0 + PS) = %f\n",firstMultRange[0],firstMultRange[1],firstMultRange[0],firstMultRange[1],hNchPSVtxQA->Integral(firstMultRange[0]+1,firstMultRange[1]+1)/hNchPS->Integral(firstMultRange[0]+1,firstMultRange[1]+1));
   printf("N(Ntrk in [%d,%d] + INEL>=0 + PS + vtxQA) / N(Ntrk in [%d,%d] + INEL>=0 + PS) = %f\n",firstMultRange[0],firstMultRange[1],firstMultRange[0],firstMultRange[1],hNtrkPSVtxQA->Integral(firstMultRange[0]+1,firstMultRange[1]+1)/hNtrkPS->Integral(firstMultRange[0]+1,firstMultRange[1]+1));
   printf("N(Ntrk in [%d,%d] + INEL>0 + PS + vtxQA) / N(Ntrk in [%d,%d] + INEL>0 + PS) = %f\n",firstMultRange[0],firstMultRange[1],firstMultRange[0],firstMultRange[1],hNtrkINELposPSVtxQA->Integral(firstMultRange[0]+1,firstMultRange[1]+1)/hNtrkINELposPS->Integral(firstMultRange[0]+1,firstMultRange[1]+1));
+  printf("N(Ntrk in [%d,%d] + INEL>0 + vtxQA) / N(Ntrk in [%d,%d] + INEL>0) = %f\n",firstMultRange[0],firstMultRange[1],firstMultRange[0],firstMultRange[1],hNtrkINELposVtxQA->Integral(firstMultRange[0]+1,firstMultRange[1]+1)/hNtrkINELpos->Integral(firstMultRange[0]+1,firstMultRange[1]+1));
   printf("------\n");
   hNchPS->GetXaxis()->SetRangeUser(firstMultRange[0],firstMultRange[1]);
   hNchPSVtxQA->GetXaxis()->SetRangeUser(firstMultRange[0],firstMultRange[1]);
@@ -177,6 +188,11 @@ void ComputeEfficiencies(TString fileNameData = "AnalysisResults.root")
   printf("<Nch>(Ntrk in [%d,%d] + INEL>0 + PS + vtxQA) / <Nch>(Ntrk in [%d,%d] + INEL>0 + PS) = %f\n",firstMultRange[0],firstMultRange[1],firstMultRange[0],firstMultRange[1],hNch1stTrkBinPSVtxQA->GetMean()/hNch1stTrkBinPS->GetMean());
   hNch1stTrkBinPS->GetXaxis()->SetRange();
   hNch1stTrkBinPSVtxQA->GetXaxis()->SetRange();
+  hNch1stTrkBin->GetXaxis()->SetRangeUser(1,hNch1stTrkBin->GetXaxis()->GetXmax());
+  hNch1stTrkBinVtxQA->GetXaxis()->SetRangeUser(1,hNch1stTrkBinVtxQA->GetXaxis()->GetXmax());
+  printf("<Nch>(Ntrk in [%d,%d] + INEL>0 + vtxQA) / <Nch>(Ntrk in [%d,%d] + INEL>0) = %f\n",firstMultRange[0],firstMultRange[1],firstMultRange[0],firstMultRange[1],hNch1stTrkBinVtxQA->GetMean()/hNch1stTrkBin->GetMean());
+  hNch1stTrkBin->GetXaxis()->SetRange();
+  hNch1stTrkBinVtxQA->GetXaxis()->SetRange();
   hNtrkPS->GetXaxis()->SetRangeUser(firstMultRange[0],firstMultRange[1]);
   hNtrkPSVtxQA->GetXaxis()->SetRangeUser(firstMultRange[0],firstMultRange[1]);
   printf("<Ntrk>(Ntrk in [%d,%d] + INEL>=0 + PS + vtxQA) / <Ntrk>(Ntrk in [%d,%d] + INEL>=0 + PS) = %f\n",firstMultRange[0],firstMultRange[1],firstMultRange[0],firstMultRange[1],hNtrkPSVtxQA->GetMean()/hNtrkPS->GetMean());
@@ -188,6 +204,7 @@ void ComputeEfficiencies(TString fileNameData = "AnalysisResults.root")
   hNtrkINELposPS->GetXaxis()->SetRange();
   hNtrkINELposPSVtxQA->GetXaxis()->SetRange();
   DrawEff(hNtrkPSVtxQA, hNtrkPS, "hVtxQAEffvsNtrk");
+  DrawEff(hNtrkINELposVtxQA, hNtrkINELpos, "hVtxQAEffINELposvsNtrk");
 
   // INEL=0 contamination
   printf("\n------ INEL=0 contamination ------\n");
