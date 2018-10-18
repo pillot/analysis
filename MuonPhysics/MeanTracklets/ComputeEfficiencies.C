@@ -69,6 +69,10 @@ void ComputeEfficiencies(TString fileNameData = "AnalysisResults.root")
   // |Zvtx| < 10 cm efficiency
   hNtrkCorrVsCuts->GetAxis(3)->SetRangeUser(1, 1);
   hNtrkCorrVsCuts->GetAxis(5)->SetRangeUser(1, 1);
+  hNtrkCorrVsCuts->GetAxis(7)->SetRangeUser(1, 1);
+  TH1D* hNchPSVtxQAZvtxMC = hNtrkCorrVsCuts->Projection(1,"e");
+  hNchPSVtxQAZvtxMC->SetName("hNchPSVtxQAZvtxMC");
+  hNtrkCorrVsCuts->GetAxis(7)->SetRange();
   hNtrkCorrVsCuts->GetAxis(6)->SetRangeUser(1, 1);
   TH1D* hNchPSVtxQAZvtx = hNtrkCorrVsCuts->Projection(1,"e");
   hNchPSVtxQAZvtx->SetName("hNchPSVtxQAZvtx");
@@ -83,6 +87,8 @@ void ComputeEfficiencies(TString fileNameData = "AnalysisResults.root")
   printf("N(INEL>=0 + PS + vtxQA + |Zvtx|<10cm) / N(INEL>=0 + PS + vtxQA) = %f\n",hNchPSVtxQAZvtx->GetEntries()/hNchPSVtxQA->GetEntries());
   printf("N(INEL>0 + PS + vtxQA + |Zvtx|<10cm) / N(INEL>0 + PS + vtxQA) = %f\n",hNchINELposPSVtxQAZvtx->GetEntries()/hNchINELposPSVtxQA->GetEntries());
   DrawEff(hNchPSVtxQAZvtx, hNchPSVtxQA, "hZvtxEffvsNch");
+  DrawEff(hNchPSVtxQAZvtxMC, hNchPSVtxQA, "hZvtxMCEffvsNch");
+  DrawEff(hNchPSVtxQAZvtx, hNchPSVtxQAZvtxMC, "hZvtxOverZvtxMCEffvsNch");
 
   // INEL=0 contamination
   printf("\n------ INEL=0 contamination ------\n");
