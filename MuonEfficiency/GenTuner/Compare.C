@@ -7,6 +7,16 @@
  *
  */
 
+#if !defined(__CINT__) || defined(__MAKECINT__)
+#include <TH1.h>
+#include <TF1.h>
+#include <TString.h>
+#include <TParameter.h>
+#include <TFile.h>
+#include <TObjArray.h>
+#include <TCanvas.h>
+#include <TLegend.h>
+#endif
 
 TF1 *fRes[2][3] = {{0x0,0x0,0x0},{0x0,0x0,0x0}};
 
@@ -55,7 +65,8 @@ void Compare(TString sfile1, TString sfile2, Bool_t rebin = kFALSE)
   for (Int_t i = 0; i < 8; i++) for (Int_t j = 0; j < 3; j++) hRes[i][j] = 0x0;
 //  TString sfunc[2][2] = {"fPtFuncMC", "fPtFuncMC", "fYFuncMC", "fYFuncMC"};
   TString sfunc[2][2] = {"fPtFuncNew", "fPtFuncNew", "fYFuncNew", "fYFuncNew"};
-  void *func[2] = {PtRat, YRat};
+//  void *func[2] = {PtRat, YRat};
+  Double_t(*func[2])(const Double_t *, const Double_t *) = {PtRat, YRat};
   TParameter<Double_t> *newMuPlusFrac[2] = {0x0, 0x0};
   Double_t nMu[2][2] = {{0.,0.},{0.,0.}};
   
@@ -63,13 +74,13 @@ void Compare(TString sfile1, TString sfile2, Bool_t rebin = kFALSE)
   for (Int_t j = 0; j < 2; j++) {
     TFile *file = TFile::Open(sfile[j].Data(),"READ");
     if (!file || !file->IsOpen()) {
-      ::Error("cannot open file");
+      ::Error("","cannot open file");
       return;
     }
     if (file && file->IsOpen()) {
       TObjArray *list = static_cast<TObjArray*>(file->FindObjectAny("Histograms"));
       if (!list) {
-	::Error("cannot find histograms");
+	::Error("","cannot find histograms");
 	return;
       }
       for (Int_t i = 0; i < 8; i++) {
@@ -87,8 +98,9 @@ void Compare(TString sfile1, TString sfile2, Bool_t rebin = kFALSE)
       for (Int_t i = 0; i < 2; i++) {
 	TF1 *f = static_cast<TF1*>(file->FindObjectAny(sfunc[i][j].Data()));
 	if (f) {
-          fRes[i][j] = new TF1(*f);
-          fRes[i][j]->SetName(Form("%s%d",f->GetName(),j+1));
+//          fRes[i][j] = new TF1(*f);
+//          fRes[i][j]->SetName(Form("%s%d",f->GetName(),j+1));
+          fRes[i][j] = static_cast<TF1*>(f->Clone(Form("%s%d",f->GetName(),j+1)));
 	}
       }
       newMuPlusFrac[j] = static_cast<TParameter<Double_t>*>(file->FindObjectAny("newMuPlusFrac"));
