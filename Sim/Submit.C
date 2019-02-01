@@ -8,12 +8,15 @@
  */
 
 // JPsi
-Double_t nGenEvents = 750000.;
+Double_t nGenEvents = 4000000.;
 //Double_t nGenFactor = -1.;
 //Double_t nGenFactor = 0.0008; // LHC13de
 //Double_t nGenFactor = 0.0012; // LHC13f
 //Double_t nGenFactor = 0.5; // LHC12hi
-Double_t nGenFactor = 0.2;
+//Double_t nGenFactor = 0.65; // LHC15n
+//Double_t nGenFactor = 0.3; // LHC15o
+//Double_t nGenFactor = 0.04; // LHC15o
+Double_t nGenFactor = 0.22; // LHC17pq
 Int_t maxEventsPerChunk = 5000;
 
 // Beauty
@@ -24,14 +27,13 @@ Bool_t FileExists(const char *lfn);
 Bool_t DirectoryExists(const char *dirname);
 
 //______________________________________________________________________________
-void Submit(const char* outDir, const char* runList = "runListProd.txt", Bool_t submit = kFALSE)
+void Submit(const char* outDir, TString jdl = "run.jdl", const char* runList = "runListProd.txt", Bool_t submit = kFALSE)
 {
   /// Submit multiple production jobs with the format "submit jdl 000run#.xml 000run#".
   /// Example:
   /// - outDir = "Sim/LHC10h/JPsiPbPb276/AlignRawVtxRaw/ESDs"
   /// - runListProd.txt must contains the list of run number and the associated number of interesting events
   
-  TString jdl = "run.jdl";
   TString homeDir = "/alice/cern.ch/user/p/ppillot";
   
   if (!TGrid::Connect("alien://")) {
@@ -42,21 +44,21 @@ void Submit(const char* outDir, const char* runList = "runListProd.txt", Bool_t 
   TString outputDir = Form("%s/%s", homeDir.Data(), outDir);
   
   if (!DirectoryExists(outputDir.Data())) {
-    Error("Submit", Form("directory %s does not exist", outputDir.Data()));
+    Error("Submit", "directory %s does not exist", outputDir.Data());
     return;
   }
   
   gGrid->Cd(outputDir.Data());
   
   if (!FileExists(jdl.Data())) {
-    Error("Submit", Form("file %s does not exist in %s", jdl.Data(), outputDir.Data()));
+    Error("Submit", "file %s does not exist in %s", jdl.Data(), outputDir.Data());
     return;
   }
   
    
   ifstream inFile(runList);
   if (!inFile.is_open()) {
-    Error("Submit", Form("cannot open file %s", runList));
+    Error("Submit", "cannot open file %s", runList);
     return;
   }
   
@@ -72,7 +74,7 @@ void Submit(const char* outDir, const char* runList = "runListProd.txt", Bool_t 
     
     TObjArray *param = line.Tokenize(" ");
     if (param->GetEntries() != 2) {
-      Error("Submit", Form("bad input line %s", line.Data()));
+      Error("Submit", "bad input line %s", line.Data());
       continue;
     }
      
