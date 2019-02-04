@@ -1,0 +1,42 @@
+JobTag = "comment:pp, 5.02 TeV, single muon MC anchored to LHC17pq, CMSH7";
+Packages = {
+    "VO_ALICE@AliDPG::prod-201901-02-1",
+    "VO_ALICE@AliPhysics::v5-09-45-01_ROOT6-1"
+};
+Executable = "/alice/cern.ch/user/a/aliprod/bin/aliroot_dpgsim.sh";
+InputFile = {
+    "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC17pq/muon_calo_pass1/muTuneCMSH1/pT4GeV/MuonGeneratorCustom.C",
+    "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC17pq/muon_calo_pass1/muTuneCMSH1/pT4GeV/main_QAtrainsim.C"
+};
+Split = "production:1-$2";
+SplitArguments = "--run $1 --mode full,MuonOnly --uid #alien_counter# --nevents $3 --generator PWGDQ:Muon_GenParam:custom --ocdb alien://folder=/alice/data/2017/OCDB";
+ValidationCommand = "/alice/cern.ch/user/a/aliprod/LHC18l3/validation.sh";
+OutputDir = "/alice/cern.ch/user/p/ppillot/Sim/LHC17pq/muon_calo_pass1/muTuneCMSH1/pT4GeV/$1/#alien_counter_03i#";
+Output = {
+ #   "log_archive.zip:*.log@disk=1",
+    "root_archive.zip:QAresults.root@disk=2"
+};
+OutputErrorE = {
+    "log_archive.zip:*.log@disk=1"
+};
+TTL = "18000";
+Price = "1";
+WorkDirectorySize = "5000MB";
+JDLVariables = {
+    "Packages",
+    "OutputDir",
+    "LPMAnchorPassName",
+    "LPMRunNumber",
+    "LPMProductionType",
+    "LPMInteractionType",
+    "LPMAnchorRun",
+    "LPMAnchorProduction",
+    "LPMAnchorYear"
+};
+LPMAnchorPassName = "muon_calo_pass1";
+LPMRunNumber = "$1";
+LPMProductionType = "MC";
+LPMInteractionType = "pp";
+LPMAnchorRun = "$1";
+LPMAnchorProduction = "LHC17p";
+LPMAnchorYear = "2017";

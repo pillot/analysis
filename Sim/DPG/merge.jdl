@@ -1,0 +1,45 @@
+JobTag = "comment: Intermediate merging stage $2";
+Packages = {
+    "VO_ALICE@AliDPG::prod-201901-02-1",
+    "VO_ALICE@AliPhysics::v5-09-45-01_ROOT6-1"
+};
+Executable = "/alice/cern.ch/user/a/aliprod/bin/train_merge.sh";
+Arguments = "wn.xml $2";
+InputDataList = "wn.xml";
+InputDataListFormat = "xml-single";
+InputDataCollection = {
+    "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC17pq/muon_calo_pass1/muTuneCMSH1/pT4GeV/$1/Stage_$2.xml,nodownload"
+};
+InputFile = {
+    "LF:/alice/cern.ch/user/p/ppillot/Sim/LHC17pq/muon_calo_pass1/muTuneCMSH1/pT4GeV/main_QAtrainsim.C"
+};
+Split = "se";
+SplitMaxInputFileNumber = "20";
+ValidationCommand = "/alice/cern.ch/user/a/aliprod/QA/validation_merge.sh";
+OutputDir = "/alice/cern.ch/user/p/ppillot/Sim/LHC17pq/muon_calo_pass1/muTuneCMSH1/pT4GeV/$1/Stage_$2/#alien_counter_03i#";
+OutputArchive = {
+    "root_archive.zip:QAresults.root@disk=2"
+};
+OutputErrorE = {
+    "log_archive.zip:std*@disk=1"
+};
+TTL = "7200";
+Price = "1";
+MemorySize = "8GB";
+WorkDirectorySize = "5000MB";
+JDLVariables = {
+    "Packages",
+    "OutputDir",
+    "LPMRunNumber",
+    "LPMProductionType",
+    "LPMInteractionType",
+    "LPMAnchorRun",
+    "LPMAnchorProduction",
+    "LPMAnchorYear"
+};
+LPMRunNumber = "$1";
+LPMProductionType = "MC";
+LPMInteractionType = "pp";
+LPMAnchorRun = "$1";
+LPMAnchorProduction = "LHC17p";
+LPMAnchorYear = "2017";
