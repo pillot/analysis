@@ -24,8 +24,8 @@ Bool_t FileExists(const char *lfn);
 Bool_t DirectoryExists(const char *dirname);
 
 //______________________________________________________________________________
-void Submit(const char* inDir, const char* outDir, const char* resDir = "results",
-	    const char* runList = "runList.txt", TString runFormat = "%d", Int_t stage = 0, Bool_t submit = kFALSE)
+void SubmitMerge(const char* inDir, const char* outDir, const char* resDir = "results",
+                 const char* runList = "runList.txt", TString runFormat = "%d", Int_t stage = 0, Bool_t submit = kFALSE)
 {
   /// Submit multiple merging jobs with the format "submit AOD_merge(_final).jdl run# (stage#)".
   /// Also produce the xml collection before sending jobs
@@ -55,7 +55,8 @@ void Submit(const char* inDir, const char* outDir, const char* resDir = "results
   
   gGrid->Cd(outputDir.Data());
   
-  TString jdl = (stage > 0) ? "AOD_merge.jdl" : "AOD_merge_final.jdl";
+  //TString jdl = (stage > 0) ? "AOD_merge.jdl" : "AOD_merge_final.jdl";
+  TString jdl = (stage > 0) ? "merge.jdl" : "merge_final.jdl";
   if (!FileExists(jdl.Data())) {
     printf("file %s does not exist in %s\n", jdl.Data(), outputDir.Data());
     return;
@@ -104,15 +105,17 @@ void Submit(const char* inDir, const char* outDir, const char* resDir = "results
       continue;
     }
     
-    TString wn = (stage > 0) ? Form("Stage_%d.xml", stage) : "wn.xml";
+//    TString wn = (stage > 0) ? Form("Stage_%d.xml", stage) : "wn.xml";
+    TString wn = (stage > 0) ? Form("Stage_%d.xml", stage) : "Stage_final.xml";
+    TString find = (lastStage == 0) ?
+      Form("alien_find -x %s %s/%s *root_archive.zip", wn.Data(), inputDir.Data(), srun.Data()) :
+      Form("alien_find -x %s %s/%s/Stage_%d *root_archive.zip", wn.Data(), inputDir.Data(), srun.Data(), lastStage);
 //    TString find = (lastStage == 0) ?
-//      Form("alien_find -x %s %s/%s *root_archive.zip", wn.Data(), inputDir.Data(), srun.Data()) :
 //      Form("alien_find -x %s %s/%s/ESDs/muon_calo_pass2 12%s*/root_archive.zip", wn.Data(), inputDir.Data(), srun.Data(), srun.Data()) :
 //      Form("alien_find -x %s %s/%s/vpass1 12%s*/root_archive.zip", wn.Data(), inputDir.Data(), srun.Data(), srun.Data()) :
-//      Form("alien_find -x %s %s/%s/Stage_%d *root_archive.zip", wn.Data(), inputDir.Data(), srun.Data(), lastStage);
-    TString find = (lastStage == 0) ?
-      Form("alien_find -x %s %s/%s *Merged.QA.Data.root", wn.Data(), inputDir.Data(), srun.Data()) :
-      Form("alien_find -x %s %s/%s/Stage_%d *Merged.QA.Data.root", wn.Data(), inputDir.Data(), srun.Data(), lastStage);
+//    TString find = (lastStage == 0) ?
+//      Form("alien_find -x %s %s/%s *Merged.QA.Data.root", wn.Data(), inputDir.Data(), srun.Data()) :
+//      Form("alien_find -x %s %s/%s/Stage_%d *Merged.QA.Data.root", wn.Data(), inputDir.Data(), srun.Data(), lastStage);
     gSystem->Exec(Form("%s 1> %s 2>/dev/null", find.Data(), wn.Data()));
     gSystem->Exec(Form("grep -c /event %s > __nfiles__", wn.Data()));
     ifstream f2("__nfiles__");
