@@ -13,7 +13,7 @@ SplitArguments = "--run $1 --mode full,MuonOnly --uid #alien_counter# --nevents 
 ValidationCommand = "/alice/cern.ch/user/a/aliprod/LHC18l3/validation.sh";
 OutputDir = "/alice/cern.ch/user/p/ppillot/Sim/LHC17pq/muon_calo_pass1/muTuneCMSH1/pT4GeV/$1/#alien_counter_03i#";
 Output = {
- #   "log_archive.zip:*.log@disk=1",
+#    "log_archive.zip:*.log@disk=1",
     "root_archive.zip:QAresults.root@disk=2"
 };
 OutputErrorE = {
