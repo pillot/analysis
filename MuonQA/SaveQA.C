@@ -10,6 +10,7 @@
 #include <TArrayI.h>
 #include <TString.h>
 #include <TObjString.h>
+#include <TObjArray.h>
 #include <Riostream.h>
 #include <fstream>
 #include "TSystem.h"
