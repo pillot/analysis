@@ -56,7 +56,7 @@ TGraphAsymmErrors* CreateRatioGraph(const char* name, const char* title, TGraphA
   // compute efficiency ratio data/sim
   Int_t nBins = GraphData.GetN();
   TGraphAsymmErrors *ratio = new TGraphAsymmErrors(nBins);
-  Double_t x,effD,effS,effDErrh,effDErrl,effSErrh,effSErrl,rat,ratErrh,ratErrl;
+  Double_t x,effD,effS,effDErrh,effDErrl,effSErrh,effSErrl,rat = 1.,ratErrh = 0.,ratErrl = 0.;
   
   // Set ratio's Xaxis lenght, name and title
   
@@ -553,7 +553,7 @@ void ComparisonDataMC(TString fileNameData, TString fileNameSim, Bool_t integrat
     }
     Int_t nBins2dX = effVSyVSphiData->GetXaxis()->GetNbins();
     Int_t nBins2dY = effVSyVSphiData->GetYaxis()->GetNbins();
-    Double_t effData2D,effSim2D,ratio2D;
+    Double_t effData2D,effSim2D,ratio2D = 1.;
 
     TH2F *effVSphiVSyRatio = new TH2F("RatioEffVSphiVSy","EffData/EffSim vs phi vs y",nBins2dX, effVSyVSphiData->GetXaxis()->GetBinLowEdge(1), effVSyVSphiData->GetXaxis()->GetBinUpEdge(nBins2dX),nBins2dY, effVSyVSphiData->GetYaxis()->GetBinLowEdge(1), effVSyVSphiData->GetYaxis()->GetBinUpEdge(nBins2dY));
     effVSphiVSyRatio->GetXaxis()->SetTitle("phi");
