@@ -26,19 +26,16 @@
 
 #include "AliMpConstants.h"
 
-
 struct preCluster {
   AliMUONVCluster *cluster; // link to the corresponding cluster
   std::list<UInt_t> digitId; // list of digit Ids
   Bool_t compareMe; // kFALSE if already associate to an identical precluster
 };
 
-
 const Int_t nDEs = 157; // 156 + 1 since 1st slote cannot be used (see comment below)
 Int_t iDEmax = 0; // index must start from 1 because TExMap::GetValue(...) return 0 if key not found
 Int_t deIds[nDEs];
 TExMap deIndices;
-
 
 Int_t LoadPreClusters(AliMUONVClusterStore *clusterStore, std::list<preCluster> *preclusters);
 Bool_t GetDifferences(std::list<preCluster> *preclusters1, std::list<preCluster> *preclusters2,
@@ -48,7 +45,6 @@ void PrintDifferences(std::list<preCluster> *preclustersDiff1, std::list<preClus
                       Int_t &integratedNDiff1, Int_t &integratedNDiff2);
 void DrawDifferences(std::list<preCluster> *preclustersDiff1, std::list<preCluster> *preclustersDiff2, const char *outFileName);
 
-
 //------------------------------------------------------------------
 void ComparePreClusters(const char *clusterFileName1, const char *clusterFileName2, Long64_t iEvent = -2)
 {
@@ -56,14 +52,10 @@ void ComparePreClusters(const char *clusterFileName1, const char *clusterFileNam
   /// iEvent <= -2: do not draw
   /// iEvent == -1: draw for all concerned events
   /// iEvent >=  0: draw only for this event (if difference found)
-  /*
-   .x $ALICE_ROOT/MUON/rootlogon.C
-   .x $WORK/Macros/PreClustering/ComparePreClusters.C+
-   */
   
   // load mapping
   AliCDBManager* man = AliCDBManager::Instance();
-  man->SetDefaultStorage("local://$ALICE_ROOT/OCDB");
+  man->SetDefaultStorage("local://$ALIROOT_OCDB_ROOT/OCDB");
   man->SetRun(0);
   if (!AliMUONCDB::LoadMapping()) return;
   
@@ -95,7 +87,10 @@ void ComparePreClusters(const char *clusterFileName1, const char *clusterFileNam
   
   // loop over events
   Long64_t nEvents = treeR1->GetEntries();
-  if (treeR2->GetEntries() != nEvents) return;
+  if (treeR2->GetEntries() != nEvents) {
+    printf("Warning: not the same number of events in the two cluster trees --> try with the smallest one\n");
+    nEvents = TMath::Min(nEvents, treeR2->GetEntries());
+  }
   for (Long64_t iEv = 0; iEv < nEvents; ++iEv) {
     
     printf("Event %lld:\n", iEv);
@@ -425,4 +420,3 @@ void DrawDifferences(std::list<preCluster> *preclustersDiff1, std::list<preClust
   }
   
 }
-

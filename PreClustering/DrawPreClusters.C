@@ -26,27 +26,21 @@
 
 #include "AliMpConstants.h"
 
-
 const Int_t nDEs = 157; // 156 + 1 since 1st slote cannot be used (see comment below)
 Int_t iDEmax = 0; // index must start from 1 because TExMap::GetValue(...) return 0 if key not found
 TExMap deIndices;
 Int_t iCluster[nDEs];
 
-
 //------------------------------------------------------------------
 void DrawPreClusters(const char *clusterFileName, Int_t iEvent, const char *outFileName)
 {
   /// Draw the preclusters in given event
-  /*
-   .x $ALICE_ROOT/MUON/rootlogon.C
-   .x $WORK/Macros/PreClustering/DrawPreClusters.C+(...)
-   */
   
   AliCodeTimerAutoGeneral("",0);
   
   // load mapping
   AliCDBManager* man = AliCDBManager::Instance();
-  man->SetDefaultStorage("local://$ALICE_ROOT/OCDB");
+  man->SetDefaultStorage("local://$ALIROOT_OCDB_ROOT/OCDB");
   man->SetRun(0);
   if (!AliMUONCDB::LoadMapping()) return;
   
@@ -120,7 +114,6 @@ void DrawPreClusters(const char *clusterFileName, Int_t iEvent, const char *outF
   AliCodeTimer::Instance()->Print();
   
   // draw it
-  //gSystem->Exec(Form("mchview --use %s", outFileName));
+  gSystem->Exec(Form("mchview --use %s --ocdb local://$ALIROOT_OCDB_ROOT/OCDB", outFileName));
   
 }
-

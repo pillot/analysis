@@ -20,26 +20,19 @@
 #include "AliMUONVCluster.h"
 #include "AliMUONVClusterStore.h"
 
-
 const Int_t nDEs = 157; // 156 + 1 since 1st slote cannot be used (see comment below)
 Int_t iDEmax = 0; // index must start from 1 because TExMap::GetValue(...) return 0 if key not found
 Int_t deIds[nDEs];
 TExMap deIndices;
 
-
 void FindDigits(AliMUONVClusterStore *clusterStore, AliMUONVDigitStore *digitStore, std::list<UInt_t> *multiUsedDigitId, std::list<UInt_t> *missingDigitId);
 void FindExtraDigits(AliMUONVDigitStore *digitStore, std::list<UInt_t> *extraDigitId);
 void PrintDigits(std::list<UInt_t> *digitId, const Char_t* type);
-
 
 //------------------------------------------------------------------
 void CheckPreClusters(const char *clusterFileName, const char *digitFileName)
 {
   /// Check that the preclusters contains all and only once the digits
-  /*
-   .x $ALICE_ROOT/MUON/rootlogon.C
-   .x $WORK/Macros/PreClustering/CheckPreClusters.C+
-   */
   
   // read clusters
   TFile* clusterFile = new TFile(clusterFileName);
@@ -63,7 +56,10 @@ void CheckPreClusters(const char *clusterFileName, const char *digitFileName)
   
   // loop over events
   Long64_t nEvents = treeR->GetEntries();
-  if (treeD->GetEntries() != nEvents) return;
+  if (treeD->GetEntries() != nEvents) {
+    printf("Warning: not the same number of events in the cluster and the digit trees --> try with the smallest one\n");
+    nEvents = TMath::Min(nEvents, treeD->GetEntries());
+  }
   for (Long64_t iEv = 0; iEv < nEvents; ++iEv) {
     
     treeR->GetEntry(iEv);
@@ -197,4 +193,3 @@ void PrintDigits(std::list<UInt_t> *digitId, const Char_t* type)
   }
   
 }
-
