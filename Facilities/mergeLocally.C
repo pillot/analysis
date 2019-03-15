@@ -33,6 +33,7 @@
 #include "TFileMergeInfo.h"
 #include "TClonesArray.h"
 #include "TList.h"
+
 #endif
 
 TList paramContainers;
@@ -62,15 +63,18 @@ void mergeLocally(TString fileList = "fileList.txt", Bool_t skipParamContainers 
   paramContainers.AddLast(new TObjString("ClustersCounters"));
   // QA task
   paramContainers.AddLast(new TObjString("general2"));
-  
+  // resolution task
+  paramContainers.AddLast(new TObjString("LocalChi2"));
+  paramContainers.AddLast(new TObjString("ChamberRes"));
+
   // load potentially needed libraries
-  gROOT->LoadMacro("$HOME/Work/Alice/Macros/Facilities/runTaskFacilities.C");
-  TString extraLibs="";
-  TString extraPkgs="";
+    gROOT->LoadMacro("$HOME/Work/Alice/Macros/Facilities/runTaskFacilities.C");
+		TString extraLibs="";
+		TString extraPkgs="";
 //  TString extraPkgs="PWGPPMUONdep:PWGPPMUONlite";
 //  TString extraPkgs="PWGPPMUONdep:PWGPPMUONlite:PWGmuondep";
-  gROOT->ProcessLineFast(Form("LoadAlirootLocally\(\"%s\", \"\", \"\", \"%s\"",extraLibs.Data(),extraPkgs.Data()));
-//  gROOT->ProcessLineFast(Form("LoadAlirootLocally\(\"%s\", \"include\", \"AliAnalysisTaskJPsi:AliAnalysisTaskMTRSign\"",extraLibs.Data()));
+    gROOT->ProcessLineFast(Form("LoadAlirootLocally(\"%s\", \"\", \"\", \"%s\")",extraLibs.Data(),extraPkgs.Data()));
+	//  gROOT->ProcessLineFast(Form("LoadAlirootLocally(\"%s\", \"include\", \"AliAnalysisTaskJPsi:AliAnalysisTaskMTRSign\")",extraLibs.Data()));
   
   // open the file list
   ifstream inFile(fileList.Data());
@@ -94,7 +98,9 @@ void mergeLocally(TString fileList = "fileList.txt", Bool_t skipParamContainers 
     // in case the file list is in fact a run list
     if (runList) {
       currFile.Prepend("./runs/");
-      currFile += "/AnalysisResults.root";
+//      currFile += "/AnalysisResults.root";
+      currFile += "/QAresults.root";
+//      currFile += "/chamberResolution_step2.root";
     }
     
     // pick up the fileName if not already done
@@ -292,6 +298,9 @@ Bool_t MergeRecursive(TDirectory *target, TList *sourcelist, Int_t type)
       
       while ( (key = (TKey*)nextkey())) {
 	
+        // only merge MUON outputs
+        if (!path.Contains("MUON") && !strstr(key->GetName(),"MUON")) continue;
+
 	// skip the kParamContainer
 	Bool_t pcFound = kFALSE;
 	TIter nextpc(&paramContainers);
