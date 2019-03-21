@@ -18,6 +18,7 @@
 #include <THashList.h>
 #include <TParameter.h>
 #include <TLegend.h>
+#include <TMath.h>
 #include "AliCounterCollection.h"
 
 // kinematics range for histogram projection (pT, y, phi, charge)
@@ -262,7 +263,7 @@ void SetCentRange(THnSparse& hKine, const Float_t centRange[2])
   
   TAxis *a = hKine.GetAxis(0);
   Int_t lowBin = a->FindBin(centRange[0]);
-  Int_t upBin = a->FindBin(centRange[1]);
+  Int_t upBin = a->FindBin(TMath::Max(centRange[1] - 0.1f, centRange[0]));
   a->SetRange(lowBin, upBin);
   
 }
