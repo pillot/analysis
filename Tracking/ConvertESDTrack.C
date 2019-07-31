@@ -82,8 +82,14 @@ void ConvertESDTrack(TString esdFileName, TString outFileName = "AliESDs.in", Bo
     
     // need OCDB access for refitting
     if (iEvent == 0 && refit) {
-      AliCDBManager::Instance()->SetDefaultStorage("local://./OCDB");
-      AliCDBManager::Instance()->SetRun(esd->GetRunNumber());
+      AliCDBManager *man = AliCDBManager::Instance();
+      if (gSystem->AccessPathName("OCDB.root", kFileExists)==0) {
+        man->SetDefaultStorage("local:///dev/null");
+        man->SetSnapshotMode("OCDB.root");
+      } else {
+        man->SetDefaultStorage("local://./OCDB");
+      }
+      man->SetRun(esd->GetRunNumber());
       auto field =
       o2::field::MagneticField::createFieldMap(-30000., -5999.95, o2::field::MagneticField::kConvLHC, false, 3500., "A-A",
                                                "$(O2_ROOT)/share/Common/maps/mfchebKGI_sym.root");
