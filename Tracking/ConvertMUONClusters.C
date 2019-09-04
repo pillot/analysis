@@ -1,6 +1,7 @@
 #include <fstream>
 #include <iostream>
 #include <chrono>
+#include <list>
 
 #include <TString.h>
 #include <TFile.h>
@@ -162,8 +163,25 @@ void ConvertMUONClusters(int runNumber, TString inFileName, TString outFileName 
       // by resetting it to a float the resolution used both in O2 and AliRoot is the same and so are the tracks
       TIter nextCl(clusterStore->CreateIterator());
       AliMUONVCluster* cl(nullptr);
+      int iCl(0);
+      std::list<uint32_t> clustersToRemove{};
       while ((cl = static_cast<AliMUONVCluster*>(nextCl()))) {
         cl->SetErrXY((float)cl->GetErrX(), (float)cl->GetErrY());
+        // find duplicate clusters (same position but different Id)
+        TIter nextCl2(clusterStore->CreateIterator());
+        AliMUONVCluster* cl2(nullptr);
+        int iCl2(-1);
+        while ((cl2 = static_cast<AliMUONVCluster*>(nextCl2()))) {
+          if (++iCl2 > iCl && cl2->GetX() == cl->GetX() && cl2->GetY() == cl->GetY() && cl2->GetZ() == cl->GetZ()) {
+            clustersToRemove.push_back(cl->GetUniqueID());
+            break;
+          }
+        }
+        ++iCl;
+      }
+      // remove duplicate clusters
+      for (const auto& id : clustersToRemove) {
+        clusterStore->Remove(*(clusterStore->FindObject(id)));
       }
     }
 
@@ -318,6 +336,7 @@ AliMUONVTrackReconstructor* CreateTrackReconstructor(int runNumber)
   //recoParam->RecoverTracks(false);
   //recoParam->ComplementTracks(false);
   //recoParam->ImproveTracks(false);
+  recoParam->SetMaxTrackCandidates(1000000);
 
   AliMUONGeometryTransformer* transformer = nullptr;
   if (discardMonoCathodClusters) {
@@ -388,7 +407,7 @@ void WriteTracks(AliMUONVTrackStore& trackStore, ofstream& outFile)
   AliMUONTrack* track(nullptr);
   TIter next(trackStore.CreateIterator());
   while ((track = static_cast<AliMUONTrack*>(next()))) {
-    size += sizeof(TrackParamStruct) + sizeof(int) + track->GetNClusters() * sizeof(ClusterStruct);
+    size += sizeof(TrackParamStruct) + sizeof(double) + sizeof(int) + track->GetNClusters() * sizeof(ClusterStruct);
   }
   outFile.write((char*)&size, sizeof(int));
 
@@ -401,6 +420,9 @@ void WriteTracks(AliMUONVTrackStore& trackStore, ofstream& outFile)
     AliMUONTrackParam* param(static_cast<AliMUONTrackParam*>(track->GetTrackParamAtCluster()->First()));
     MUONToO2(*param, o2TrackParam);
     outFile.write((char*)&o2TrackParam, sizeof(TrackParamStruct));
+
+    double chi2 = track->GetGlobalChi2();
+    outFile.write((char*)&chi2, sizeof(double));
 
     int nClusters(track->GetNClusters());
     outFile.write((char*)&nClusters, sizeof(int));
