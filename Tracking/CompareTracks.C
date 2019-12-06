@@ -86,10 +86,11 @@ struct TrackStruct {
 
 //_________________________________________________________________________________________________
 int ReadNextEvent(ifstream& inFile, std::vector<VertexStruct>& vertices);
-int ReadNextEvent(ifstream& inFile, std::vector<VertexStruct>& vertices, std::vector<TrackStruct>& tracks, int version);
+int ReadNextEvent(ifstream& inFile, int version, std::vector<VertexStruct>& vertices, bool selectTracks, std::vector<TrackStruct>& tracks);
 void ReadTrack(ifstream& inFile, TrackStruct& track, int version);
 bool LoadOCDB();
 void ExtrapToVertex(TrackStruct& track, VertexStruct& vertex);
+bool IsSelected(TrackStruct& track);
 int CompareEvents(std::vector<TrackStruct>& tracks1, std::vector<TrackStruct>& tracks2, double precision, bool printAll, std::vector<TH1*>& histos);
 bool AreTrackParamCompatible(const TrackParamStruct& param1, const TrackParamStruct& param2, double precision);
 int PrintEvent(const std::vector<TrackStruct>& tracks);
@@ -107,7 +108,7 @@ void DrawComparisonsAtVertex(std::vector<TH1*> histos[4]);
 
 //_________________________________________________________________________________________________
 void CompareTracks(string inFileName1, int versionFile1, string inFileName2, int versionFile2,
-                   string vtxFileName = "", double precision = 1.e-4, bool printAll = false)
+                   string vtxFileName = "", double precision = 1.e-4, bool selectTracks = false, bool printAll = false)
 {
   /// Compare the tracks stored in the 2 binary files
   
@@ -158,12 +159,12 @@ void CompareTracks(string inFileName1, int versionFile1, string inFileName2, int
   while (true) {
 
     if (readNextEvent1) {
-      event1 = ReadNextEvent(inFile1, vertices, tracks1, versionFile1);
+      event1 = ReadNextEvent(inFile1, versionFile1, vertices, selectTracks, tracks1);
       FillHistosAtVertex(tracks1, histosAtVertex[0]);
     }
 
     if (readNextEvent2) {
-      event2 = ReadNextEvent(inFile2, vertices, tracks2, versionFile2);
+      event2 = ReadNextEvent(inFile2, versionFile2, vertices, selectTracks, tracks2);
       FillHistosAtVertex(tracks2, histosAtVertex[1]);
     }
 
@@ -234,7 +235,7 @@ int ReadNextEvent(ifstream& inFile, std::vector<VertexStruct>& vertices)
 }
 
 //_________________________________________________________________________________________________
-int ReadNextEvent(ifstream& inFile, std::vector<VertexStruct>& vertices, std::vector<TrackStruct>& tracks, int version)
+int ReadNextEvent(ifstream& inFile, int version, std::vector<VertexStruct>& vertices, bool selectTracks, std::vector<TrackStruct>& tracks)
 {
   /// read the next event in the input file
 
@@ -271,7 +272,9 @@ int ReadNextEvent(ifstream& inFile, std::vector<VertexStruct>& vertices, std::ve
   for (Int_t iTrack = 0; iTrack < nTracks; ++iTrack) {
     ReadTrack(inFile, track, version);
     ExtrapToVertex(track, vertex);
-    tracks.push_back(track);
+    if (!selectTracks || IsSelected(track)) {
+      tracks.push_back(track);
+    }
   }
 
   return event;
@@ -325,6 +328,10 @@ void ExtrapToVertex(TrackStruct& track, VertexStruct& vertex)
 {
   /// compute the track parameters at vertex, at DCA and at the end of the absorber
 
+  if (!AliGeomManager::GetGeometry()) {
+    return;
+  }
+
   static const double muMass = TDatabasePDG::Instance()->GetParticle("mu-")->Mass();
 
   // convert parameters at first cluster in MUON format
@@ -357,6 +364,42 @@ void ExtrapToVertex(TrackStruct& track, VertexStruct& vertex)
   double xAbs = trackParam.GetNonBendingCoor();
   double yAbs = trackParam.GetBendingCoor();
   track.rAbs = TMath::Sqrt(xAbs*xAbs + yAbs*yAbs);
+}
+
+//_________________________________________________________________________________________________
+bool IsSelected(TrackStruct& track)
+{
+  /// apply standard track selections + pDCA
+
+  static const double sigmaPDCA23 = 80.;
+  static const double sigmaPDCA310 = 54.;
+  static const double nSigmaPDCA = 6.;
+  static const double relPRes = 0.0004;
+  static const double slopeRes = 0.0005;
+
+  double thetaAbs = TMath::ATan(track.rAbs/505.) * TMath::RadToDeg();
+  if (thetaAbs < 2. || thetaAbs > 10.) {
+    return false;
+  }
+
+  double eta = track.pxpypzm.Eta();
+  if (eta < -4. || eta > -2.5) {
+    return false;
+  }
+
+  double pUncorr = TMath::Sqrt(track.param.px*track.param.px + track.param.py*track.param.py + track.param.pz*track.param.pz);
+  double pDCA = pUncorr * track.dca;
+  double sigmaPDCA = (thetaAbs < 3) ? sigmaPDCA23 : sigmaPDCA310;
+  double pTot = track.pxpypzm.P();
+  double nrp = nSigmaPDCA * relPRes * pTot;
+  double pResEffect = sigmaPDCA / (1. - nrp / (1. + nrp));
+  double slopeResEffect = 535. * slopeRes * pTot;
+  double sigmaPDCAWithRes = TMath::Sqrt(pResEffect*pResEffect + slopeResEffect*slopeResEffect);
+  if (pDCA > nSigmaPDCA * sigmaPDCAWithRes) {
+    return false;
+  }
+
+  return true;
 }
 
 //_________________________________________________________________________________________________
@@ -551,8 +594,8 @@ void CreateHistosAtVertex(std::vector<TH1*>& histos, const char* extension)
     histos.emplace_back(new TH1F(Form("rapidity%s",extension), "rapidity;rapidity", 200, -4.5, -2.));
     histos.emplace_back(new TH1F(Form("rAbs%s",extension), "rAbs;R_{abs} (cm)", 1000, 0., 100.));
     histos.emplace_back(new TH1F(Form("dca%s",extension), "DCA;DCA (cm)", 500, 0., 500.));
-    histos.emplace_back(new TH1F(Form("pDCA23%s",extension), "pDCA in 2#circ < #theta_{abs} < 3#circ;pDCA (GeV.cm/c)", 2500, 0., 5000.));
-    histos.emplace_back(new TH1F(Form("pDCA310%s",extension), "pDCA in 3#circ < #theta_{abs} < 10#circ;pDCA (GeV.cm/c)", 2500, 0., 5000.));
+    histos.emplace_back(new TH1F(Form("pDCA23%s",extension), "pDCA for #theta_{abs} < 3#circ;pDCA (GeV.cm/c)", 2500, 0., 5000.));
+    histos.emplace_back(new TH1F(Form("pDCA310%s",extension), "pDCA for #theta_{abs} > 3#circ;pDCA (GeV.cm/c)", 2500, 0., 5000.));
     histos.emplace_back(new TH1F(Form("nClusters%s",extension), "number of clusters per track;n_{clusters}", 20, 0., 20.));
     histos.emplace_back(new TH1F(Form("chi2%s",extension), "normalized #chi^{2};#chi^{2} / ndf", 500, 0., 50.));
     histos.emplace_back(new TH1F(Form("mass%s",extension), "#mu^{+}#mu^{-} invariant mass;mass (GeV/c^{2})", 1600, 0., 20.));
@@ -577,15 +620,16 @@ void FillHistosMuAtVertex(const TrackStruct& track, std::vector<TH1*>& histos)
   /// fill single muon histograms at vertex
 
   double thetaAbs = TMath::ATan(track.rAbs/505.) * TMath::RadToDeg();
-  double pDCA = track.pxpypzm.P() * track.dca;
+  double pUncorr = TMath::Sqrt(track.param.px*track.param.px + track.param.py*track.param.py + track.param.pz*track.param.pz);
+  double pDCA = pUncorr * track.dca;
   
   histos[0]->Fill(track.pxpypzm.Pt());
   histos[1]->Fill(track.pxpypzm.Rapidity());
   histos[2]->Fill(track.rAbs);
   histos[3]->Fill(track.dca);
-  if (thetaAbs > 2 && thetaAbs < 3) {
+  if (thetaAbs < 3) {
     histos[4]->Fill(pDCA);
-  } else if (thetaAbs >= 3 && thetaAbs < 10) {
+  } else {
     histos[5]->Fill(pDCA);
   }
   histos[6]->Fill(track.clusters.size());
