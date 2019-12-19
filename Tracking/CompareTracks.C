@@ -26,6 +26,8 @@ using namespace std;
 using namespace o2::mch;
 using namespace ROOT::Math;
 
+static const double muMass = TDatabasePDG::Instance()->GetParticle("mu-")->Mass();
+
 //_________________________________________________________________________________________________
 struct VertexStruct {
   double x;
@@ -111,7 +113,10 @@ void CompareTracks(string inFileName1, int versionFile1, string inFileName2, int
                    string vtxFileName = "", double precision = 1.e-4, bool selectTracks = false, bool printAll = false)
 {
   /// Compare the tracks stored in the 2 binary files
-  
+  /// file version 1: param at 1st cluster + clusters
+  /// file version 2: param at 1st cluster + chi2 + clusters
+  /// file version 3: param at vertex + dca +rAbs + chi2 + param at 1st cluster + clusters
+
   // get vertices and prepare track extrapolation
   std::vector<VertexStruct> vertices{};
   if (!vtxFileName.empty()) {
@@ -127,7 +132,7 @@ void CompareTracks(string inFileName1, int versionFile1, string inFileName2, int
         return;
       }
     }
-    if(!LoadOCDB()) {
+    if ((versionFile1 < 3 || versionFile2 < 3) && !LoadOCDB()) {
       cout << "fail loading OCDB objects for track extrapolation" << endl;
       return;
     }
@@ -271,7 +276,9 @@ int ReadNextEvent(ifstream& inFile, int version, std::vector<VertexStruct>& vert
   TrackStruct track{};
   for (Int_t iTrack = 0; iTrack < nTracks; ++iTrack) {
     ReadTrack(inFile, track, version);
-    ExtrapToVertex(track, vertex);
+    if (version < 3) {
+      ExtrapToVertex(track, vertex);
+    }
     if (!selectTracks || IsSelected(track)) {
       tracks.push_back(track);
     }
@@ -284,10 +291,25 @@ int ReadNextEvent(ifstream& inFile, int version, std::vector<VertexStruct>& vert
 void ReadTrack(ifstream& inFile, TrackStruct& track, int version)
 {
   /// read one track from the input file
+
+  if (version > 2) {
+    TrackParamStruct paramAtVtx{};
+    inFile.read(reinterpret_cast<char*>(&paramAtVtx), sizeof(TrackParamStruct));
+    track.pxpypzm.SetPx(paramAtVtx.px);
+    track.pxpypzm.SetPy(paramAtVtx.py);
+    track.pxpypzm.SetPz(paramAtVtx.pz);
+    track.pxpypzm.SetM(muMass);
+    track.sign = paramAtVtx.sign;
+    inFile.read(reinterpret_cast<char*>(&(track.dca)), sizeof(double));
+    inFile.read(reinterpret_cast<char*>(&(track.rAbs)), sizeof(double));
+  }
+
   inFile.read(reinterpret_cast<char*>(&(track.param)), sizeof(TrackParamStruct));
+
   if (version > 1) {
     inFile.read(reinterpret_cast<char*>(&(track.chi2)), sizeof(double));
   }
+
   int nClusters(0);
   inFile.read(reinterpret_cast<char*>(&nClusters), sizeof(int));
   track.clusters.resize(nClusters);
@@ -331,8 +353,6 @@ void ExtrapToVertex(TrackStruct& track, VertexStruct& vertex)
   if (!AliGeomManager::GetGeometry()) {
     return;
   }
-
-  static const double muMass = TDatabasePDG::Instance()->GetParticle("mu-")->Mass();
 
   // convert parameters at first cluster in MUON format
   AliMUONTrackParam trackParam;
