@@ -45,7 +45,10 @@ void ScanHV(TString runList, TString ocdbPath = "raw://", Bool_t allIssues = kFA
 {
   /// Scan the HV of every sectors to check for "1400V issues".
   /// if allIssues = kTRUE, look for all cases where HV < RecoParam limit more than 15s
-  
+
+  //AliCDBManager::Instance()->SetDefaultStorage(ocdbPath.Data());
+  //AliCDBManager::Instance()->SetRun(296304);
+  //AliCDBManager::Instance()->SetSpecificStorage("MUON/Calib/HV", "local://OCDB");
   AliMUONTrackerHV hv(runList.Data(), ocdbPath.Data());
   
   hv.Plot("");
@@ -287,8 +290,11 @@ Bool_t isKnown(Int_t run, TString dcsName)
   if (gSystem->AccessPathName("CheckHVLogs")) gSystem->Exec("mkdir -p CheckHVLogs");
   
   TString log(TString::Format("CheckHVLogs/%d.log",run));
-  if (gSystem->AccessPathName(log.Data()))
-    gROOT->ProcessLineSync(TString::Format("AliMUONCDB::CheckHV(%d); > %s",run,log.Data()));
+  if (gSystem->AccessPathName(log.Data())) {
+    gROOT->ProcessLineSync(TString::Format(".> %s", log.Data()));
+    gROOT->ProcessLineSync(TString::Format("AliMUONCDB::CheckHV(%d)", run));
+    gROOT->ProcessLineSync(".>");
+  }
   
   TString dcsAlias = dcsHelper.DCSAliasFromName(dcsName);
   return (!gSystem->Exec(TString::Format("grep -c \"Problem at %s\" %s > /dev/null",dcsAlias.Data(),log.Data())));
