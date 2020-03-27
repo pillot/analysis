@@ -9,14 +9,26 @@
 #include "AliMUONVDigit.h"
 #include "AliMUONVDigitStore.h"
 
-#include "MCHBase/DigitBlock.h"
+struct DataBlockHeader {
+   uint16_t fType;        // The type of the data block. Must contain a value defined by DataBlockType.
+   uint16_t fRecordWidth; // The number of bytes each record uses.
+   uint32_t fNrecords;    // Number of records in this data block.
+ };
 
-using namespace o2::mch;
+  struct DigitBlock {
+   DataBlockHeader header; // Common data block header
+ };
 
+  struct DigitStruct {
+   uint32_t uid;   // Digit ID in the current mapping (from OCDB)
+   uint16_t index; // Digit index in the new mapping (produced internally)
+   uint16_t adc;   // ADC value of signal
+ };
+ 
 //------------------------------------------------------------------
 void ConvertAliRootDigits(TString inFileName, TString outFileName = "digits.in")
 {
-  /// Convert AliRoot digits to O2 digits
+  /// Convert AliRoot digits to O2 digits (old format)
   /// saved in a binary file with the following format:
   ///
   /// DigitBlock 1
