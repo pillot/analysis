@@ -8,17 +8,30 @@
 #include "AliMUONVCluster.h"
 #include "AliMUONClusterStoreV2.h"
 
-#include "MCHBase/PreClusterBlock.h"
-#include "MCHBase/DigitBlock.h"
+struct DataBlockHeader {
+   uint16_t fType;        // The type of the data block. Must contain a value defined by DataBlockType.
+   uint16_t fRecordWidth; // The number of bytes each record uses.
+   uint32_t fNrecords;    // Number of records in this data block.
+ };
 
-using namespace o2::mch;
+  struct DigitBlock {
+   DataBlockHeader header; // Common data block header
+ };
+
+  struct DigitStruct {
+   uint32_t uid;   // Digit ID in the current mapping (from OCDB)
+   uint16_t index; // Digit index in the new mapping (produced internally)
+   uint16_t adc;   // ADC value of signal
+ };
+ 
+#include "PreClusterBlock.cxx"
 
 void StorePreclusters(int deId, const PreClusterBlock& preClusterBlock, AliMUONClusterStoreV2* clusterStore);
 
 //------------------------------------------------------------------
 void ConvertO2PreClusters(TString inFileName, TString outFileName = "preclusters.root")
 {
-  /// Convert O2 preclusters to AliRoot clusters
+  /// Convert O2 preclusters (old format) to AliRoot clusters
   /// input binary file with the following format:
   ///
   /// Number of DE with preclusters
