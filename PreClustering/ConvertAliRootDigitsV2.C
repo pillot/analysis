@@ -1,3 +1,4 @@
+#include <iostream>
 #include <fstream>
 #include <vector>
 
@@ -12,6 +13,7 @@
 #include "MCHBase/Digit.h"
 
 using namespace o2::mch;
+using namespace std;
 
 //------------------------------------------------------------------
 void ConvertAliRootDigitsV2(TString inFileName, TString outFileName = "digits.v2.in")
@@ -52,7 +54,10 @@ void ConvertAliRootDigitsV2(TString inFileName, TString outFileName = "digits.v2
     AliMUONVDigit *digit(nullptr);
     while ((digit = static_cast<AliMUONVDigit*>(digitIt->Next()))) {
       if (digit->Charge() <= 0) continue;
-      digits.push_back({0., digit->DetElemId(), static_cast<int>(digit->GetUniqueID()), static_cast<unsigned long>(digit->ADC())});
+//      if (digit->Charge() > 610) cout << digit->Charge() << endl;
+      unsigned long charge = (digit->Charge() / 1024) * ULONG_MAX;
+      Digit::Time time{static_cast<uint64_t>(digit->IsSaturated() ? 1 : 0)};
+      digits.push_back({digit->DetElemId(), static_cast<int>(digit->GetUniqueID()), charge, time});
     }
 
     // write the number of digits
