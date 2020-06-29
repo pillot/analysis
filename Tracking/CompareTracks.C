@@ -19,14 +19,28 @@
 #include "AliMUONTrackExtrap.h"
 #include "AliMUONTrackParam.h"
 
-#include "MCHBase/ClusterBlock.h"
 #include "MCHBase/TrackBlock.h"
+
+struct ClusterStruct {
+  float x;             ///< cluster position along x
+  float y;             ///< cluster position along y
+  float z;             ///< cluster position along z
+  float ex;            ///< cluster resolution along x
+  float ey;            ///< cluster resolution along y
+  uint32_t uid;        ///< cluster unique ID
+
+  /// Return the chamber ID (0..), part of the unique ID
+  int getChamberId() const { return (uid & 0xF0000000) >> 28; }
+  /// Return the detection element ID, part of the unique ID
+  int getDEId() const { return (uid & 0x0FFE0000) >> 17; }
+};
 
 using namespace std;
 using namespace o2::mch;
 using namespace ROOT::Math;
 
 static const double muMass = TDatabasePDG::Instance()->GetParticle("mu-")->Mass();
+double chi2Max = 2. * 4. * 4.;
 
 //_________________________________________________________________________________________________
 struct VertexStruct {
@@ -49,12 +63,20 @@ struct TrackStruct {
 
   bool operator==(const TrackStruct& track) const
   {
-    /// tracks are considered identical when they share exactly the same clusters
+    /// tracks are considered identical when all their clusters match within chi2Max
     if (this->clusters.size() != track.clusters.size()) {
       return false;
     }
     for (size_t iCl = 0; iCl != this->clusters.size(); ++iCl) {
-      if (this->clusters[iCl].uid != track.clusters[iCl].uid) {
+      auto& cl1 = this->clusters[iCl];
+      auto& cl2 = track.clusters[iCl];
+      if (cl1.getDEId() != cl2.getDEId()) {
+        return false;
+      }
+      double dx = cl1.x - cl2.x;
+      double dy = cl1.y - cl2.y;
+      double chi2 = dx * dx / (cl1.ex * cl1.ex + cl2.ex * cl2.ex) + dy * dy / (cl1.ey * cl1.ey + cl2.ey * cl2.ey);
+      if (chi2 > chi2Max) {
         return false;
       }
     }
@@ -70,16 +92,21 @@ struct TrackStruct {
     size_t nMatchClusters(0);
     bool matchCluster[10] = {false, false, false, false, false, false, false, false, false, false};
 
-    for(const auto& cluster1 : this->clusters) {
-      for(const auto& cluster2 : track.clusters) {
-        if (cluster1.uid == cluster2.uid) {
-          matchCluster[cluster1.getChamberId()] = true;
-          ++nMatchClusters;
-          break;
+    for (const auto& cl1 : this->clusters) {
+      for(const auto& cl2 : track.clusters) {
+        if (cl1.getDEId() == cl2.getDEId()) {
+          double dx = cl1.x - cl2.x;
+          double dy = cl1.y - cl2.y;
+          double chi2 = dx * dx / (cl1.ex * cl1.ex + cl2.ex * cl2.ex) + dy * dy / (cl1.ey * cl1.ey + cl2.ey * cl2.ey);
+          if (chi2 < chi2Max) {
+            matchCluster[cl1.getChamberId()] = true;
+            ++nMatchClusters;
+            break;
+          }
         }
       }
     }
-  
+
     return ((matchCluster[0] || matchCluster[1] || matchCluster[2] || matchCluster[3]) &&
             (matchCluster[6] || matchCluster[7] || matchCluster[8] || matchCluster[9]) &&
             (2 * nMatchClusters > this->clusters.size() || 2 * nMatchClusters > track.clusters.size()));
@@ -116,6 +143,7 @@ void CompareTracks(string inFileName1, int versionFile1, string inFileName2, int
   /// file version 1: param at 1st cluster + clusters
   /// file version 2: param at 1st cluster + chi2 + clusters
   /// file version 3: param at vertex + dca +rAbs + chi2 + param at 1st cluster + clusters
+  /// file version 4: param at vertex + dca +rAbs + chi2 + param at 1st cluster + clusters (new version)
 
   // get vertices and prepare track extrapolation
   std::vector<VertexStruct> vertices{};
@@ -132,10 +160,12 @@ void CompareTracks(string inFileName1, int versionFile1, string inFileName2, int
         return;
       }
     }
-    if ((versionFile1 < 3 || versionFile2 < 3) && !LoadOCDB()) {
-      cout << "fail loading OCDB objects for track extrapolation" << endl;
-      return;
-    }
+  }
+
+  // load OCDB if needed
+  if ((versionFile1 < 3 || versionFile2 < 3) && !LoadOCDB()) {
+    cout << "fail loading OCDB objects for track extrapolation" << endl;
+    return;
   }
 
   // open files
@@ -315,6 +345,11 @@ void ReadTrack(ifstream& inFile, TrackStruct& track, int version)
   track.clusters.resize(nClusters);
   for (Int_t iCl = 0; iCl < nClusters; ++iCl) {
     inFile.read(reinterpret_cast<char*>(&(track.clusters[iCl])), sizeof(ClusterStruct));
+    if (version > 3) {
+      uint32_t dummy(0);
+      inFile.read(reinterpret_cast<char*>(&dummy), sizeof(uint32_t));
+      inFile.read(reinterpret_cast<char*>(&dummy), sizeof(uint32_t));
+    }
   }
 }
 
@@ -330,7 +365,7 @@ bool LoadOCDB()
   } else {
     man->SetDefaultStorage("local://./OCDB");
   }
-  man->SetRun(295584);
+  man->SetRun(169099);
 
   if (!AliMUONCDB::LoadField()) {
     return false;
