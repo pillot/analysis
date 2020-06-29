@@ -8,6 +8,7 @@
 
 #include <stdio.h>
 #include <list>
+#include <iterator>
 
 #include <TFile.h>
 #include <TTree.h>
@@ -38,6 +39,7 @@ Int_t deIds[nDEs];
 TExMap deIndices;
 
 Int_t LoadPreClusters(AliMUONVClusterStore *clusterStore, std::list<preCluster> *preclusters);
+Int_t RemoveDuplicates(std::list<preCluster> *preclusters);
 Bool_t GetDifferences(std::list<preCluster> *preclusters1, std::list<preCluster> *preclusters2,
                       std::list<preCluster> *preclustersDiff1, std::list<preCluster> *preclustersDiff2);
 Bool_t AreIdentical(preCluster &cl1, preCluster &cl2);
@@ -46,13 +48,15 @@ void PrintDifferences(std::list<preCluster> *preclustersDiff1, std::list<preClus
 void DrawDifferences(std::list<preCluster> *preclustersDiff1, std::list<preCluster> *preclustersDiff2, const char *outFileName);
 
 //------------------------------------------------------------------
-void ComparePreClusters(const char *clusterFileName1, const char *clusterFileName2, Long64_t iEvent = -2)
+void ComparePreClusters(const char *clusterFileName1, const char *clusterFileName2, bool removeDuplicates = false, Long64_t iEvent = -2)
 {
   /// Compare the preclusters between the two input files
+  /// if removeDuplicates == true: keep only one instance of each precluster
+  /// (in case several clusters are reconstructed out of the same precluster)
   /// iEvent <= -2: do not draw
   /// iEvent == -1: draw for all concerned events
   /// iEvent >=  0: draw only for this event (if difference found)
-  
+
   // load mapping
   AliCDBManager* man = AliCDBManager::Instance();
   man->SetDefaultStorage("local://$ALIROOT_OCDB_ROOT/OCDB");
@@ -99,7 +103,9 @@ void ComparePreClusters(const char *clusterFileName1, const char *clusterFileNam
     treeR2->GetEntry(iEv);
     
     Int_t nPreclusters1 = LoadPreClusters(clusterStore1, preclusters1);
+    if (removeDuplicates) nPreclusters1 -= RemoveDuplicates(preclusters1);
     Int_t nPreclusters2 = LoadPreClusters(clusterStore2, preclusters2);
+    if (removeDuplicates) nPreclusters2 -= RemoveDuplicates(preclusters2);
     printf("\tTotal number of preclusters = %d / %d\n", nPreclusters1, nPreclusters2);
     
     Bool_t differenceFound = GetDifferences(preclusters1, preclusters2, preclustersDiff1, preclustersDiff2);
@@ -161,6 +167,26 @@ Int_t LoadPreClusters(AliMUONVClusterStore *clusterStore, std::list<preCluster> 
   
   return nPreclusters;
   
+}
+
+//------------------------------------------------------------------
+Int_t RemoveDuplicates(std::list<preCluster> *preclusters)
+{
+  /// keep only one instance of each precluster in the list
+  Int_t nRemoved(0);
+  for (Int_t iDE = 1; iDE <= iDEmax; iDE++) {
+    for (auto clusterIt1 = preclusters[iDE].begin(); clusterIt1 != preclusters[iDE].end(); ++clusterIt1) {
+      for (auto clusterIt2 = std::next(clusterIt1); clusterIt2 != preclusters[iDE].end();) {
+        if (AreIdentical(*clusterIt1, *clusterIt2)) {
+          clusterIt2 = preclusters[iDE].erase(clusterIt2);
+          ++nRemoved;
+        } else {
+          ++clusterIt2;
+        }
+      }
+    }
+  }
+  return nRemoved;
 }
 
 //------------------------------------------------------------------
