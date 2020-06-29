@@ -24,9 +24,9 @@ using namespace o2::mch;
 
 //_________________________________________________________________________________________________
 struct VertexStruct {
-  double x;
-  double y;
-  double z;
+  double x = 0.;
+  double y = 0.;
+  double z = 0.;
 };
 
 //_________________________________________________________________________________________________
@@ -67,10 +67,17 @@ void ExtrapToVertex(string trackFileName, int versionFile, string vtxFileName)
 
   // open files
   ifstream inFileTrack(trackFileName, ios::binary);
-  ifstream inFileVtx(vtxFileName, ios::binary);
-  if (!inFileTrack.is_open() || !inFileVtx.is_open()) {
-    cout << "fail opening files" << endl;
+  if (!inFileTrack.is_open()) {
+    cout << "fail opening track file" << endl;
     return;
+  }
+  ifstream inFileVtx{};
+  if (!vtxFileName.empty()) {
+    inFileVtx.open(vtxFileName, ios::binary);
+    if (!inFileVtx.is_open()) {
+      cout << "fail opening vertex file" << endl;
+      return;
+    }
   }
   ofstream outFileTrack("O2Tracks.vtx", ios::out | ios::binary);
   if (!outFileTrack.is_open()) {
@@ -83,7 +90,7 @@ void ExtrapToVertex(string trackFileName, int versionFile, string vtxFileName)
 
     // get vertex and tracks
     int event1 = ReadNextEvent(inFileTrack, versionFile, tracks);
-    int event2 = ReadNextEvent(inFileVtx, vertex);
+    int event2 = vtxFileName.empty() ? event1 : ReadNextEvent(inFileVtx, vertex);
 
     if (event1 < 0 && event2 < 0) {
       // reaching end of both files
@@ -122,7 +129,7 @@ bool LoadOCDB()
   } else {
     man->SetDefaultStorage("local://./OCDB");
   }
-  man->SetRun(295584);
+  man->SetRun(169099);
 
   if (!SetMagField()) {
 //  if (!AliMUONCDB::LoadField()) {
