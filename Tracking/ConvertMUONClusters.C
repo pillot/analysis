@@ -54,13 +54,12 @@ void ConvertMUONClusters(int runNumber, TString inFileName, TString outFileName 
   /// convert MUON clusters from ESD or RecPoints into O2 structures
   /// saved in a binary file with the following format:
   ///
-  /// event number
   /// number of clusters in event 1
+  /// number of associated digits (= 0)
   /// ClusterStruct of 1st cluster
   /// ClusterStruct of 2nd cluster
   /// ...
   /// ClusterStruct of nth cluster
-  /// event number
   /// number of clusters in event 2
   /// ...
   ///
@@ -140,7 +139,6 @@ void ConvertMUONClusters(int runNumber, TString inFileName, TString outFileName 
       Error("ConvertMUONCluster", "no entry object found for event %d", iEvent);
       return;
     }
-    outClusterFile.write((char*)&iEvent, sizeof(int));
 
     if (esd) {
       // add the clusters to the cluster store manually in case they are taken from ESD
@@ -166,7 +164,13 @@ void ConvertMUONClusters(int runNumber, TString inFileName, TString outFileName 
       int iCl(0);
       std::list<uint32_t> clustersToRemove{};
       while ((cl = static_cast<AliMUONVCluster*>(nextCl()))) {
-        cl->SetErrXY((float)cl->GetErrX(), (float)cl->GetErrY());
+        if (trackReconstructor) {
+          cl->SetErrXY(trackReconstructor->GetRecoParam()->GetDefaultNonBendingReso(cluster->GetChamberId()),
+                       trackReconstructor->GetRecoParam()->GetDefaultBendingReso(cluster->GetChamberId()));
+        } else {
+          cl->SetErrXY(0.2f, 0.2f);
+        }
+//        cl->SetErrXY((float)cl->GetErrX(), (float)cl->GetErrY());
         // find duplicate clusters (same position but different Id)
         TIter nextCl2(clusterStore->CreateIterator());
         AliMUONVCluster* cl2(nullptr);
@@ -188,6 +192,10 @@ void ConvertMUONClusters(int runNumber, TString inFileName, TString outFileName 
     // get the number of clusters effectively stored (without duplicates)
     int nClusters = clusterStore->GetSize();
     outClusterFile.write((char*)&nClusters, sizeof(int));
+
+    // write the number of associated digits
+    int nDigits(0);
+    outClusterFile.write((char*)&nDigits, sizeof(int));
 
     // write the clusters in the binary file
     WriteClusters(*clusterStore, outClusterFile);
