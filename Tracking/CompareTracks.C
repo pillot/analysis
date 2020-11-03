@@ -2,6 +2,7 @@
 #include <iostream>
 #include <vector>
 #include <algorithm>
+#include <iterator>
 
 #include <TMath.h>
 #include <TStyle.h>
@@ -10,30 +11,25 @@
 #include <TLegend.h>
 #include <TH1F.h>
 #include <TH2F.h>
+#include <TMatrixD.h>
 #include <TDatabasePDG.h>
 #include <Math/Vector4D.h>
+#include <TGeoGlobalMagField.h>
 
 #include "AliCDBManager.h"
+#include "AliGRPManager.h"
+#include "AliGRPObject.h"
 #include "AliGeomManager.h"
 #include "AliMUONCDB.h"
 #include "AliMUONTrackExtrap.h"
 #include "AliMUONTrackParam.h"
 
+#include "DetectorsBase/GeometryManager.h"
+#include "Field/MagneticField.h"
+
+#include "DataFormatsMCH/TrackMCH.h"
+#include "MCHBase/ClusterBlock.h"
 #include "MCHBase/TrackBlock.h"
-
-struct ClusterStruct {
-  float x;             ///< cluster position along x
-  float y;             ///< cluster position along y
-  float z;             ///< cluster position along z
-  float ex;            ///< cluster resolution along x
-  float ey;            ///< cluster resolution along y
-  uint32_t uid;        ///< cluster unique ID
-
-  /// Return the chamber ID (0..), part of the unique ID
-  int getChamberId() const { return (uid & 0xF0000000) >> 28; }
-  /// Return the detection element ID, part of the unique ID
-  int getDEId() const { return (uid & 0x0FFE0000) >> 17; }
-};
 
 using namespace std;
 using namespace o2::mch;
@@ -41,6 +37,24 @@ using namespace ROOT::Math;
 
 static const double muMass = TDatabasePDG::Instance()->GetParticle("mu-")->Mass();
 double chi2Max = 2. * 4. * 4.;
+
+//_________________________________________________________________________________________________
+struct ClusterStructV1 {
+  float x;             ///< cluster position along x
+  float y;             ///< cluster position along y
+  float z;             ///< cluster position along z
+  float ex;            ///< cluster resolution along x
+  float ey;            ///< cluster resolution along y
+  uint32_t uid;        ///< cluster unique ID
+};
+
+//_________________________________________________________________________________________________
+struct TrackAtVtxStruct {
+  TrackParamStruct paramAtVertex{};
+  double dca = 0.;
+  double rAbs = 0.;
+  int mchTrackIdx = 0;
+};
 
 //_________________________________________________________________________________________________
 struct VertexStruct {
@@ -57,6 +71,7 @@ struct TrackStruct {
   double rAbs = 0.;
   double chi2 = 0.;
   TrackParamStruct param{};
+  TMatrixD cov{5, 5};
   std::vector<ClusterStruct> clusters{};
   bool matchFound = false;
   bool matchIdentical = false;
@@ -117,14 +132,19 @@ struct TrackStruct {
 int ReadNextEvent(ifstream& inFile, std::vector<VertexStruct>& vertices);
 int ReadNextEvent(ifstream& inFile, int version, std::vector<VertexStruct>& vertices, bool selectTracks, std::vector<TrackStruct>& tracks);
 void ReadTrack(ifstream& inFile, TrackStruct& track, int version);
+void ReadNextEventV5(ifstream& inFile, std::vector<VertexStruct>& vertices, int& event, bool selectTracks, std::vector<TrackStruct>& tracks);
+void FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const TrackMCH* mchTrack, std::vector<ClusterStruct>& clusters);
 bool LoadOCDB();
+bool SetMagField();
 void ExtrapToVertex(TrackStruct& track, VertexStruct& vertex);
 bool IsSelected(TrackStruct& track);
 int CompareEvents(std::vector<TrackStruct>& tracks1, std::vector<TrackStruct>& tracks2, double precision, bool printAll, std::vector<TH1*>& histos);
 bool AreTrackParamCompatible(const TrackParamStruct& param1, const TrackParamStruct& param2, double precision);
+bool AreTrackParamCovCompatible(const TMatrixD& cov1, const TMatrixD& cov2, double precision);
 int PrintEvent(const std::vector<TrackStruct>& tracks);
 void PrintTrack(const TrackStruct& track);
 void PrintResiduals(const TrackParamStruct& param1, const TrackParamStruct& param2);
+void PrintCovResiduals(const TMatrixD& cov1, const TMatrixD& cov2);
 void FillResiduals(const TrackParamStruct& param1, const TrackParamStruct& param2, std::vector<TH1*>& histos);
 void DrawResiduals(std::vector<TH1*>& histos);
 void CreateHistosAtVertex(std::vector<TH1*>& histos, const char* extension);
@@ -142,8 +162,9 @@ void CompareTracks(string inFileName1, int versionFile1, string inFileName2, int
   /// Compare the tracks stored in the 2 binary files
   /// file version 1: param at 1st cluster + clusters
   /// file version 2: param at 1st cluster + chi2 + clusters
-  /// file version 3: param at vertex + dca +rAbs + chi2 + param at 1st cluster + clusters
-  /// file version 4: param at vertex + dca +rAbs + chi2 + param at 1st cluster + clusters (new version)
+  /// file version 3: param at vertex + dca + rAbs + chi2 + param at 1st cluster + clusters
+  /// file version 4: param at vertex + dca + rAbs + chi2 + param at 1st cluster + clusters (v2)
+  /// file version 5: nTracksAtVtx + nMCHTracks + nClusters + list of Tracks at vertex (param at vertex + dca + rAbs + mchTrackIdx) + list of MCH tracks + list of clusters (v2)
 
   // get vertices and prepare track extrapolation
   std::vector<VertexStruct> vertices{};
@@ -162,12 +183,6 @@ void CompareTracks(string inFileName1, int versionFile1, string inFileName2, int
     }
   }
 
-  // load OCDB if needed
-  if ((versionFile1 < 3 || versionFile2 < 3) && !LoadOCDB()) {
-    cout << "fail loading OCDB objects for track extrapolation" << endl;
-    return;
-  }
-
   // open files
   ifstream inFile1(inFileName1,ios::binary);
   ifstream inFile2(inFileName2,ios::binary);
@@ -176,7 +191,7 @@ void CompareTracks(string inFileName1, int versionFile1, string inFileName2, int
     return;
   }
 
-  int event1(0), event2(0);
+  int event1(-1), event2(-1);
   std::vector<TrackStruct> tracks1{};
   std::vector<TrackStruct> tracks2{};
   bool readNextEvent1(true), readNextEvent2(true);
@@ -194,12 +209,20 @@ void CompareTracks(string inFileName1, int versionFile1, string inFileName2, int
   while (true) {
 
     if (readNextEvent1) {
-      event1 = ReadNextEvent(inFile1, versionFile1, vertices, selectTracks, tracks1);
+      if (versionFile1 < 5) {
+        event1 = ReadNextEvent(inFile1, versionFile1, vertices, selectTracks, tracks1);
+      } else {
+        ReadNextEventV5(inFile1, vertices, event1, selectTracks, tracks1);
+      }
       FillHistosAtVertex(tracks1, histosAtVertex[0]);
     }
 
     if (readNextEvent2) {
-      event2 = ReadNextEvent(inFile2, versionFile2, vertices, selectTracks, tracks2);
+      if (versionFile2 < 5) {
+        event2 = ReadNextEvent(inFile2, versionFile2, vertices, selectTracks, tracks2);
+      } else {
+        ReadNextEventV5(inFile2, vertices, event2, selectTracks, tracks2);
+      }
       FillHistosAtVertex(tracks2, histosAtVertex[1]);
     }
 
@@ -275,13 +298,13 @@ int ReadNextEvent(ifstream& inFile, int version, std::vector<VertexStruct>& vert
   /// read the next event in the input file
 
   tracks.clear();
-  
+
   int event(-1);
   if (!inFile.read(reinterpret_cast<char*>(&event), sizeof(int))) {
     // reaching end of file
     return -1;
   }
-  
+ 
   int size(0);
   inFile.read(reinterpret_cast<char*>(&size), sizeof(int));
   if (size == 0) {
@@ -344,12 +367,113 @@ void ReadTrack(ifstream& inFile, TrackStruct& track, int version)
   inFile.read(reinterpret_cast<char*>(&nClusters), sizeof(int));
   track.clusters.resize(nClusters);
   for (Int_t iCl = 0; iCl < nClusters; ++iCl) {
-    inFile.read(reinterpret_cast<char*>(&(track.clusters[iCl])), sizeof(ClusterStruct));
-    if (version > 3) {
-      uint32_t dummy(0);
-      inFile.read(reinterpret_cast<char*>(&dummy), sizeof(uint32_t));
-      inFile.read(reinterpret_cast<char*>(&dummy), sizeof(uint32_t));
+    if (version < 4) {
+      inFile.read(reinterpret_cast<char*>(&(track.clusters[iCl])), sizeof(ClusterStructV1));
+    } else {
+      inFile.read(reinterpret_cast<char*>(&(track.clusters[iCl])), sizeof(ClusterStruct));
     }
+  }
+}
+
+//_________________________________________________________________________________________________
+void ReadNextEventV5(ifstream& inFile, std::vector<VertexStruct>& vertices, int& event, bool selectTracks, std::vector<TrackStruct>& tracks)
+{
+  /// read the next event in the input file
+
+  tracks.clear();
+
+  int nTracksAtVtx(-1);
+  if (!inFile.read(reinterpret_cast<char*>(&nTracksAtVtx), sizeof(int))) {
+    event = -1;
+    return; // reaching end of file ...
+  } else {
+    ++event; // ... or reading the next event
+  }
+  int nMCHTracks(-1);
+  inFile.read(reinterpret_cast<char*>(&nMCHTracks), sizeof(int));
+  int nClusters(-1);
+  inFile.read(reinterpret_cast<char*>(&nClusters), sizeof(int));
+  if (nTracksAtVtx == 0 && nMCHTracks == 0) {
+    return; // event is empty
+  }
+
+  // read the tracks at vertex, the MCH tracks and the attached clusters
+  std::vector<TrackAtVtxStruct> tracksAtVtx(nTracksAtVtx);
+  inFile.read(reinterpret_cast<char*>(tracksAtVtx.data()), nTracksAtVtx * sizeof(TrackAtVtxStruct));
+  std::vector<TrackMCH> mchTracks(nMCHTracks);
+  inFile.read(reinterpret_cast<char*>(mchTracks.data()), nMCHTracks * sizeof(TrackMCH));
+  std::vector<ClusterStruct> clusters(nClusters);
+  inFile.read(reinterpret_cast<char*>(clusters.data()), nClusters * sizeof(ClusterStruct));
+
+  if (nTracksAtVtx > 0) {
+
+    // fill the internal track structure based on the provided tracks at vertex
+    tracks.reserve(nTracksAtVtx);
+    for (const auto& trackAtVtx : tracksAtVtx) {
+      tracks.emplace_back();
+      FillTrack(tracks.back(), &trackAtVtx, (nMCHTracks > 0) ? &(mchTracks[trackAtVtx.mchTrackIdx]) : nullptr, clusters);
+      if (selectTracks && !IsSelected(tracks.back())) {
+        tracks.pop_back();
+      }
+    }
+
+  } else {
+
+    // get the vertex corresponding to this event or use (0.,0.,0.)
+    VertexStruct vertex = {0., 0., 0.};
+    if (!vertices.empty()) {
+      if (event < (int)vertices.size()) {
+        vertex = vertices[event];
+      } else {
+        cout << "missing vertex for event " << event << endl;
+      }
+    }
+
+    // fill the internal track structure based on the MCH tracks extrapolated to the provided vertex
+    tracks.reserve(nMCHTracks);
+    for (const auto& mchTrack : mchTracks) {
+      tracks.emplace_back();
+      FillTrack(tracks.back(), nullptr, &mchTrack, clusters);
+      ExtrapToVertex(tracks.back(), vertex);
+      if (selectTracks && !IsSelected(tracks.back())) {
+        tracks.pop_back();
+      }
+    }
+  }
+}
+
+//_________________________________________________________________________________________________
+void FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const TrackMCH* mchTrack, std::vector<ClusterStruct>& clusters)
+{
+  /// fill the internal track structure from the provided informations
+
+  if (trackAtVtx) {
+    track.pxpypzm.SetPx(trackAtVtx->paramAtVertex.px);
+    track.pxpypzm.SetPy(trackAtVtx->paramAtVertex.py);
+    track.pxpypzm.SetPz(trackAtVtx->paramAtVertex.pz);
+    track.pxpypzm.SetM(muMass);
+    track.sign = trackAtVtx->paramAtVertex.sign;
+    track.dca = trackAtVtx->dca;
+    track.rAbs = trackAtVtx->rAbs;
+  }
+
+  if (mchTrack) {
+    track.chi2 = mchTrack->getChi2();
+    track.param.x = mchTrack->getX();
+    track.param.y = mchTrack->getY();
+    track.param.z = mchTrack->getZ();
+    track.param.px = mchTrack->getPx();
+    track.param.py = mchTrack->getPy();
+    track.param.pz = mchTrack->getPz();
+    track.param.sign = mchTrack->getSign();
+    for (int i = 0; i < 5; i++) {
+      for (int j = 0; j < 5; j++) {
+        track.cov(i, j) = mchTrack->getCovariance(i, j);
+      }
+    }
+    track.clusters.insert(track.clusters.end(),
+                          std::make_move_iterator(clusters.begin() + mchTrack->getFirstClusterIdx()),
+                          std::make_move_iterator(clusters.begin() + mchTrack->getLastClusterIdx() + 1));
   }
 }
 
@@ -367,15 +491,86 @@ bool LoadOCDB()
   }
   man->SetRun(169099);
 
-  if (!AliMUONCDB::LoadField()) {
+  if (!SetMagField()) {
+//  if (!AliMUONCDB::LoadField()) {
     return false;
   }
   AliMUONTrackExtrap::SetField();
 
-  AliGeomManager::LoadGeometry();
-  if (!AliGeomManager::GetGeometry() || !AliGeomManager::ApplyAlignObjsFromCDB("MUON")) {
+  o2::base::GeometryManager::loadGeometry("O2geometry.root");
+  if (!gGeoManager) {
     return false;
   }
+//  AliGeomManager::LoadGeometry();
+//  if (!AliGeomManager::GetGeometry() || !AliGeomManager::ApplyAlignObjsFromCDB("MUON")) {
+//    return false;
+//  }
+
+  return true;
+}
+
+//_________________________________________________________________________________________________
+bool SetMagField()
+{
+  /// Set the magnetic field using O2 maps and GRP info
+
+  AliGRPManager grpMan;
+  if (!grpMan.ReadGRPEntry()) {
+    Error("SetMagField", "failed to load GRP Data from OCDB");
+    return false;
+  }
+
+  const AliGRPObject* grpData = grpMan.GetGRPData();
+  if (!grpData) {
+    Error("SetMagField", "GRP Data is not loaded");
+    return false;
+  }
+
+  float l3Current = grpData->GetL3Current((AliGRPObject::Stats)0);
+  if (l3Current == AliGRPObject::GetInvalidFloat()) {
+    Error("SetMagField", "GRP/GRP/Data entry:  missing value for the L3 current !");
+    return false;
+  }
+
+  char l3Polarity = grpData->GetL3Polarity();
+  if (l3Polarity == AliGRPObject::GetInvalidChar()) {
+    Error("SetMagField", "GRP/GRP/Data entry:  missing value for the L3 polarity !");
+    return false;
+  }
+
+  float diCurrent = grpData->GetDipoleCurrent((AliGRPObject::Stats)0);
+  if (diCurrent == AliGRPObject::GetInvalidFloat()) {
+    Error("SetMagField", "GRP/GRP/Data entry:  missing value for the dipole current !");
+    return false;
+  }
+
+  char diPolarity = grpData->GetDipolePolarity();
+  if (diPolarity == AliGRPObject::GetInvalidChar()) {
+    Error("SetMagField", "GRP/GRP/Data entry:  missing value for the dipole polarity !");
+    return false;
+  }
+
+  float beamEnergy = grpData->GetBeamEnergy();
+  if (beamEnergy == AliGRPObject::GetInvalidFloat()) {
+    Error("SetMagField", "GRP/GRP/Data entry:  missing value for the beam energy !");
+    return false;
+  }
+
+  TString beamType = grpData->GetBeamType();
+  if (beamType == AliGRPObject::GetInvalidString()) {
+    Error("SetMagField", "GRP/GRP/Data entry:  missing value for the beam type !");
+    return false;
+  }
+
+  Info("SetMagField", "l3Current = %f, diCurrent = %f", TMath::Abs(l3Current) * (l3Polarity ? -1 : 1),
+       TMath::Abs(diCurrent) * (diPolarity ? -1 : 1));
+
+  auto field = o2::field::MagneticField::createFieldMap(TMath::Abs(l3Current) * (l3Polarity ? -1 : 1),
+                                                        TMath::Abs(diCurrent) * (diPolarity ? -1 : 1),
+                                                        o2::field::MagneticField::kConvLHC, false, beamEnergy, beamType.Data(),
+                                                        "$(O2_ROOT)/share/Common/maps/mfchebKGI_sym.root");
+  TGeoGlobalMagField::Instance()->SetField(field);
+  TGeoGlobalMagField::Instance()->Lock();
 
   return true;
 }
@@ -385,8 +580,14 @@ void ExtrapToVertex(TrackStruct& track, VertexStruct& vertex)
 {
   /// compute the track parameters at vertex, at DCA and at the end of the absorber
 
-  if (!AliGeomManager::GetGeometry()) {
-    return;
+  // load OCDB (only once)
+  static bool ocdbLoaded = false;
+  if (!ocdbLoaded) {
+    if (!LoadOCDB()) {
+      cout << "fail loading OCDB objects for track extrapolation" << endl;
+      exit(1);
+    }
+    ocdbLoaded = true;
   }
 
   // convert parameters at first cluster in MUON format
@@ -478,11 +679,15 @@ int CompareEvents(std::vector<TrackStruct>& tracks1, std::vector<TrackStruct>& t
       itTrack2->matchIdentical = true;
       // compare the track parameters
       bool areCompatible = AreTrackParamCompatible(track1.param, itTrack2->param, precision);
-      if (!areCompatible) {
+      bool areCovCompatible = AreTrackParamCovCompatible(track1.cov, itTrack2->cov, precision);
+      if (!areCompatible || !areCovCompatible) {
         ++nDifferences;
       }
       if (printAll || !areCompatible) {
         PrintResiduals(track1.param, itTrack2->param);
+      }
+      if (printAll || !areCovCompatible) {
+        PrintCovResiduals(track1.cov, itTrack2->cov);
       }
       FillResiduals(track1.param, itTrack2->param, histos);
     }
@@ -501,11 +706,15 @@ int CompareEvents(std::vector<TrackStruct>& tracks1, std::vector<TrackStruct>& t
         track2.matchFound = true;
         // compare the track parameters
         bool areCompatible = AreTrackParamCompatible(track1.param, track2.param, precision);
-        if (!areCompatible) {
+        bool areCovCompatible = AreTrackParamCovCompatible(track1.cov, track2.cov, precision);
+        if (!areCompatible || !areCovCompatible) {
           ++nDifferences;
         }
         if (printAll || !areCompatible) {
           PrintResiduals(track1.param, track2.param);
+        }
+        if (printAll || !areCovCompatible) {
+          PrintCovResiduals(track1.cov, track2.cov);
         }
         FillResiduals(track1.param, track2.param, histos);
         break;
@@ -548,6 +757,17 @@ bool AreTrackParamCompatible(const TrackParamStruct& param1, const TrackParamStr
 }
 
 //_________________________________________________________________________________________________
+bool AreTrackParamCovCompatible(const TMatrixD& cov1, const TMatrixD& cov2, double precision)
+{
+  /// compare track parameters covariances (if any) within precision
+  if (cov1.NonZeros() == 0 || cov2.NonZeros() == 0) {
+    return true;
+  }
+  TMatrixD diff(cov2, TMatrixD::kMinus, cov1);
+  return (diff <= precision && diff >= -precision);
+}
+
+//_________________________________________________________________________________________________
 int PrintEvent(const std::vector<TrackStruct>& tracks)
 {
   /// print all tracks in the events
@@ -583,6 +803,14 @@ void PrintResiduals(const TrackParamStruct& param1, const TrackParamStruct& para
        << ", dpz = " << (param2.pz - param1.pz) << " (" << 100. * (param2.pz - param1.pz) / param1.pz << "\%)"
        << ", dsign = " << param2.sign - param1.sign
        << "}" << endl;
+}
+
+//_________________________________________________________________________________________________
+void PrintCovResiduals(const TMatrixD& cov1, const TMatrixD& cov2)
+{
+  /// print cov2 - cov1
+  TMatrixD diff(cov2, TMatrixD::kMinus, cov1);
+  diff.Print();
 }
 
 //_________________________________________________________________________________________________
@@ -790,32 +1018,34 @@ void FillComparisonsAtVertex(std::vector<TrackStruct>& tracks1, std::vector<Trac
         FillHistosDimuAtVertex(*itTrack21, *itTrack22, histos[2]);
       }
     }
-
-    for (const auto& track1 : tracks1) {
-      // fill histograms for missing dimuons
-      if (!track1.matchFound) {
-        FillHistosDimuAtVertex(*itTrack21, track1, histos[3]);
-      }
-    }
   }
 
   for (auto itTrack11 = tracks1.begin(); itTrack11 != tracks1.end(); ++itTrack11) {
 
-    if (itTrack11->matchFound) {
-      continue;
-    }
-
     // fill histograms for missing muons
-    FillHistosMuAtVertex(*itTrack11, histos[3]);
+    if (!itTrack11->matchFound) {
+      FillHistosMuAtVertex(*itTrack11, histos[3]);
+    }
 
     for (auto itTrack12 = std::next(itTrack11); itTrack12 != tracks1.end(); ++itTrack12) {
 
       // fill histograms for missing dimuons
-      if (!itTrack12->matchFound) {
+      if (!itTrack11->matchFound || !itTrack12->matchFound) {
         FillHistosDimuAtVertex(*itTrack11, *itTrack12, histos[3]);
       }
     }
   }
+/*
+  // fill histograms for missing dimuons in both files
+  for (const auto& track1 : tracks1) {
+    if (!track1.matchFound) {
+      for (const auto& track2 : tracks2) {
+        if (!track2.matchFound) {
+          FillHistosDimuAtVertex(track1, track2, histos[3]);
+        }
+      }
+    }
+  }*/
 }
 
 //_________________________________________________________________________________________________
