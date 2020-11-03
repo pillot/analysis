@@ -15,7 +15,7 @@ class AliVertexFromFile: public AliVertexGenerator {
   AliVertexFromFile(const char* fileName, Int_t eventsPerEntry = 1);
   virtual ~AliVertexFromFile();
 
-  virtual TVector3 GetVertex();
+  virtual TVector3 GetVertex(Bool_t& isGood);
   virtual Float_t GetLastVertexTime() const {return 0.;}
   
  private:

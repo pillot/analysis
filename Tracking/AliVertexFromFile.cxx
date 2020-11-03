@@ -54,7 +54,7 @@ AliVertexFromFile::AliVertexFromFile(const char* fileName, Int_t eventsPerEntry)
 // main constructor:
 // fileName is the name of the binary file containing the vertices
 // eventsPerEntry is the number of events for which the same vertex is used
-  fFile = new std::ifstream(fileName,ios::binary);
+  fFile = new std::ifstream(fileName, std::ios::binary);
   if (!fFile || !fFile->is_open()) {
     AliFatal(Form("could not open file %s", fileName));
     return;
@@ -70,13 +70,14 @@ AliVertexFromFile::~AliVertexFromFile()
 }
 
 //_____________________________________________________________________________
-TVector3 AliVertexFromFile::GetVertex()
+TVector3 AliVertexFromFile::GetVertex(Bool_t& isGood)
 {
 // get the vertex from the binary file
   if (fEventsPerEntry < 2 || fEvent%fEventsPerEntry == 0) {
     ReadNextVertex();
   }
   ++fEvent;
+  isGood = true;
   return fVertex;
 }
 
