@@ -16,13 +16,14 @@
 #include <TDatabasePDG.h>
 #include <Math/Vector4D.h>
 
+#include "DataFormatsMCH/TrackMCH.h"
 #include "MCHBase/ClusterBlock.h"
 #include "MCHBase/TrackBlock.h"
 #include "MCHTracking/TrackParam.h"
 #include "MCHTracking/Cluster.h"
 #include "MCHTracking/Track.h"
-#include "/Users/PILLOT/Work/Alice/devO2Tracking/O2/Detectors/MUON/MCH/Tracking/src/TrackFitter.h"
-#include "/Users/PILLOT/Work/Alice/devO2Tracking/O2/Detectors/MUON/MCH/Tracking/src/TrackExtrap.h"
+#include "MCHTracking/TrackFitter.h"
+#include "MCHTracking/TrackExtrap.h"
 
 using namespace std;
 using namespace o2::mch;
@@ -31,6 +32,14 @@ using namespace ROOT::Math;
 static const double muMass = TDatabasePDG::Instance()->GetParticle("mu-")->Mass();
 double chi2Max = 2. * 4. * 4.;
 TrackFitter trackFitter{};
+
+//_________________________________________________________________________________________________
+struct TrackAtVtxStruct {
+  TrackParamStruct paramAtVertex{};
+  double dca = 0.;
+  double rAbs = 0.;
+  int mchTrackIdx = 0;
+};
 
 //_________________________________________________________________________________________________
 struct TrackStruct {
@@ -102,6 +111,8 @@ struct TrackStruct {
 //_________________________________________________________________________________________________
 int ReadNextEvent(ifstream& inFile, bool selectTracks, std::vector<TrackStruct>& tracks);
 void ReadTrack(ifstream& inFile, TrackStruct& track);
+void ReadNextEventV5(ifstream& inFile, int& event, bool selectTracks, std::vector<TrackStruct>& tracks);
+void FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const TrackMCH& mchTrack, std::vector<ClusterStruct>& clusters);
 bool IsSelected(TrackStruct& track);
 void CompareTracks(std::vector<TrackStruct>& tracks1, std::vector<TrackStruct>& tracks2, std::vector<TH1*>& histos);
 void CreateResiduals(std::vector<TH1*>& histos, const char* extension, double range);
@@ -113,10 +124,14 @@ pair<double, double> GetSigma(TH1* h, int color);
 double CrystalBallSymmetric(double* xx, double* par);
 
 //_________________________________________________________________________________________________
-void CompareTrackResolution(string inFileName1, string inFileName2, bool selectTracks = false)
+void CompareTrackResolution(string inFileName1, int versionFile1,
+                            string inFileName2, int versionFile2,
+                            bool selectTracks = false)
 {
   /// Compare the cluster-track residuals between the tracks stored in the 2 binary files
   /// O2 tracking need to be loaded before: gSystem->Load("libO2MCHTracking")
+  /// file version 4: param at vertex + dca + rAbs + chi2 + param at 1st cluster + clusters (v2)
+  /// file version 5: nTracksAtVtx + nMCHTracks + nClusters + list of Tracks at vertex (param at vertex + dca + rAbs + mchTrackIdx) + list of MCH tracks + list of clusters (v2)
 
   // open files
   ifstream inFile1(inFileName1, ios::binary);
@@ -131,7 +146,7 @@ void CompareTrackResolution(string inFileName1, string inFileName2, bool selectT
   trackFitter.smoothTracks(true);
   TrackExtrap::useExtrapV2();
 
-  int event1(0), event2(0);
+  int event1(-1), event2(-1);
   std::vector<TrackStruct> tracks1{};
   std::vector<TrackStruct> tracks2{};
   bool readNextEvent1(true), readNextEvent2(true);
@@ -145,12 +160,20 @@ void CompareTrackResolution(string inFileName1, string inFileName2, bool selectT
   while (true) {
 
     if (readNextEvent1) {
-      event1 = ReadNextEvent(inFile1, selectTracks, tracks1);
+      if (versionFile1 < 5) {
+        event1 = ReadNextEvent(inFile1, selectTracks, tracks1);
+      } else {
+        ReadNextEventV5(inFile1, event1, selectTracks, tracks1);
+      }
       FillResiduals(tracks1, residuals[0]);
     }
 
     if (readNextEvent2) {
-      event2 = ReadNextEvent(inFile2, selectTracks, tracks2);
+      if (versionFile2 < 5) {
+        event2 = ReadNextEvent(inFile2, selectTracks, tracks2);
+      } else {
+        ReadNextEventV5(inFile2, event2, selectTracks, tracks2);
+      }
       FillResiduals(tracks2, residuals[1]);
     }
 
@@ -184,7 +207,6 @@ void CompareTrackResolution(string inFileName1, string inFileName2, bool selectT
 
   inFile1.close();
   inFile2.close();
-
 }
 
 //_________________________________________________________________________________________________
@@ -248,6 +270,100 @@ void ReadTrack(ifstream& inFile, TrackStruct& track)
   for (Int_t iCl = 0; iCl < nClusters; ++iCl) {
     inFile.read(reinterpret_cast<char*>(&clusterIn), sizeof(ClusterStruct));
     track.clusters.emplace_back(clusterIn);
+    track.track.createParamAtCluster(track.clusters.back());
+  }
+
+  try {
+    trackFitter.fit(track.track);
+  } catch (exception const& e) {
+    throw runtime_error(std::string("Track fit failed: ") + e.what());
+  }
+}
+
+//_________________________________________________________________________________________________
+void ReadNextEventV5(ifstream& inFile, int& event, bool selectTracks, std::vector<TrackStruct>& tracks)
+{
+  /// read the next event in the input file
+
+  tracks.clear();
+
+  int nTracksAtVtx(-1);
+  if (!inFile.read(reinterpret_cast<char*>(&nTracksAtVtx), sizeof(int))) {
+    event = -1;
+    return; // reaching end of file ...
+  } else {
+    ++event; // ... or reading the next event
+  }
+  int nMCHTracks(-1);
+  inFile.read(reinterpret_cast<char*>(&nMCHTracks), sizeof(int));
+  int nClusters(-1);
+  inFile.read(reinterpret_cast<char*>(&nClusters), sizeof(int));
+
+  // read the tracks at vertex, the MCH tracks and the attached clusters
+  std::vector<TrackAtVtxStruct> tracksAtVtx(nTracksAtVtx);
+  inFile.read(reinterpret_cast<char*>(tracksAtVtx.data()), nTracksAtVtx * sizeof(TrackAtVtxStruct));
+  std::vector<TrackMCH> mchTracks(nMCHTracks);
+  inFile.read(reinterpret_cast<char*>(mchTracks.data()), nMCHTracks * sizeof(TrackMCH));
+  std::vector<ClusterStruct> clusters(nClusters);
+  inFile.read(reinterpret_cast<char*>(clusters.data()), nClusters * sizeof(ClusterStruct));
+
+  if (nMCHTracks == 0) {
+    return; // need MCH tracks to study the resolution
+  }
+
+  if (nTracksAtVtx > 0) {
+
+    // fill the internal track structure based on the provided tracks at vertex
+    tracks.reserve(nTracksAtVtx);
+    for (const auto& trackAtVtx : tracksAtVtx) {
+      tracks.emplace_back();
+      FillTrack(tracks.back(), &trackAtVtx, mchTracks[trackAtVtx.mchTrackIdx], clusters);
+      if (selectTracks && !IsSelected(tracks.back())) {
+        tracks.pop_back();
+      }
+    }
+
+  } else {
+
+    // fill the internal track structure based on the MCH tracks
+    tracks.reserve(nMCHTracks);
+    for (const auto& mchTrack : mchTracks) {
+      tracks.emplace_back();
+      FillTrack(tracks.back(), nullptr, mchTrack, clusters);
+      if (selectTracks && !IsSelected(tracks.back())) {
+        tracks.pop_back();
+      }
+    }
+  }
+}
+
+//_________________________________________________________________________________________________
+void FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const TrackMCH& mchTrack, std::vector<ClusterStruct>& clusters)
+{
+  /// fill the internal track structure from the provided informations
+
+  if (trackAtVtx) {
+    track.pxpypzm.SetPx(trackAtVtx->paramAtVertex.px);
+    track.pxpypzm.SetPy(trackAtVtx->paramAtVertex.py);
+    track.pxpypzm.SetPz(trackAtVtx->paramAtVertex.pz);
+    track.pxpypzm.SetM(muMass);
+    track.sign = trackAtVtx->paramAtVertex.sign;
+    track.dca = trackAtVtx->dca;
+    track.rAbs = trackAtVtx->rAbs;
+  }
+
+  track.chi2 = mchTrack.getChi2();
+  track.param.x = mchTrack.getX();
+  track.param.y = mchTrack.getY();
+  track.param.z = mchTrack.getZ();
+  track.param.px = mchTrack.getPx();
+  track.param.py = mchTrack.getPy();
+  track.param.pz = mchTrack.getPz();
+  track.param.sign = mchTrack.getSign();
+
+  track.clusters.reserve(mchTrack.getNClusters());
+  for (int iCl = mchTrack.getFirstClusterIdx(); iCl <= mchTrack.getLastClusterIdx(); ++iCl) {
+    track.clusters.emplace_back(clusters[iCl]);
     track.track.createParamAtCluster(track.clusters.back());
   }
 
