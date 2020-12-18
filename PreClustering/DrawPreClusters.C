@@ -32,10 +32,11 @@ TExMap deIndices;
 Int_t iCluster[nDEs];
 
 //------------------------------------------------------------------
-void DrawPreClusters(const char *clusterFileName, Int_t iEvent, const char *outFileName)
+void DrawPreClusters(const char* clusterFileName, Int_t iEvent, Int_t firstDigitId = -1, const char* outFileName = "display.root")
 {
   /// Draw the preclusters in given event
-  
+  /// if firstDigitId >= 0, only draw the precluster starting with that digit
+
   AliCodeTimerAutoGeneral("",0);
   
   // load mapping
@@ -67,6 +68,10 @@ void DrawPreClusters(const char *clusterFileName, Int_t iEvent, const char *outF
   TIter nextCluster(clusterStore->CreateIterator());
   while ((cluster = static_cast<AliMUONVCluster*>(nextCluster()))) {
     
+    if (firstDigitId >= 0 && cluster->GetDigitId(0) != static_cast<UInt_t>(firstDigitId)) {
+      continue;
+    }
+
     // get the DE index
     Int_t deId = cluster->GetDetElemId();
     Int_t iDE = deIndices.GetValue(deId);
