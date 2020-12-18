@@ -20,10 +20,18 @@
 #include "AliESDMuonCluster.h"
 
 #include "AliMpCDB.h"
+#include "AliMpDDLStore.h"
+#include "AliMpDetElement.h"
+#include "AliMpPad.h"
+#include "AliMpCathodType.h"
+#include "AliMpPlaneType.h"
+#include "AliMpVSegmentation.h"
+#include "AliMpSegmentation.h"
 
 #include "AliMUONCDB.h"
 #include "AliMUONRecoParam.h"
 #include "AliMUONESDInterface.h"
+#include "AliMUONVDigit.h"
 #include "AliMUONVCluster.h"
 #include "AliMUONVClusterStore.h"
 #include "AliMUONTrack.h"
@@ -41,8 +49,12 @@
 using namespace std;
 using namespace o2::mch;
 
+AliMUONGeometryTransformer* transformer(nullptr);
+
 bool SetMagField();
-AliMUONVTrackReconstructor* CreateTrackReconstructor(int runNumber);
+AliMUONGeometryTransformer* LoadGeometry(int runNumber);
+AliMUONVTrackReconstructor* CreateTrackReconstructor();
+void ChangeMonoCathodClusterRes(AliMUONVClusterStore& clusterStore);
 void MUONToO2(AliMUONVCluster& cluster, ClusterStruct& o2Cluster);
 void WriteClusters(AliMUONVClusterStore& clusterStore, ofstream& outFile);
 void MUONToO2(AliMUONTrack& track, TrackMCH& o2Track, std::vector<ClusterStruct>& o2Clusters);
@@ -113,9 +125,16 @@ void ConvertMUONClusters(int runNumber, TString inFileName, TString outFileName 
     }
   }
 
+  // load geometry and mapping, to find mono-cathod clusters
+  transformer = LoadGeometry(runNumber);
+  if (!transformer) {
+    Error("ConvertMUONCluster", "cannot get the geometry transformer");
+    return;
+  }
+
   AliMUONVCluster* cluster = clusterStore->CreateCluster(0, 0, 0);
   AliMUONVTrackStore* trackStore = findTracks ? AliMUONESDInterface::NewTrackStore() : nullptr;
-  AliMUONVTrackReconstructor* trackReconstructor = findTracks ? CreateTrackReconstructor(runNumber) : nullptr;
+  AliMUONVTrackReconstructor* trackReconstructor = findTracks ? CreateTrackReconstructor() : nullptr;
   if (findTracks && !trackReconstructor) {
     return;
   }
@@ -138,31 +157,18 @@ void ConvertMUONClusters(int runNumber, TString inFileName, TString outFileName 
       for (int iCluster = 0; iCluster < nClusters; ++iCluster) {
         AliESDMuonCluster* esdCluster = esd->GetMuonCluster(iCluster);
         AliMUONESDInterface::ESDToMUON(*esdCluster, *cluster);
-        // reset the resolution of the mono-cathod clusters before running the reconstruction
-        // make sure to use float precision so that the values are identical both in O2 and AliRoot format
-        if (trackReconstructor) {
-          cluster->SetErrXY(trackReconstructor->GetRecoParam()->GetDefaultNonBendingReso(cluster->GetChamberId()),
-                            trackReconstructor->GetRecoParam()->GetDefaultBendingReso(cluster->GetChamberId()));
-        } else {
-          cluster->SetErrXY(0.2f, 0.2f);
-        }
+        // reset the resolution of the mono-cathod clusters and others in double precision before running the reconstruction
+        cluster->SetErrXY(0.2, 0.2);
         clusterStore->Add(*cluster);
       }
     } else {
-      // cluster resolution data members are ex and ey in O2 while they are ex^2 and ey^2 in AliRoot
-      // by resetting it to a float the resolution used both in O2 and AliRoot is the same and so are the tracks
       TIter nextCl(clusterStore->CreateIterator());
       AliMUONVCluster* cl(nullptr);
       int iCl(0);
       std::list<uint32_t> clustersToRemove{};
       while ((cl = static_cast<AliMUONVCluster*>(nextCl()))) {
-        if (trackReconstructor) {
-          cl->SetErrXY(trackReconstructor->GetRecoParam()->GetDefaultNonBendingReso(cluster->GetChamberId()),
-                       trackReconstructor->GetRecoParam()->GetDefaultBendingReso(cluster->GetChamberId()));
-        } else {
-          cl->SetErrXY(0.2f, 0.2f);
-        }
-//        cl->SetErrXY((float)cl->GetErrX(), (float)cl->GetErrY());
+        // reset the cluster resolution in double precision before running the reconstruction
+        cl->SetErrXY(0.2, 0.2);
         // find duplicate clusters (same position but different Id)
         TIter nextCl2(clusterStore->CreateIterator());
         AliMUONVCluster* cl2(nullptr);
@@ -181,9 +187,6 @@ void ConvertMUONClusters(int runNumber, TString inFileName, TString outFileName 
       }
     }
 
-    // write the clusters in the binary file
-    WriteClusters(*clusterStore, outClusterFile);
-
     if (findTracks) {
 
       // reconstruct tracks from clusters
@@ -195,14 +198,28 @@ void ConvertMUONClusters(int runNumber, TString inFileName, TString outFileName 
       if (clusterStore->GetSize() > 0 && trackStore->GetSize() == 0) {
         cout << "no track has been retreived in event " << iEvent << endl;
       }
-/*
-      // refit the tracks to retreive the exact same parameters as the refitted ESD tracks
+    }
+
+    // change the resolution of all mono-cathod clusters
+    ChangeMonoCathodClusterRes(*clusterStore);
+
+    // write the clusters in the binary file
+    WriteClusters(*clusterStore, outClusterFile);
+
+    if (findTracks) {
+
+      // refit the tracks to retreive the exact same parameters as in O2
       AliMUONTrack* track(nullptr);
       TIter next(trackStore->CreateIterator());
       while ((track = static_cast<AliMUONTrack*>(next()))) {
+        for (int iCl = 0; iCl < track->GetNClusters(); ++iCl) {
+          AliMUONVCluster* cl = static_cast<AliMUONTrackParam*>(track->GetTrackParamAtCluster()->UncheckedAt(iCl))->GetClusterPtr();
+          // reset the cluster resolution in float, as in O2
+          cl->SetErrXY((float)cl->GetErrX(), (float)cl->GetErrY());
+        }
         trackReconstructor->RefitTrack(*track, kFALSE);
       }
-*/
+
       // write the tracks in the second binary file
       WriteTracks(*trackStore, *outTrackFile);
     }
@@ -288,12 +305,13 @@ bool SetMagField()
 }
 
 //------------------------------------------------------------------
-AliMUONVTrackReconstructor* CreateTrackReconstructor(int runNumber)
+AliMUONGeometryTransformer* LoadGeometry(int runNumber)
 {
-  /// access OCDB and prepare track finding
+  /// load the geometry and mapping from the OCDB
 
+  // set OCDB location
   AliCDBManager* man = AliCDBManager::Instance();
-  if (gSystem->AccessPathName("OCDB.root", kFileExists)==0) {
+  if (gSystem->AccessPathName("OCDB.root", kFileExists) == 0) {
     man->SetDefaultStorage("local:///dev/null");
     man->SetSnapshotMode("OCDB.root");
   } else {
@@ -301,13 +319,31 @@ AliMUONVTrackReconstructor* CreateTrackReconstructor(int runNumber)
   }
   man->SetRun(runNumber);
 
-  if (!SetMagField()) {
-//  if (!AliMUONCDB::LoadField()) {
+  // load the geometry
+  AliGeomManager::LoadGeometry();
+  if (!AliGeomManager::GetGeometry() || !AliGeomManager::ApplyAlignObjsFromCDB("MUON")) {
     return nullptr;
   }
 
-  AliGeomManager::LoadGeometry();
-  if (!AliGeomManager::GetGeometry() || !AliGeomManager::ApplyAlignObjsFromCDB("MUON")) {
+  // load the mapping
+  if (!AliMpCDB::LoadDDLStore()) {
+    return nullptr;
+  }
+
+  // create the geometry transformer
+  AliMUONGeometryTransformer* transformer = new AliMUONGeometryTransformer();
+  transformer->LoadGeometryData();
+
+  return transformer;
+}
+
+//------------------------------------------------------------------
+AliMUONVTrackReconstructor* CreateTrackReconstructor()
+{
+  /// load the magnetic field and recoParam from the OCDB and prepare track finding
+
+  if (!SetMagField()) {
+//  if (!AliMUONCDB::LoadField()) {
     return nullptr;
   }
 
@@ -316,8 +352,7 @@ AliMUONVTrackReconstructor* CreateTrackReconstructor(int runNumber)
     return nullptr;
   }
 
-  bool discardMonoCathodClusters = false;
-  recoParam->DiscardMonoCathodClusters(discardMonoCathodClusters);
+  recoParam->DiscardMonoCathodClusters(true, 10., 10.);
   //recoParam->MakeMoreTrackCandidates(true);
   //recoParam->RequestStation(0, false);
   //recoParam->RequestStation(1, false);
@@ -329,16 +364,58 @@ AliMUONVTrackReconstructor* CreateTrackReconstructor(int runNumber)
   //recoParam->ImproveTracks(false);
   recoParam->SetMaxTrackCandidates(1000000);
 
-  AliMUONGeometryTransformer* transformer = nullptr;
-  if (discardMonoCathodClusters) {
-    if (!AliMpCDB::LoadDDLStore()) {
-      return nullptr;
-    }
-    transformer = new AliMUONGeometryTransformer;
-    transformer->LoadGeometryData();
-  }
-
   return AliMUONTracker::CreateTrackReconstructor(recoParam, nullptr, transformer);
+}
+
+//------------------------------------------------------------------
+void ChangeMonoCathodClusterRes(AliMUONVClusterStore& clusterStore)
+{
+  /// assign a different resolution to the mono-cathod clusters in the direction of the missing plane
+
+  // loop over clusters in stations 3, 4 and 5
+  TIter next(clusterStore.CreateChamberIterator(4, 9));
+  AliMUONVCluster* cluster(nullptr);
+  while ((cluster = static_cast<AliMUONVCluster*>(next()))) {
+
+    // get the cathod corresponding to the bending/non-bending plane
+    int deId = cluster->GetDetElemId();
+    AliMpDetElement* de = AliMpDDLStore::Instance()->GetDetElement(deId, false);
+    AliMp::CathodType cath1 = de->GetCathodType(AliMp::kBendingPlane);
+    AliMp::CathodType cath2 = de->GetCathodType(AliMp::kNonBendingPlane);
+
+    // get the corresponding segmentation
+    const AliMpVSegmentation* seg1 = AliMpSegmentation::Instance()->GetMpSegmentation(deId, cath1);
+    const AliMpVSegmentation* seg2 = AliMpSegmentation::Instance()->GetMpSegmentation(deId, cath2);
+
+    // get local coordinate of the cluster
+    double lX(0.), lY(0.), lZ(0.);
+    transformer->Global2Local(deId, cluster->GetX(), cluster->GetY(), cluster->GetZ(), lX, lY, lZ);
+
+    // find pads below the cluster
+    AliMpPad pad1 = seg1->PadByPosition(lX, lY, false);
+    AliMpPad pad2 = seg2->PadByPosition(lX, lY, false);
+
+    // build their ID if pads are valid
+    uint32_t padId1 = (pad1.IsValid()) ? AliMUONVDigit::BuildUniqueID(deId, pad1.GetManuId(), pad1.GetManuChannel(), cath1) : 0;
+    uint32_t padId2 = (pad2.IsValid()) ? AliMUONVDigit::BuildUniqueID(deId, pad2.GetManuId(), pad2.GetManuChannel(), cath2) : 0;
+
+    // check if the cluster contains these pads
+    bool hasNonBending(false);
+    bool hasBending(false);
+    for (int iDigit = 0; iDigit < cluster->GetNDigits(); ++iDigit) {
+      if (cluster->GetDigitId(iDigit) == padId1) {
+        hasBending = true;
+        if (hasNonBending) break;
+      } else if (cluster->GetDigitId(iDigit) == padId2) {
+        hasNonBending = true;
+        if (hasBending) break;
+      }
+    }
+
+    // modify the cluster resolution if needed
+    if (!hasNonBending) cluster->SetErrXY(10., cluster->GetErrY());
+    if (!hasBending) cluster->SetErrXY(cluster->GetErrX(), 10.);
+  }
 }
 
 //------------------------------------------------------------------
