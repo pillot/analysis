@@ -1,7 +1,13 @@
+#include <iostream>
+#include <chrono>
+
+#include <TString.h>
 #include <TFile.h>
 #include <TTree.h>
 #include <TROOT.h>
 
+#include "AliRunLoader.h"
+#include "AliLoader.h"
 #include "AliCDBManager.h"
 #include "AliGeomManager.h"
 
@@ -15,15 +21,19 @@
 #include "AliMUONVDigitStore.h"
 #include "AliMUONClusterStoreV2.h"
 
+using namespace std;
+
 //------------------------------------------------------------------
-void RunAliRootPreClusterizer(const char* digitFileName, const char* clusterFileName)
+void RunAliRootPreClusterizer(int runNumber = 0, TString ocdb = "local://$ALIROOT_OCDB_ROOT/OCDB",
+                              TString digitFileName = "", TString clusterFileName = "preclusters.root")
 {
   /// run the Aliroot preclustering
+  // if digitFileName == "", read the digits from the standard MUON.Digits.root file
 
   // load geometry and reconstruction parameters
 //  AliCDBManager::Instance()->SetDefaultStorage("raw://");
-  AliCDBManager::Instance()->SetDefaultStorage("local://./OCDB");
-  AliCDBManager::Instance()->SetRun(196099);
+  AliCDBManager::Instance()->SetDefaultStorage(ocdb.Data());
+  AliCDBManager::Instance()->SetRun(runNumber);
   AliGeomManager::LoadGeometry();
   if (!AliGeomManager::GetGeometry() || !AliGeomManager::ApplyAlignObjsFromCDB("MUON")) return;
   AliMUONGeometryTransformer transformer;
@@ -37,13 +47,25 @@ void RunAliRootPreClusterizer(const char* digitFileName, const char* clusterFile
 //  AliMUONVClusterFinder* clusterFinder = new AliMUONPreClusterFinder();
   AliMUONVClusterServer* clusterServer = new AliMUONSimpleClusterServer(clusterFinder, transformer);
 
-  // prepare to read digits
-  TFile* digitFile = TFile::Open(digitFileName);
-  if (!digitFile) return;
-  TTree* treeD = static_cast<TTree*>(digitFile->Get("TreeD"));
-  if (!treeD) return;
-  AliMUONVDigitStore* digitStore = AliMUONVDigitStore::Create(*treeD);
-  if (!digitStore->Connect(*treeD)) return;
+  // prepare to read reconstructed digits
+  AliRunLoader* rl(nullptr);
+  AliLoader* muonLoader(nullptr);
+  TTree* treeD(nullptr);
+  AliMUONVDigitStore* digitStore(nullptr);
+  if (digitFileName.IsNull()) {
+    rl = AliRunLoader::Open("galice.root", "MUONLoader");
+    muonLoader = rl->GetDetectorLoader("MUON");
+    if (muonLoader->LoadDigits("READ") != 0) return;
+    treeD = muonLoader->TreeD();
+    digitStore = AliMUONVDigitStore::Create(*treeD);
+  } else {
+    TFile* digitFile = TFile::Open(digitFileName);
+    if (!digitFile) return;
+    treeD = static_cast<TTree*>(digitFile->Get("TreeD"));
+    if (!treeD) return;
+    digitStore = AliMUONVDigitStore::Create(*treeD);
+    if (!digitStore->Connect(*treeD)) return;
+  }
 
   // prepare to write clusters
   AliMUONVClusterStore* clusterStore = new AliMUONClusterStoreV2();
@@ -53,18 +75,29 @@ void RunAliRootPreClusterizer(const char* digitFileName, const char* clusterFile
 
   // loop over events
   AliMpArea area; // invalid area to clusterize everything
-  int nEvents = treeD->GetEntries();
+  int nEvents = rl ? rl->GetNumberOfEvents() : treeD->GetEntries();
+  std::chrono::duration<double> preclusteringTime{};
   for (int iEvent = 0; iEvent < nEvents; ++iEvent) {
 
     // load the digits
-    treeD->GetEntry(iEvent);
+    if (digitFileName.IsNull()) {
+      rl->GetEvent(iEvent);
+      treeD = muonLoader->TreeD();
+      digitStore->Connect(*treeD);
+      treeD->GetEvent(0);
+    } else {
+      treeD->GetEntry(iEvent);
+    }
     TIter next(digitStore->CreateIterator());
     clusterServer->UseDigits(next);
 
     // clusterize every chambers
+    auto tStart = std::chrono::high_resolution_clock::now();
     for (int iCh = 0; iCh < 10; ++iCh) {
       clusterServer->Clusterize(iCh, *clusterStore, area, recoParam);
     }
+    auto tEnd = std::chrono::high_resolution_clock::now();
+    preclusteringTime += tEnd - tStart;
 
     // store the clusters
     treeR->Fill();
@@ -78,4 +111,7 @@ void RunAliRootPreClusterizer(const char* digitFileName, const char* clusterFile
   clusterFile->cd();
   treeR->Write();
   clusterFile->Close();
+
+  // print timer
+  cout << "preclustering duration = " << preclusteringTime.count() << " s" << endl;
 }
