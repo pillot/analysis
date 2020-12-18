@@ -1,8 +1,8 @@
 #include <fstream>
 #include <iostream>
+#include <list>
 #include <vector>
 #include <algorithm>
-#include <iterator>
 
 #include <TMath.h>
 #include <TStyle.h>
@@ -21,8 +21,6 @@
 #include "AliGRPObject.h"
 #include "AliGeomManager.h"
 #include "AliMUONCDB.h"
-#include "AliMUONTrackExtrap.h"
-#include "AliMUONTrackParam.h"
 
 #include "DetectorsBase/GeometryManager.h"
 #include "Field/MagneticField.h"
@@ -30,6 +28,11 @@
 #include "DataFormatsMCH/TrackMCH.h"
 #include "MCHBase/ClusterBlock.h"
 #include "MCHBase/TrackBlock.h"
+#include "MCHTracking/TrackParam.h"
+#include "MCHTracking/Cluster.h"
+#include "MCHTracking/Track.h"
+#include "MCHTracking/TrackFitter.h"
+#include "MCHTracking/TrackExtrap.h"
 
 using namespace std;
 using namespace o2::mch;
@@ -37,6 +40,9 @@ using namespace ROOT::Math;
 
 static const double muMass = TDatabasePDG::Instance()->GetParticle("mu-")->Mass();
 double chi2Max = 2. * 4. * 4.;
+TrackFitter trackFitter{};
+bool ocdbLoaded = false;
+int run = 0;
 
 //_________________________________________________________________________________________________
 struct ClusterStructV1 {
@@ -72,9 +78,11 @@ struct TrackStruct {
   double chi2 = 0.;
   TrackParamStruct param{};
   TMatrixD cov{5, 5};
-  std::vector<ClusterStruct> clusters{};
+  std::vector<Cluster> clusters{};
   bool matchFound = false;
   bool matchIdentical = false;
+  bool connected = false;
+  bool needExtrapToVtx = false;
 
   bool operator==(const TrackStruct& track) const
   {
@@ -88,9 +96,9 @@ struct TrackStruct {
       if (cl1.getDEId() != cl2.getDEId()) {
         return false;
       }
-      double dx = cl1.x - cl2.x;
-      double dy = cl1.y - cl2.y;
-      double chi2 = dx * dx / (cl1.ex * cl1.ex + cl2.ex * cl2.ex) + dy * dy / (cl1.ey * cl1.ey + cl2.ey * cl2.ey);
+      double dx = cl1.getX() - cl2.getX();
+      double dy = cl1.getY() - cl2.getY();
+      double chi2 = dx * dx / (cl1.getEx2() + cl2.getEx2()) + dy * dy / (cl1.getEy2() + cl2.getEy2());
       if (chi2 > chi2Max) {
         return false;
       }
@@ -110,10 +118,10 @@ struct TrackStruct {
     for (const auto& cl1 : this->clusters) {
       for(const auto& cl2 : track.clusters) {
         if (cl1.getDEId() == cl2.getDEId()) {
-          double dx = cl1.x - cl2.x;
-          double dy = cl1.y - cl2.y;
-          double chi2 = dx * dx / (cl1.ex * cl1.ex + cl2.ex * cl2.ex) + dy * dy / (cl1.ey * cl1.ey + cl2.ey * cl2.ey);
-          if (chi2 < chi2Max) {
+          double dx = cl1.getX() - cl2.getX();
+          double dy = cl1.getY() - cl2.getY();
+          double chi2 = dx * dx / (cl1.getEx2() + cl2.getEx2()) + dy * dy / (cl1.getEy2() + cl2.getEy2());
+          if (chi2 <= chi2Max) {
             matchCluster[cl1.getChamberId()] = true;
             ++nMatchClusters;
             break;
@@ -126,45 +134,300 @@ struct TrackStruct {
             (matchCluster[6] || matchCluster[7] || matchCluster[8] || matchCluster[9]) &&
             (2 * nMatchClusters > this->clusters.size() || 2 * nMatchClusters > track.clusters.size()));
   }
+
+  void printClusterDifferences(const TrackStruct& track) const
+  {
+    /// print the DE where clusters differ between the 2 tracks
+    printf("additional clusters: track1 (%f) : ", getChi2N2());
+    for (const auto& cluster1 : clusters) {
+      bool found(false);
+      for (const auto& cluster2 : track.clusters) {
+        if (cluster1.getUniqueId() == cluster2.getUniqueId()) {
+          found = true;
+          break;
+        }
+      }
+      if (found) {
+        if (cluster1.getEx() > 1. || cluster1.getEy() > 1.) {
+          printf("%d (mono), ", cluster1.getDEId());
+        } else {
+          printf("%d, ", cluster1.getDEId());
+        }
+      } else {
+        if (cluster1.getEx() > 1. || cluster1.getEy() > 1.) {
+          printf("\e[91m%d (mono)\e[0m, ", cluster1.getDEId());
+        } else {
+          printf("\e[91m%d\e[0m, ", cluster1.getDEId());
+        }
+      }
+    }
+    printf("track2 (%f) : ", track.getChi2N2());
+    for (const auto& cluster2 : track.clusters) {
+      bool found(false);
+      for (const auto& cluster1 : clusters) {
+        if (cluster1.getUniqueId() == cluster2.getUniqueId()) {
+          found = true;
+          break;
+        }
+      }
+      if (found) {
+        if (cluster2.getEx() > 1. || cluster2.getEy() > 1.) {
+          printf("%d (mono), ", cluster2.getDEId());
+        } else {
+          printf("%d, ", cluster2.getDEId());
+        }
+      } else {
+        if (cluster2.getEx() > 1. || cluster2.getEy() > 1.) {
+          printf("\e[91m%d (mono)\e[0m, ", cluster2.getDEId());
+        } else {
+          printf("\e[91m%d\e[0m, ", cluster2.getDEId());
+        }
+      }
+    }
+    printf("\n");
+  }
+
+  int getNClustersInCommon(const TrackStruct& track) const
+  {
+    /// return the number of clusters in common between this track and the one given as parameter
+    int nClustersInCommon(0);
+    for (const auto& cluster1 : clusters) {
+      for (const auto& cluster2 : track.clusters) {
+        if (cluster1.getUniqueId() == cluster2.getUniqueId()) {
+          ++nClustersInCommon;
+          break;
+        }
+      }
+    }
+    return nClustersInCommon;
+  }
+
+  bool missClusterOnSt345(const TrackStruct& track) const
+  {
+    /// return true if the given track misses clusters from this track on station 3, 4 and 5
+    for (const auto& cluster1 : clusters) {
+      if (cluster1.getChamberId() < 4) {
+        continue;
+      }
+      bool found(false);
+      for (const auto& cluster2 : track.clusters) {
+        if (cluster2.getChamberId() < 4) {
+          continue;
+        }
+        if (cluster1.getUniqueId() == cluster2.getUniqueId()) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool isValid() const
+  {
+    /// check if the track passes *all* the tracking criteria, that are:
+    /// 1 chamber fired per station and 3 chambers fired in stations 4 & 5
+    int nChFired[5] = {0, 0, 0, 0, 0};
+    int previousCh(-1);
+    for (const auto& cluster : clusters) {
+      int chId = cluster.getChamberId();
+      if (chId != previousCh) {
+        nChFired[chId / 2]++;
+        previousCh = chId;
+      }
+    }
+    if (nChFired[0] == 0 || nChFired[1] == 0 || nChFired[2] == 0 || nChFired[3] + nChFired[4] < 3) {
+      return false;
+    }
+    return true;
+  }
+
+  bool containsMonoCathodClusters() const
+  {
+    /// return true if the track contains mono-cathod cluster(s)
+    for (const auto& cluster : clusters) {
+      if (cluster.getEx() > 1. || cluster.getEy() > 1.) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  int getNChamberFired() const
+  {
+    /// return the number of chamber fired
+    int nCh(0);
+    int previousCh(-1);
+    for (const auto& cluster : clusters) {
+      int chId = cluster.getChamberId();
+      if (chId != previousCh) {
+        nCh++;
+        previousCh = chId;
+      }
+    }
+    return nCh;
+  }
+
+  int getNdf() const
+  {
+    /// return the number of degrees of freedom
+    return 2 * clusters.size() - 5;
+  }
+
+  int getNdf2() const
+  {
+    /// return the number of degrees of freedom - 1
+    return 2 * clusters.size() - 6;
+  }
+
+  int getNdf3() const
+  {
+    /// return the number of degrees of freedom accounting for missing information from mono-cathod clusters
+    int ndf(-5);
+    for (const auto& cluster : clusters) {
+      if (cluster.getEx() < 1.) {
+        ++ndf;
+      }
+      if (cluster.getEy() < 1.) {
+        ++ndf;
+      }
+    }
+    return ndf;
+  }
+
+  double getChi2N() const
+  {
+    /// return the normalized chi2
+    return chi2 / getNdf();
+  }
+
+  double getChi2N2() const
+  {
+    /// return the normalized chi2
+    return chi2 / getNdf2();
+  }
+
+  double getChi2N3() const
+  {
+    /// return the normalized chi2 (accounting for missing info)
+    return chi2 / getNdf3();
+  }
+
+  bool isBetter1(const TrackStruct& track) const
+  {
+    /// Return true if this track is better than the one given as parameter
+    /// It is better if it has more clusters or a better chi2 in case of equality
+    int nCl1 = this->clusters.size();
+    int nCl2 = track.clusters.size();
+    return ((nCl1 > nCl2) || ((nCl1 == nCl2) && (this->chi2 < track.chi2)));
+  }
+
+  bool isBetter2(const TrackStruct& track) const
+  {
+    /// Return true if this track is better than the one given as parameter
+    /// It is better if it has a better normalized chi2
+    return (this->getChi2N() < track.getChi2N());
+  }
+
+  bool isBetter22(const TrackStruct& track) const
+  {
+    /// Return true if this track is better than the one given as parameter
+    /// It is better if it has a better normalized chi2
+    return (this->getChi2N2() < track.getChi2N2());
+  }
+
+  bool isBetter23(const TrackStruct& track) const
+  {
+    /// Return true if this track is better than the one given as parameter
+    /// It is better if it has a better normalized chi2 (accounting for missing info)
+    return (this->getChi2N3() < track.getChi2N3());
+  }
+
+  bool isBetter3(const TrackStruct& track) const
+  {
+    /// Return true if this track is better than the one given as parameter
+    /// It is better if it has a higher probability of chi2
+    return (TMath::Prob(this->chi2, this->getNdf()) > TMath::Prob(track.chi2, track.getNdf()));
+  }
+
+  bool isBetter4(const TrackStruct& track) const
+  {
+    /// Return true if this track is better than the one given as parameter
+    /// It is better if it has more chambers fired or a better chi2/ndf in case of equality
+    int nCh1 = getNChamberFired();
+    int nCh2 = track.getNChamberFired();
+    return ((nCh1 > nCh2) || ((nCh1 == nCh2) && (getChi2N() < track.getChi2N())));
+  }
+
+  bool isBetter42(const TrackStruct& track) const
+  {
+    /// Return true if this track is better than the one given as parameter
+    /// It is better if it has more chambers fired or a better chi2/ndf in case of equality
+    int nCh1 = getNChamberFired();
+    int nCh2 = track.getNChamberFired();
+    return ((nCh1 > nCh2) || ((nCh1 == nCh2) && (getChi2N2() < track.getChi2N2())));
+  }
+
+  bool isBetter43(const TrackStruct& track) const
+  {
+    /// Return true if this track is better than the one given as parameter
+    /// It is better if it has more chambers fired or a better chi2/ndf (accounting for missing info) in case of equality
+    int nCh1 = getNChamberFired();
+    int nCh2 = track.getNChamberFired();
+    return ((nCh1 > nCh2) || ((nCh1 == nCh2) && (getChi2N3() < track.getChi2N3())));
+  }
 };
 
 //_________________________________________________________________________________________________
 int ReadNextEvent(ifstream& inFile, std::vector<VertexStruct>& vertices);
-int ReadNextEvent(ifstream& inFile, int version, std::vector<VertexStruct>& vertices, bool selectTracks, std::vector<TrackStruct>& tracks);
+int ReadNextEvent(ifstream& inFile, int version, std::list<TrackStruct>& tracks);
 void ReadTrack(ifstream& inFile, TrackStruct& track, int version);
-void ReadNextEventV5(ifstream& inFile, std::vector<VertexStruct>& vertices, int& event, bool selectTracks, std::vector<TrackStruct>& tracks);
+void ReadNextEventV5(ifstream& inFile, int& event, std::list<TrackStruct>& tracks);
 void FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const TrackMCH* mchTrack, std::vector<ClusterStruct>& clusters);
+void UpdateTrack(TrackStruct& track, const Track& tmpTrack);
+void RefitTracks(std::list<TrackStruct>& tracks);
+void ImproveTracks(std::list<TrackStruct>& tracks);
+void RemoveInvalidTracks(std::list<TrackStruct>& tracks);
+void RemoveConnectedTracks(std::list<TrackStruct>& tracks, int stMin, int stMax, std::function<bool(const TrackStruct&, const TrackStruct&)> isBetter);
 bool LoadOCDB();
 bool SetMagField();
+void ExtrapToVertex(std::list<TrackStruct>& tracks, const std::vector<VertexStruct>& vertices, int event);
 void ExtrapToVertex(TrackStruct& track, VertexStruct& vertex);
+void selectTracks(std::list<TrackStruct>& tracks);
 bool IsSelected(TrackStruct& track);
-int CompareEvents(std::vector<TrackStruct>& tracks1, std::vector<TrackStruct>& tracks2, double precision, bool printAll, std::vector<TH1*>& histos);
+int CompareEvents(std::list<TrackStruct>& tracks1, std::list<TrackStruct>& tracks2, double precision, bool printAll, std::vector<TH1*>& histos);
 bool AreTrackParamCompatible(const TrackParamStruct& param1, const TrackParamStruct& param2, double precision);
 bool AreTrackParamCovCompatible(const TMatrixD& cov1, const TMatrixD& cov2, double precision);
-int PrintEvent(const std::vector<TrackStruct>& tracks);
+int PrintEvent(const std::list<TrackStruct>& tracks);
 void PrintTrack(const TrackStruct& track);
 void PrintResiduals(const TrackParamStruct& param1, const TrackParamStruct& param2);
 void PrintCovResiduals(const TMatrixD& cov1, const TMatrixD& cov2);
 void FillResiduals(const TrackParamStruct& param1, const TrackParamStruct& param2, std::vector<TH1*>& histos);
 void DrawResiduals(std::vector<TH1*>& histos);
 void CreateHistosAtVertex(std::vector<TH1*>& histos, const char* extension);
-void FillHistosAtVertex(const std::vector<TrackStruct>& tracks, std::vector<TH1*>& histos);
+void FillHistosAtVertex(const std::list<TrackStruct>& tracks, std::vector<TH1*>& histos);
 void FillHistosMuAtVertex(const TrackStruct& track, std::vector<TH1*>& histos);
 void FillHistosDimuAtVertex(const TrackStruct& track1, const TrackStruct& track2, std::vector<TH1*>& histos);
 void DrawHistosAtVertex(std::vector<TH1*> histos[2]);
-void FillComparisonsAtVertex(std::vector<TrackStruct>& tracks1, std::vector<TrackStruct>& tracks2, std::vector<TH1*> histos[4]);
-void DrawComparisonsAtVertex(std::vector<TH1*> histos[4]);
+void FillComparisonsAtVertex(std::list<TrackStruct>& tracks1, std::list<TrackStruct>& tracks2, std::vector<TH1*> histos[5]);
+void DrawComparisonsAtVertex(std::vector<TH1*> histos[5]);
 
 //_________________________________________________________________________________________________
-void CompareTracks(string inFileName1, int versionFile1, string inFileName2, int versionFile2,
-                   string vtxFileName = "", double precision = 1.e-4, bool selectTracks = false, bool printAll = false)
+void CompareTracks(int runNumber, string inFileName1, int versionFile1, string inFileName2, int versionFile2,
+                   string vtxFileName = "", double precision = 1.e-4, bool applyTrackSelection = false, bool printAll = false)
 {
   /// Compare the tracks stored in the 2 binary files
+  /// O2 tracking need to be loaded before: gSystem->Load("libO2MCHTracking")
   /// file version 1: param at 1st cluster + clusters
   /// file version 2: param at 1st cluster + chi2 + clusters
   /// file version 3: param at vertex + dca + rAbs + chi2 + param at 1st cluster + clusters
   /// file version 4: param at vertex + dca + rAbs + chi2 + param at 1st cluster + clusters (v2)
   /// file version 5: nTracksAtVtx + nMCHTracks + nClusters + list of Tracks at vertex (param at vertex + dca + rAbs + mchTrackIdx) + list of MCH tracks + list of clusters (v2)
+
+  run = runNumber;
 
   // get vertices and prepare track extrapolation
   std::vector<VertexStruct> vertices{};
@@ -192,16 +455,17 @@ void CompareTracks(string inFileName1, int versionFile1, string inFileName2, int
   }
 
   int event1(-1), event2(-1);
-  std::vector<TrackStruct> tracks1{};
-  std::vector<TrackStruct> tracks2{};
+  std::list<TrackStruct> tracks1{};
+  std::list<TrackStruct> tracks2{};
   bool readNextEvent1(true), readNextEvent2(true);
   int nDifferences(0);
   std::vector<TH1*> residualsAtFirstCluster{};
-  std::vector<TH1*> comparisonsAtVertex[4] = {{}, {}, {}, {}};
+  std::vector<TH1*> comparisonsAtVertex[5] = {{}, {}, {}, {}, {}};
   CreateHistosAtVertex(comparisonsAtVertex[0], "identical");
-  CreateHistosAtVertex(comparisonsAtVertex[1], "similar");
-  CreateHistosAtVertex(comparisonsAtVertex[2], "additional");
-  CreateHistosAtVertex(comparisonsAtVertex[3], "missing");
+  CreateHistosAtVertex(comparisonsAtVertex[1], "similar1");
+  CreateHistosAtVertex(comparisonsAtVertex[2], "similar2");
+  CreateHistosAtVertex(comparisonsAtVertex[3], "additional");
+  CreateHistosAtVertex(comparisonsAtVertex[4], "missing");
   std::vector<TH1*> histosAtVertex[2] = {{}, {}};
   CreateHistosAtVertex(histosAtVertex[0], "1");
   CreateHistosAtVertex(histosAtVertex[1], "2");
@@ -210,18 +474,36 @@ void CompareTracks(string inFileName1, int versionFile1, string inFileName2, int
 
     if (readNextEvent1) {
       if (versionFile1 < 5) {
-        event1 = ReadNextEvent(inFile1, versionFile1, vertices, selectTracks, tracks1);
+        event1 = ReadNextEvent(inFile1, versionFile1, tracks1);
       } else {
-        ReadNextEventV5(inFile1, vertices, event1, selectTracks, tracks1);
+        ReadNextEventV5(inFile1, event1, tracks1);
+      }
+      //trackFitter.useChamberResolution();
+      //ImproveTracks(tracks1);
+      //RemoveInvalidTracks(tracks1);
+      //RemoveConnectedTracks(tracks1, 2, 4, &TrackStruct::isBetter1);
+      //trackFitter.useClusterResolution();
+      //RefitTracks(tracks1);
+      ExtrapToVertex(tracks1, vertices, event1);
+      if (applyTrackSelection) {
+        selectTracks(tracks1);
       }
       FillHistosAtVertex(tracks1, histosAtVertex[0]);
     }
 
     if (readNextEvent2) {
       if (versionFile2 < 5) {
-        event2 = ReadNextEvent(inFile2, versionFile2, vertices, selectTracks, tracks2);
+        event2 = ReadNextEvent(inFile2, versionFile2, tracks2);
       } else {
-        ReadNextEventV5(inFile2, vertices, event2, selectTracks, tracks2);
+        ReadNextEventV5(inFile2, event2, tracks2);
+      }
+      //RemoveInvalidTracks(tracks2);
+      //RemoveConnectedTracks(tracks2, 2, 4, &TrackStruct::isBetter42);
+      //trackFitter.useClusterResolution();
+      //RefitTracks(tracks2);
+      ExtrapToVertex(tracks2, vertices, event2);
+      if (applyTrackSelection) {
+        selectTracks(tracks2);
       }
       FillHistosAtVertex(tracks2, histosAtVertex[1]);
     }
@@ -246,7 +528,7 @@ void CompareTracks(string inFileName1, int versionFile1, string inFileName2, int
       if (tracks1.size() > 0) {
         cout << "tracks in event " << event1 << " are missing in file 2" << endl;
         nDifferences += PrintEvent(tracks1);
-        FillHistosAtVertex(tracks1, comparisonsAtVertex[3]);
+        FillHistosAtVertex(tracks1, comparisonsAtVertex[4]);
       }
       readNextEvent1 = true;
       readNextEvent2 = false;
@@ -255,7 +537,7 @@ void CompareTracks(string inFileName1, int versionFile1, string inFileName2, int
       if (tracks2.size() > 0) {
         cout << "tracks in event " << event2 << " are missing in file 1" << endl;
         nDifferences += PrintEvent(tracks2);
-        FillHistosAtVertex(tracks2, comparisonsAtVertex[2]);
+        FillHistosAtVertex(tracks2, comparisonsAtVertex[3]);
       }
       readNextEvent1 = false;
       readNextEvent2 = true;
@@ -293,7 +575,7 @@ int ReadNextEvent(ifstream& inFile, std::vector<VertexStruct>& vertices)
 }
 
 //_________________________________________________________________________________________________
-int ReadNextEvent(ifstream& inFile, int version, std::vector<VertexStruct>& vertices, bool selectTracks, std::vector<TrackStruct>& tracks)
+int ReadNextEvent(ifstream& inFile, int version, std::list<TrackStruct>& tracks)
 {
   /// read the next event in the input file
 
@@ -312,28 +594,14 @@ int ReadNextEvent(ifstream& inFile, int version, std::vector<VertexStruct>& vert
     return event;
   }
 
-  // get the vertex corresponding to this event or use (0.,0.,0.)
-  VertexStruct vertex = {0., 0., 0.};
-  if (!vertices.empty()) {
-    if (event < (int)vertices.size()) {
-      vertex = vertices[event];
-    } else {
-      cout << "missing vertex for event " << event << endl;
-    }
-  }
-
   // read the tracks
   int nTracks(0);
   inFile.read(reinterpret_cast<char*>(&nTracks), sizeof(int));
-  tracks.reserve(nTracks);
-  TrackStruct track{};
   for (Int_t iTrack = 0; iTrack < nTracks; ++iTrack) {
-    ReadTrack(inFile, track, version);
+    tracks.emplace_back();
+    ReadTrack(inFile, tracks.back(), version);
     if (version < 3) {
-      ExtrapToVertex(track, vertex);
-    }
-    if (!selectTracks || IsSelected(track)) {
-      tracks.push_back(track);
+      tracks.back().needExtrapToVtx = true;
     }
   }
 
@@ -365,18 +633,20 @@ void ReadTrack(ifstream& inFile, TrackStruct& track, int version)
 
   int nClusters(0);
   inFile.read(reinterpret_cast<char*>(&nClusters), sizeof(int));
-  track.clusters.resize(nClusters);
+  track.clusters.reserve(nClusters);
+  ClusterStruct clusterIn{};
   for (Int_t iCl = 0; iCl < nClusters; ++iCl) {
     if (version < 4) {
-      inFile.read(reinterpret_cast<char*>(&(track.clusters[iCl])), sizeof(ClusterStructV1));
+      inFile.read(reinterpret_cast<char*>(&clusterIn), sizeof(ClusterStructV1));
     } else {
-      inFile.read(reinterpret_cast<char*>(&(track.clusters[iCl])), sizeof(ClusterStruct));
+      inFile.read(reinterpret_cast<char*>(&clusterIn), sizeof(ClusterStruct));
     }
+    track.clusters.emplace_back(clusterIn);
   }
 }
 
 //_________________________________________________________________________________________________
-void ReadNextEventV5(ifstream& inFile, std::vector<VertexStruct>& vertices, int& event, bool selectTracks, std::vector<TrackStruct>& tracks)
+void ReadNextEventV5(ifstream& inFile, int& event, std::list<TrackStruct>& tracks)
 {
   /// read the next event in the input file
 
@@ -408,36 +678,18 @@ void ReadNextEventV5(ifstream& inFile, std::vector<VertexStruct>& vertices, int&
   if (nTracksAtVtx > 0) {
 
     // fill the internal track structure based on the provided tracks at vertex
-    tracks.reserve(nTracksAtVtx);
     for (const auto& trackAtVtx : tracksAtVtx) {
       tracks.emplace_back();
       FillTrack(tracks.back(), &trackAtVtx, (nMCHTracks > 0) ? &(mchTracks[trackAtVtx.mchTrackIdx]) : nullptr, clusters);
-      if (selectTracks && !IsSelected(tracks.back())) {
-        tracks.pop_back();
-      }
     }
 
   } else {
 
-    // get the vertex corresponding to this event or use (0.,0.,0.)
-    VertexStruct vertex = {0., 0., 0.};
-    if (!vertices.empty()) {
-      if (event < (int)vertices.size()) {
-        vertex = vertices[event];
-      } else {
-        cout << "missing vertex for event " << event << endl;
-      }
-    }
-
-    // fill the internal track structure based on the MCH tracks extrapolated to the provided vertex
-    tracks.reserve(nMCHTracks);
+    // fill the internal track structure based on the MCH tracks
     for (const auto& mchTrack : mchTracks) {
       tracks.emplace_back();
       FillTrack(tracks.back(), nullptr, &mchTrack, clusters);
-      ExtrapToVertex(tracks.back(), vertex);
-      if (selectTracks && !IsSelected(tracks.back())) {
-        tracks.pop_back();
-      }
+      tracks.back().needExtrapToVtx = true;
     }
   }
 }
@@ -471,16 +723,276 @@ void FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const Tra
         track.cov(i, j) = mchTrack->getCovariance(i, j);
       }
     }
-    track.clusters.insert(track.clusters.end(),
-                          std::make_move_iterator(clusters.begin() + mchTrack->getFirstClusterIdx()),
-                          std::make_move_iterator(clusters.begin() + mchTrack->getLastClusterIdx() + 1));
+    track.clusters.reserve(mchTrack->getNClusters());
+    for (int iCl = mchTrack->getFirstClusterIdx(); iCl <= mchTrack->getLastClusterIdx(); ++iCl) {
+      track.clusters.emplace_back(clusters[iCl]);
+    }
+  }
+}
+
+//_________________________________________________________________________________________________
+void UpdateTrack(TrackStruct& track, const Track& tmpTrack)
+{
+  /// update the track parameters from the temporary track
+
+  const auto& param = tmpTrack.first();
+  track.chi2 = param.getTrackChi2();
+  track.param.x = param.getNonBendingCoor();
+  track.param.y = param.getBendingCoor();
+  track.param.z = param.getZ();
+  track.param.px = param.px();
+  track.param.py = param.py();
+  track.param.pz = param.pz();
+  track.param.sign = param.getCharge();
+
+  const TMatrixD& cov = param.getCovariances();
+  for (int i = 0; i < 5; i++) {
+    for (int j = 0; j <= i; j++) {
+      track.cov(i, j) = track.cov(j, i) = cov(i, j);
+    }
+  }
+
+  // update the list of clusters only if some have been removed
+  if (tmpTrack.getNClusters() != (int)track.clusters.size()) {
+    std::vector<Cluster> clusters{};
+    clusters.reserve(tmpTrack.getNClusters());
+    for (auto& param : tmpTrack) {
+      clusters.push_back(std::move(*param.getClusterPtr()));
+    }
+    track.clusters.swap(clusters);
+  }
+
+  track.needExtrapToVtx = true;
+}
+
+//_________________________________________________________________________________________________
+void RefitTracks(std::list<TrackStruct>& tracks)
+{
+  /// refit the tracks to the attached clusters
+
+  // load OCDB (only once)
+  if (!ocdbLoaded) {
+    if (!LoadOCDB()) {
+      cout << "fail loading OCDB objects for track extrapolation" << endl;
+      exit(1);
+    }
+    ocdbLoaded = true;
+  }
+
+  // same extrapolation method as in TrackFinder
+  TrackExtrap::useExtrapV2();
+
+  for (auto itTrack = tracks.begin(); itTrack != tracks.end();) {
+
+    if (itTrack->clusters.size() == 0) {
+      cout << "track does not contain clusters --> unable to refit" << endl;
+      exit(1);
+    }
+
+    Track track{};
+    for (const auto& cluster : itTrack->clusters) {
+      track.createParamAtCluster(cluster);
+    }
+
+    try {
+      trackFitter.fit(track, false);
+      UpdateTrack(*itTrack, track);
+      ++itTrack;
+    } catch (exception const& e) {
+      itTrack = tracks.erase(itTrack);
+    }
+  }
+}
+
+//_________________________________________________________________________________________________
+void ImproveTracks(std::list<TrackStruct>& tracks)
+{
+  /// Improve tracks by removing removable clusters with local chi2 higher than the defined cut
+  /// Removable clusters are identified by the method Track::tagRemovableClusters()
+  /// Recompute track parameters and covariances at the remaining clusters
+  /// Remove the track if it cannot be improved or in case of failure
+
+  // load OCDB (only once)
+  if (!ocdbLoaded) {
+    if (!LoadOCDB()) {
+      cout << "fail loading OCDB objects for track extrapolation" << endl;
+      exit(1);
+    }
+    ocdbLoaded = true;
+  }
+
+  // same extrapolation method as in TrackFinder
+  TrackExtrap::useExtrapV2();
+
+  // Maximum chi2 to keep a cluster (the factor 2 is for the 2 degrees of freedom: x and y)
+  static const double maxChi2OfCluster = 2. * 4. * 4.;
+
+  for (auto itTrack = tracks.begin(); itTrack != tracks.end();) {
+
+    if (itTrack->clusters.size() == 0) {
+      cout << "track does not contain clusters --> unable to improve" << endl;
+      exit(1);
+    }
+
+    // create a temporary tracking track and fit it without running the smoother
+    Track track{};
+    for (const auto& cluster : itTrack->clusters) {
+      track.createParamAtCluster(cluster);
+    }
+    try {
+      trackFitter.fit(track, false);
+    } catch (exception const& e) {
+      itTrack = tracks.erase(itTrack);
+      continue;
+    }
+
+    bool removeTrack(false);
+
+    // At the first step, only run the smoother
+    auto itStartingParam = std::prev(track.rend());
+
+    while (true) {
+
+      // Refit the part of the track affected by the cluster removal, run the smoother, but do not finalize
+      try {
+        trackFitter.fit(track, true, false, (itStartingParam == track.rbegin()) ? nullptr : &itStartingParam);
+      } catch (exception const&) {
+        removeTrack = true;
+        break;
+      }
+
+      // Identify removable clusters
+      track.tagRemovableClusters(0x1F, false);
+
+      // Look for the cluster with the worst local chi2
+      double worstLocalChi2(-1.);
+      auto itWorstParam(track.end());
+      for (auto itParam = track.begin(); itParam != track.end(); ++itParam) {
+        if (itParam->getLocalChi2() > worstLocalChi2) {
+          worstLocalChi2 = itParam->getLocalChi2();
+          itWorstParam = itParam;
+        }
+      }
+
+      // If the worst chi2 is under requirement then the track is improved
+      if (worstLocalChi2 < maxChi2OfCluster) {
+        break;
+      }
+
+      // If the worst cluster is not removable then the track cannot be improved
+      if (!itWorstParam->isRemovable()) {
+        removeTrack = true;
+        break;
+      }
+
+      // Remove the worst cluster
+      auto itNextParam = track.removeParamAtCluster(itWorstParam);
+
+      // Decide from where to refit the track: from the cluster next the one suppressed or
+      // from scratch if the removed cluster was used to compute the tracking seed
+      itStartingParam = track.rbegin();
+      auto itNextToNextParam = (itNextParam == track.end()) ? itNextParam : std::next(itNextParam);
+      while (itNextToNextParam != track.end()) {
+        if (itNextToNextParam->getClusterPtr()->getChamberId() != itNextParam->getClusterPtr()->getChamberId()) {
+          itStartingParam = std::make_reverse_iterator(++itNextParam);
+          break;
+        }
+        ++itNextToNextParam;
+      }
+    }
+
+    // Remove the track if it couldn't be improved or update the parameters
+    if (removeTrack) {
+      itTrack = tracks.erase(itTrack);
+    } else {
+      UpdateTrack(*itTrack, track);
+      ++itTrack;
+    }
+  }
+}
+
+//_________________________________________________________________________________________________
+void RemoveInvalidTracks(std::list<TrackStruct>& tracks)
+{
+  /// Find and remove tracks that do not pass all the tracking criteria,
+  /// including 3 chambers fired out of 4 in stations 4 & 5
+  for (auto itTrack = tracks.begin(); itTrack != tracks.end();) {
+    if (!itTrack->isValid()) {
+      itTrack = tracks.erase(itTrack);
+    } else {
+      ++itTrack;
+    }
+  }
+}
+
+//_________________________________________________________________________________________________
+void RemoveConnectedTracks(std::list<TrackStruct>& tracks, int stMin, int stMax,
+                           std::function<bool(const TrackStruct&, const TrackStruct&)> isBetter)
+{
+  /// Find and remove tracks sharing 1 cluster or more in station(s) [stMin, stMax]
+  /// For each couple of connected tracks, one removes the worst one as determined by the isBetter function
+
+  if (tracks.size() < 2) {
+    return;
+  }
+
+  int chMin = 2 * stMin;
+  int chMax = 2 * stMax + 1;
+  int nPlane = 2 * (chMax - chMin + 1);
+
+  // first loop to fill the array of cluster Ids
+  std::vector<uint32_t> ClIds{};
+  ClIds.resize(nPlane * tracks.size());
+  int iTrack(0);
+  for (auto itTrack = tracks.begin(); itTrack != tracks.end(); ++itTrack, ++iTrack) {
+    for (auto itCl = itTrack->clusters.rbegin(); itCl != itTrack->clusters.rend(); ++itCl) {
+      int ch = itCl->getChamberId();
+      if (ch > chMax) {
+        continue;
+      } else if (ch < chMin) {
+        break;
+      }
+      ClIds[nPlane * iTrack + 2 * (ch - chMin) + itCl->getDEId() % 2] = itCl->getUniqueId();
+    }
+  }
+
+  // second loop to tag the tracks to remove
+  int iindex = ClIds.size() - 1;
+  for (auto itTrack1 = tracks.rbegin(); itTrack1 != tracks.rend(); ++itTrack1, iindex -= nPlane) {
+    int jindex = iindex - nPlane;
+    for (auto itTrack2 = std::next(itTrack1); itTrack2 != tracks.rend(); ++itTrack2) {
+      for (int iPlane = nPlane; iPlane > 0; --iPlane) {
+        if (ClIds[iindex] > 0 && ClIds[iindex] == ClIds[jindex]) {
+          if (isBetter(*itTrack2, *itTrack1)) {
+            itTrack1->connected = true;
+          } else {
+            itTrack2->connected = true;
+          }
+          iindex -= iPlane;
+          jindex -= iPlane;
+          break;
+        }
+        --iindex;
+        --jindex;
+      }
+      iindex += nPlane;
+    }
+  }
+
+  // third loop to remove them. That way all combinations are tested.
+  for (auto itTrack = tracks.begin(); itTrack != tracks.end();) {
+    if (itTrack->connected) {
+      itTrack = tracks.erase(itTrack);
+    } else {
+      ++itTrack;
+    }
   }
 }
 
 //_________________________________________________________________________________________________
 bool LoadOCDB()
 {
-  /// access OCDB and prepare track extrapolation to vertex
+  /// access OCDB and prepare track extrapolation to vertex and track fitting
 
   AliCDBManager* man = AliCDBManager::Instance();
   if (gSystem->AccessPathName("OCDB.root", kFileExists)==0) {
@@ -489,13 +1001,17 @@ bool LoadOCDB()
   } else {
     man->SetDefaultStorage("local://./OCDB");
   }
-  man->SetRun(169099);
+  man->SetRun(run);
 
   if (!SetMagField()) {
 //  if (!AliMUONCDB::LoadField()) {
     return false;
   }
-  AliMUONTrackExtrap::SetField();
+  TrackExtrap::setField();
+
+  // prepare the track fitter
+  trackFitter.smoothTracks(true);
+  trackFitter.setChamberResolution(0.2, 0.2);
 
   o2::base::GeometryManager::loadGeometry("O2geometry.root");
   if (!gGeoManager) {
@@ -576,12 +1092,37 @@ bool SetMagField()
 }
 
 //_________________________________________________________________________________________________
+void ExtrapToVertex(std::list<TrackStruct>& tracks, const std::vector<VertexStruct>& vertices, int event)
+{
+  /// extrapolate to the vertex all tracks that need to be
+
+  // same extrapolation method as in TrackAtVertexSpec
+  TrackExtrap::useExtrapV2(false);
+
+  // get the vertex corresponding to this event or use (0.,0.,0.)
+  VertexStruct vertex = {0., 0., 0.};
+  if (!vertices.empty()) {
+    if (event < (int)vertices.size()) {
+      vertex = vertices[event];
+    } else {
+      cout << "missing vertex for event " << event << endl;
+    }
+  }
+
+  // loop over tracks and extrapolate them to the vertex if needed
+  for (auto& track : tracks) {
+    if (track.needExtrapToVtx) {
+      ExtrapToVertex(track, vertex);
+    }
+  }
+}
+
+//_________________________________________________________________________________________________
 void ExtrapToVertex(TrackStruct& track, VertexStruct& vertex)
 {
   /// compute the track parameters at vertex, at DCA and at the end of the absorber
 
   // load OCDB (only once)
-  static bool ocdbLoaded = false;
   if (!ocdbLoaded) {
     if (!LoadOCDB()) {
       cout << "fail loading OCDB objects for track extrapolation" << endl;
@@ -590,36 +1131,49 @@ void ExtrapToVertex(TrackStruct& track, VertexStruct& vertex)
     ocdbLoaded = true;
   }
 
-  // convert parameters at first cluster in MUON format
-  AliMUONTrackParam trackParam;
-  trackParam.SetNonBendingCoor(track.param.x);
-  trackParam.SetBendingCoor(track.param.y);
-  trackParam.SetZ(track.param.z);
-  trackParam.SetNonBendingSlope(track.param.px / track.param.pz);
-  trackParam.SetBendingSlope(track.param.py / track.param.pz);
-  trackParam.SetInverseBendingMomentum(track.param.sign/TMath::Sqrt(track.param.py*track.param.py + track.param.pz*track.param.pz));
+  // convert parameters at first cluster in TrackParam format
+  TrackParam trackParam;
+  trackParam.setNonBendingCoor(track.param.x);
+  trackParam.setBendingCoor(track.param.y);
+  trackParam.setZ(track.param.z);
+  trackParam.setNonBendingSlope(track.param.px / track.param.pz);
+  trackParam.setBendingSlope(track.param.py / track.param.pz);
+  trackParam.setInverseBendingMomentum(track.param.sign/TMath::Sqrt(track.param.py*track.param.py + track.param.pz*track.param.pz));
 
   // extrapolate to vertex
-  AliMUONTrackParam trackParamAtVertex(trackParam);
-  AliMUONTrackExtrap::ExtrapToVertex(&trackParamAtVertex, vertex.x, vertex.y, vertex.z, 0., 0.);
-  track.pxpypzm.SetPx(trackParamAtVertex.Px());
-  track.pxpypzm.SetPy(trackParamAtVertex.Py());
-  track.pxpypzm.SetPz(trackParamAtVertex.Pz());
+  TrackParam trackParamAtVertex(trackParam);
+  TrackExtrap::extrapToVertex(&trackParamAtVertex, vertex.x, vertex.y, vertex.z, 0., 0.);
+  track.pxpypzm.SetPx(trackParamAtVertex.px());
+  track.pxpypzm.SetPy(trackParamAtVertex.py());
+  track.pxpypzm.SetPz(trackParamAtVertex.pz());
   track.pxpypzm.SetM(muMass);
-  track.sign = trackParamAtVertex.GetCharge();
+  track.sign = trackParamAtVertex.getCharge();
 
   // extrapolate to DCA
-  AliMUONTrackParam trackParamAtDCA(trackParam);
-  AliMUONTrackExtrap::ExtrapToVertexWithoutBranson(&trackParamAtDCA, vertex.z);
-  double dcaX = trackParamAtDCA.GetNonBendingCoor() - vertex.x;
-  double dcaY = trackParamAtDCA.GetBendingCoor() - vertex.y;
+  TrackParam trackParamAtDCA(trackParam);
+  TrackExtrap::extrapToVertexWithoutBranson(&trackParamAtDCA, vertex.z);
+  double dcaX = trackParamAtDCA.getNonBendingCoor() - vertex.x;
+  double dcaY = trackParamAtDCA.getBendingCoor() - vertex.y;
   track.dca = TMath::Sqrt(dcaX*dcaX + dcaY*dcaY);
  
   // extrapolate to the end of the absorber
-  AliMUONTrackExtrap::ExtrapToZ(&trackParam, -505.);
-  double xAbs = trackParam.GetNonBendingCoor();
-  double yAbs = trackParam.GetBendingCoor();
+  TrackExtrap::extrapToZ(&trackParam, -505.);
+  double xAbs = trackParam.getNonBendingCoor();
+  double yAbs = trackParam.getBendingCoor();
   track.rAbs = TMath::Sqrt(xAbs*xAbs + yAbs*yAbs);
+}
+
+//_________________________________________________________________________________________________
+void selectTracks(std::list<TrackStruct>& tracks)
+{
+  /// remove tracks that do not pass the selection criteria
+  for (auto itTrack = tracks.begin(); itTrack != tracks.end();) {
+    if (!IsSelected(*itTrack)) {
+      itTrack = tracks.erase(itTrack);
+    } else {
+      ++itTrack;
+    }
+  }
 }
 
 //_________________________________________________________________________________________________
@@ -659,7 +1213,7 @@ bool IsSelected(TrackStruct& track)
 }
 
 //_________________________________________________________________________________________________
-int CompareEvents(std::vector<TrackStruct>& tracks1, std::vector<TrackStruct>& tracks2, double precision, bool printAll, std::vector<TH1*>& histos)
+int CompareEvents(std::list<TrackStruct>& tracks1, std::list<TrackStruct>& tracks2, double precision, bool printAll, std::vector<TH1*>& histos)
 {
   /// compare the tracks between the 2 events
 
@@ -704,6 +1258,12 @@ int CompareEvents(std::vector<TrackStruct>& tracks1, std::vector<TrackStruct>& t
       if (!track2.matchFound && track2.match(track1)) {
         track1.matchFound = true;
         track2.matchFound = true;
+        // if (track2.getNClustersInCommon(track1) == track2.clusters.size()) {
+        //   track1.matchIdentical = true;
+        //   track2.matchIdentical = true;
+        // } else {
+        //   track1.printClusterDifferences(track2);
+        // }
         // compare the track parameters
         bool areCompatible = AreTrackParamCompatible(track1.param, track2.param, precision);
         bool areCovCompatible = AreTrackParamCovCompatible(track1.cov, track2.cov, precision);
@@ -768,7 +1328,7 @@ bool AreTrackParamCovCompatible(const TMatrixD& cov1, const TMatrixD& cov2, doub
 }
 
 //_________________________________________________________________________________________________
-int PrintEvent(const std::vector<TrackStruct>& tracks)
+int PrintEvent(const std::list<TrackStruct>& tracks)
 {
   /// print all tracks in the events
   for (const auto& track : tracks) {
@@ -886,7 +1446,7 @@ void CreateHistosAtVertex(std::vector<TH1*>& histos, const char* extension)
 }
 
 //_________________________________________________________________________________________________
-void FillHistosAtVertex(const std::vector<TrackStruct>& tracks, std::vector<TH1*>& histos)
+void FillHistosAtVertex(const std::list<TrackStruct>& tracks, std::vector<TH1*>& histos)
 {
   /// fill single muon and dimuon histograms at vertex
   for (auto itTrack1 = tracks.begin(); itTrack1 != tracks.end(); ++itTrack1) {
@@ -901,7 +1461,11 @@ void FillHistosAtVertex(const std::vector<TrackStruct>& tracks, std::vector<TH1*
 void FillHistosMuAtVertex(const TrackStruct& track, std::vector<TH1*>& histos)
 {
   /// fill single muon histograms at vertex
-
+/*
+  if (track.pxpypzm.Pt() < 1.) {
+    return;
+  }
+*/
   double thetaAbs = TMath::ATan(track.rAbs/505.) * TMath::RadToDeg();
   double pUncorr = TMath::Sqrt(track.param.px*track.param.px + track.param.py*track.param.py + track.param.pz*track.param.pz);
   double pDCA = pUncorr * track.dca;
@@ -916,13 +1480,18 @@ void FillHistosMuAtVertex(const TrackStruct& track, std::vector<TH1*>& histos)
     histos[5]->Fill(pDCA);
   }
   histos[6]->Fill(track.clusters.size());
-  histos[7]->Fill(track.chi2 / (2. * track.clusters.size() - 5.));
+  histos[7]->Fill(track.getChi2N2());
 }
 
 //_________________________________________________________________________________________________
 void FillHistosDimuAtVertex(const TrackStruct& track1, const TrackStruct& track2, std::vector<TH1*>& histos)
 {
   /// fill dimuon histograms at vertex
+/*
+  if (track1.pxpypzm.Pt() < 1. || track2.pxpypzm.Pt() < 1.) {
+    return;
+  }
+*/
   if (track1.sign * track2.sign < 0) {
     PxPyPzMVector dimu = track1.pxpypzm + track2.pxpypzm;
     histos[8]->Fill(dimu.M());
@@ -992,46 +1561,50 @@ void DrawHistosAtVertex(std::vector<TH1*> histos[2])
 }
 
 //_________________________________________________________________________________________________
-void FillComparisonsAtVertex(std::vector<TrackStruct>& tracks1, std::vector<TrackStruct>& tracks2, std::vector<TH1*> histos[4])
+void FillComparisonsAtVertex(std::list<TrackStruct>& tracks1, std::list<TrackStruct>& tracks2, std::vector<TH1*> histos[5])
 {
   /// fill comparison histograms at vertex
 
   for (auto itTrack21 = tracks2.begin(); itTrack21 != tracks2.end(); ++itTrack21) {
 
-    // fill histograms for identical, similar and additional muons
+    // fill histograms for identical, similar (from file 2) and additional muons
     if (itTrack21->matchIdentical) {
       FillHistosMuAtVertex(*itTrack21, histos[0]);
     } else if (itTrack21->matchFound) {
-      FillHistosMuAtVertex(*itTrack21, histos[1]);
-    } else {
       FillHistosMuAtVertex(*itTrack21, histos[2]);
+    } else {
+      FillHistosMuAtVertex(*itTrack21, histos[3]);
     }
 
     for (auto itTrack22 = std::next(itTrack21); itTrack22 != tracks2.end(); ++itTrack22) {
 
-      // fill histograms for identical, similar and additional dimuons
+      // fill histograms for identical, similar (from file 2) and additional dimuons
       if (itTrack21->matchIdentical && itTrack22->matchIdentical) {
         FillHistosDimuAtVertex(*itTrack21, *itTrack22, histos[0]);
       } else if (itTrack21->matchFound && itTrack22->matchFound) {
-        FillHistosDimuAtVertex(*itTrack21, *itTrack22, histos[1]);
-      } else {
         FillHistosDimuAtVertex(*itTrack21, *itTrack22, histos[2]);
+      } else {
+        FillHistosDimuAtVertex(*itTrack21, *itTrack22, histos[3]);
       }
     }
   }
 
   for (auto itTrack11 = tracks1.begin(); itTrack11 != tracks1.end(); ++itTrack11) {
 
-    // fill histograms for missing muons
+    // fill histograms for missing and similar (from file 1) muons
     if (!itTrack11->matchFound) {
-      FillHistosMuAtVertex(*itTrack11, histos[3]);
+      FillHistosMuAtVertex(*itTrack11, histos[4]);
+    } else if (!itTrack11->matchIdentical) {
+      FillHistosMuAtVertex(*itTrack11, histos[1]);
     }
 
     for (auto itTrack12 = std::next(itTrack11); itTrack12 != tracks1.end(); ++itTrack12) {
 
-      // fill histograms for missing dimuons
+      // fill histograms for missing and similar (from file 1) dimuons
       if (!itTrack11->matchFound || !itTrack12->matchFound) {
-        FillHistosDimuAtVertex(*itTrack11, *itTrack12, histos[3]);
+        FillHistosDimuAtVertex(*itTrack11, *itTrack12, histos[4]);
+      } else if (!itTrack11->matchIdentical || !itTrack12->matchIdentical) {
+        FillHistosDimuAtVertex(*itTrack11, *itTrack12, histos[1]);
       }
     }
   }
@@ -1041,7 +1614,7 @@ void FillComparisonsAtVertex(std::vector<TrackStruct>& tracks1, std::vector<Trac
     if (!track1.matchFound) {
       for (const auto& track2 : tracks2) {
         if (!track2.matchFound) {
-          FillHistosDimuAtVertex(track1, track2, histos[3]);
+          FillHistosDimuAtVertex(track1, track2, histos[4]);
         }
       }
     }
@@ -1049,7 +1622,7 @@ void FillComparisonsAtVertex(std::vector<TrackStruct>& tracks1, std::vector<Trac
 }
 
 //_________________________________________________________________________________________________
-void DrawComparisonsAtVertex(std::vector<TH1*> histos[4])
+void DrawComparisonsAtVertex(std::vector<TH1*> histos[5])
 {
   /// draw comparison histograms at vertex
 
@@ -1074,10 +1647,12 @@ void DrawComparisonsAtVertex(std::vector<TH1*> histos[4])
     histos[0][i]->Draw();
     histos[1][i]->SetLineColor(4);
     histos[1][i]->Draw("same");
-    histos[2][i]->SetLineColor(3);
+    histos[2][i]->SetLineColor(877);
     histos[2][i]->Draw("same");
-    histos[3][i]->SetLineColor(2);
+    histos[3][i]->SetLineColor(3);
     histos[3][i]->Draw("same");
+    histos[4][i]->SetLineColor(2);
+    histos[4][i]->Draw("same");
   }
 
   // add a legend
@@ -1085,9 +1660,10 @@ void DrawComparisonsAtVertex(std::vector<TH1*> histos[4])
   lHist->SetFillStyle(0);
   lHist->SetBorderSize(0);
   lHist->AddEntry(histos[0][0], Form("%g tracks identical", histos[0][0]->GetEntries()), "l");
-  lHist->AddEntry(histos[1][0], Form("%g tracks similar", histos[1][0]->GetEntries()), "l");
-  lHist->AddEntry(histos[2][0], Form("%g tracks additional", histos[2][0]->GetEntries()), "l");
-  lHist->AddEntry(histos[3][0], Form("%g tracks missing", histos[3][0]->GetEntries()), "l");
+  lHist->AddEntry(histos[1][0], Form("%g tracks similar (1)", histos[1][0]->GetEntries()), "l");
+  lHist->AddEntry(histos[2][0], Form("%g tracks similar (2)", histos[2][0]->GetEntries()), "l");
+  lHist->AddEntry(histos[3][0], Form("%g tracks additional", histos[3][0]->GetEntries()), "l");
+  lHist->AddEntry(histos[4][0], Form("%g tracks missing", histos[4][0]->GetEntries()), "l");
   cHist->cd(1);
   lHist->Draw("same");
 }
