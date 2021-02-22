@@ -1,11 +1,11 @@
-#include <TFile.h>
-#include <TTree.h>
-#include <TError.h>
+// #include <TFile.h>
+// #include <TTree.h>
+// #include <TError.h>
 
-#include "AliRunLoader.h"
-#include "AliLoader.h"
+// #include "AliRunLoader.h"
+// #include "AliLoader.h"
 
-#include "AliMUONVClusterStore.h"
+// #include "AliMUONVClusterStore.h"
 
 //-----------------------------------------------------------------------
 void MergeTreeR(const char *outFileName = "clusters.root")
@@ -23,8 +23,8 @@ void MergeTreeR(const char *outFileName = "clusters.root")
   TFile *outFile = TFile::Open(outFileName,"RECREATE");
   TTree *outTreeR = new TTree("TreeR","Cluster Container");
 
-  auto nEvents = rl->GetNumberOfEvents();
-  AliMUONVClusterStore* clusterStore = nullptr;
+  int nEvents = rl->GetNumberOfEvents();
+  AliMUONVClusterStore* clusterStore = 0x0;
   for (int iEvent = 0; iEvent < nEvents; ++iEvent) {
     
     // load the current event

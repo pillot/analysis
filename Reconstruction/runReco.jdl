@@ -1,43 +1,40 @@
-Packages =
-   {
-      "VO_ALICE@AliRoot::v5-01-Rev-08",
-      "VO_ALICE@GEANT3::v1-12-1",
-      "VO_ALICE@ROOT::v5-30-02",
-      "VO_ALICE@APISCONFIG::V1.1x"
-   };
-Jobtag =
-   {
-      "comment:LHC period LHC10h - MUON test reco"
-   };
+Packages = {
+  "VO_ALICE@AliPhysics::v5-09-41h-01-1"
+};
+Jobtag = {
+  "comment:LHC period LHC18q - MUON digit reco for O2 clustering development"
+};
 Split = "file";
-OutputDir = "/alice/cern.ch/user/p/ppillot/Data/LHC10h/MoreCandidates/$1/#alienfilename/.root//#";
+OutputDir = "/alice/cern.ch/user/p/ppillot/Data/LHC18q/reco/CINT7v2/$1/#alienfilename/.root//#";
 Price = 1;
-Executable = "/alice/cern.ch/user/p/ppillot/bin/runReco.sh";
-InputFile =
-   {
-      "LF:/alice/cern.ch/user/p/ppillot/Data/LHC10h/MoreCandidates/rec.C"
-   };
+Executable = "/alice/cern.ch/user/p/ppillot/Data/LHC18q/reco/CINT7v2/runReco.sh";
+InputFile = {
+  "LF:/alice/data/2018/LHC18q/$1/muon_calo_pass3_ocdb/OCDB.root",
+  "LF:/alice/cern.ch/user/p/ppillot/Data/LHC18q/reco/CINT7v2/runReco.C",
+  "LF:/alice/cern.ch/user/p/ppillot/Data/LHC18q/reco/CINT7v2/rec.C",
+  "LF:/alice/cern.ch/user/p/ppillot/Data/LHC18q/reco/CINT7v2/MergeTreeR.C",
+  "LF:/alice/cern.ch/user/p/ppillot/Data/LHC18q/reco/CINT7v2/MergeTreeD.C"
+};
 User = "ppillot";
-SplitArguments =
-   {
-      "/alice/data/2010/LHC10h/$1/raw/#alienfilename#"
-   };
-OutputArchive =
-   {
-      "log_archive:*.log@disk=1",
-      "root_archive.zip:AliESDs.root,@disk=3"
-   };
-TTL = 86400;
-Workdirectorysize =
-   {
-      "6000MB"
-   };
-InputDataCollection = "LF:/alice/data/2010/LHC10h/$1/collection,nodownload";
+SplitArguments = {
+  "/alice/data/2018/LHC18q/$1/raw/#alienfilename# $2"
+};
+Output = {
+  "log_archive:rec.log@disk=1",
+  "root_archive.zip:AliESDs.root,clusters.root,digits.root@disk=2"
+};
+OutputErrorE = {
+  "log_archive.zip:*.log@disk=1"
+};
+TTL = "57600";
+Workdirectorysize = {
+  "10000MB"
+};
+InputDataCollection = "LF:/alice/data/2018/LHC18q/$1/collection";
 GUIDFILE = "guid.txt";
-JDLVariables =
-   {
-      "Packages",
-      "OutputDir"
-   };
-Validationcommand = "/alice/cern.ch/user/p/ppillot/Data/LHC10h/MoreCandidates/validation.sh"
+JDLVariables = {
+  "Packages",
+  "OutputDir"
+};
+Validationcommand = "/alice/cern.ch/user/p/ppillot/Data/LHC18q/reco/CINT7v2/validation.sh";
 
