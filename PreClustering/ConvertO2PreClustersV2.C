@@ -91,7 +91,7 @@ void StorePreclusters(std::vector<PreCluster>& preClusters, std::vector<Digit>& 
 
     // add the list of digit Ids
     digitIds.clear();
-    for (uint16_t iDigit = preCluster.firstDigit; iDigit <= preCluster.lastDigit(); ++iDigit) {
+    for (auto iDigit = preCluster.firstDigit; iDigit <= preCluster.lastDigit(); ++iDigit) {
       digitIds.push_back(static_cast<uint32_t>(digits[iDigit].getPadID()));
     }
     cluster->SetDigitsId(preCluster.nDigits, digitIds.data());
