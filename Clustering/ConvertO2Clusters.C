@@ -1,6 +1,8 @@
 #include <fstream>
 #include <vector>
 
+#include <TError.h>
+#include <TSystem.h>
 #include <TString.h>
 #include <TFile.h>
 #include <TTree.h>
@@ -12,33 +14,65 @@
 #include "AliMUONVCluster.h"
 #include "AliMUONClusterStoreV2.h"
 
+#include "MCHGeometryTransformer/Transformations.h"
+#include "MathUtils/Cartesian.h"
+
 #include "MCHBase/ClusterBlock.h"
 #include "MCHBase/Digit.h"
 
 using namespace o2::mch;
+using namespace std;
 
-AliMUONGeometryTransformer transformer;
+AliMUONGeometryTransformer alirootTransformer;
+geo::TransformationCreator o2Transformer;
 
 void StoreClusters(std::vector<ClusterStruct>& clusters, std::vector<Digit>& digits, AliMUONClusterStoreV2* clusterStore);
 
 //------------------------------------------------------------------
-void ConvertO2Clusters(TString inFileName, TString outFileName = "clusters.root")
+void ConvertO2Clusters(TString inFileName, TString outFileName = "clusters.root",
+                       bool localtoGobal = true, TString geoFileName = "",
+                       TString ocdb = "local://./OCDB", int run = 169099)
 {
-  /// Convert O2 clusters to AliRoot clusters
-  /// input binary file with the following format:
+  /// convert O2 clusters to AliRoot clusters
+  /// change clusters position from local to global coordinate system if requested,
+  /// using the provided geometry (with AliRoot if *.root or O2 if *.json) or loading it from the OCDB
+  /// the OCDB is also needed when using an AliRoot geometry file to get the mapping segmentation
   ///
-  /// Number of clusters
-  /// Number of digits
-  /// All Clusters
-  /// All Digits
+  /// gSystem->Load("libO2MCHGeometryTransformer") is needed for compilation
+  ///
+  /// input binary file must have the following format:
+  /// number of clusters
+  /// number of digits
+  /// all Clusters
+  /// all Digits
 
-  // load geometry to change cluster position from local to global coordinates
-  //  AliCDBManager::Instance()->SetDefaultStorage("raw://");
-  AliCDBManager::Instance()->SetDefaultStorage("local://./OCDB");
-  AliCDBManager::Instance()->SetRun(196099);
-  AliGeomManager::LoadGeometry();
-  if (!AliGeomManager::GetGeometry() || !AliGeomManager::ApplyAlignObjsFromCDB("MUON")) return;
-  transformer.LoadGeometryData(); // also load the mapping segmentation
+  // load geometry to change cluster position from local to global coordinates, if needed
+  if (localtoGobal) {
+    if (geoFileName.IsNull()) {
+      AliCDBManager::Instance()->SetDefaultStorage(ocdb.Data());
+      AliCDBManager::Instance()->SetRun(run);
+      AliGeomManager::LoadGeometry();
+      if (!AliGeomManager::GetGeometry() || !AliGeomManager::ApplyAlignObjsFromCDB("MUON")) {
+        Error("ConvertO2Clusters", "unable to load geometry and apply alignment from OCDB");
+        return;
+      }
+      alirootTransformer.LoadGeometryData(); // also load the mapping segmentation
+    } else if (gSystem->AccessPathName(geoFileName.Data(), kFileExists) != 0) {
+      Error("ConvertO2Clusters", "geometry file %s not found", geoFileName.Data());
+      return;
+    } else if (geoFileName.EndsWith(".root")) {
+      AliCDBManager::Instance()->SetDefaultStorage(ocdb.Data());
+      AliCDBManager::Instance()->SetRun(run);
+      AliGeomManager::LoadGeometry(geoFileName.Data());
+      alirootTransformer.LoadGeometryData(); // also load the mapping segmentation
+    } else if (geoFileName.EndsWith(".json")) {
+      std::ifstream inGeoFile(geoFileName.Data());
+      o2Transformer = geo::transformationFromJSON(inGeoFile);
+    } else {
+      Error("ConvertO2Clusters", "invalid geometry file");
+      return;
+    }
+  }
 
   // open input file
   ifstream inFile(inFileName,ios::binary);
@@ -90,29 +124,41 @@ void ConvertO2Clusters(TString inFileName, TString outFileName = "clusters.root"
 void StoreClusters(std::vector<ClusterStruct>& clusters, std::vector<Digit>& digits, AliMUONClusterStoreV2* clusterStore)
 {
   /// convert the clusters in AliRoot clusters and store them in the cluster store
+  /// change clusters position from local to global coordinate system if requested
 
   int clIndex = clusterStore->GetSize();
   std::vector<uint32_t> digitIds(100);
 
   for (const auto& o2Cluster : clusters) {
 
-    int deId = digits[o2Cluster.firstDigit].getDetID();
+    int deId = o2Cluster.getDEId();
     int chId = deId / 100 - 1;
 
     // store a new cluster (its ID has to be unique to add it to the new store)
     AliMUONVCluster* cluster = clusterStore->Add(chId, deId, clIndex);
     ++clIndex;
 
-    // store the position in the global coordinate system
-    double xg(0.), yg(0.), zg(0.);
-    transformer.Local2Global(deId, o2Cluster.x, o2Cluster.y, 0., xg, yg, zg);
-    cluster->SetXYZ(xg, yg, zg);
-
-    // add the list of digit Ids
-    digitIds.clear();
-    for (uint32_t iDigit = 0; iDigit <= o2Cluster.nDigits; ++iDigit) {
-      digitIds.push_back(static_cast<uint32_t>(digits[o2Cluster.firstDigit + iDigit].getPadID()));
+    // change the coordinate system if needed
+    if (alirootTransformer.GetNofModuleTransformers() > 0) {
+      double xg(0.), yg(0.), zg(0.);
+      alirootTransformer.Local2Global(deId, o2Cluster.x, o2Cluster.y, 0., xg, yg, zg);
+      cluster->SetXYZ(xg, yg, zg);
+    } else if (o2Transformer) {
+      o2::math_utils::Point3D<double> lpos{o2Cluster.x, o2Cluster.y, 0.};
+      auto local2Global = o2Transformer(deId);
+      auto gpos = local2Global(lpos);
+      cluster->SetXYZ(gpos.x(), gpos.y(), gpos.z());
+    } else {
+      cluster->SetXYZ(o2Cluster.x, o2Cluster.y, o2Cluster.z);
     }
-    cluster->SetDigitsId(o2Cluster.nDigits, digitIds.data());
+
+    // add the list of digit Ids, if any
+    if (!digits.empty()) {
+      digitIds.clear();
+      for (uint32_t iDigit = 0; iDigit <= o2Cluster.nDigits; ++iDigit) {
+        digitIds.push_back(static_cast<uint32_t>(digits[o2Cluster.firstDigit + iDigit].getPadID()));
+      }
+      cluster->SetDigitsId(o2Cluster.nDigits, digitIds.data());
+    }
   }
 }
