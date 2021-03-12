@@ -26,16 +26,18 @@ std::unordered_map<int, int> deIndices(0);
 TH1F hDiff("hDiff", "distance between clusters", 100001, -0.000005, 1.000005);
 double kPrecision = 0.;
 
-int LoadClusters(AliMUONVClusterStore *clusterStore, std::list<preCluster> *preclusters);
+int LoadClusters(AliMUONVClusterStore* clusterStore, std::list<preCluster>* preclusters, bool perPrecluster);
 std::tuple<int, int, int> Compare(std::list<preCluster>* preclusters1, std::list<preCluster>* preclusters2);
 std::tuple<int, int, int> Compare(std::list<AliMUONVCluster*>& clusters1, std::list<AliMUONVCluster*>& clusters2);
 preCluster* FindPrecluster(std::list<u_int32_t>& digitIds, std::list<preCluster>& preclusters);
 
 //------------------------------------------------------------------
-void CompareClusters(const char *clusterFileName1, const char *clusterFileName2, double precision = 1.e-3)
+void CompareClusters(const char *clusterFileName1, const char *clusterFileName2, double precision = 1.e-3,
+                     bool perPrecluster = true)
 {
-  /// Compare the clusters between the two input files
-  /// print the difference between clusters if it higher than the given precision
+  /// Compare the clusters DE per DE between the two input files
+  /// - precision: print the difference between clusters if it higher than the given precision
+  /// - perPrecluster: compare clusters from identical preclusters or from all preclusters
 
   kPrecision = precision;
 
@@ -77,9 +79,9 @@ void CompareClusters(const char *clusterFileName1, const char *clusterFileName2,
     
     treeR1->GetEntry(iEv);
     treeR2->GetEntry(iEv);
-    
-    int nClusters1 = LoadClusters(clusterStore1, preclusters1);
-    int nClusters2 = LoadClusters(clusterStore2, preclusters2);
+
+    int nClusters1 = LoadClusters(clusterStore1, preclusters1, perPrecluster);
+    int nClusters2 = LoadClusters(clusterStore2, preclusters2, perPrecluster);
     printf("\tTotal number of clusters = %d / %d\n", nClusters1, nClusters2);
     integratedNCl1 += nClusters1;
     integratedNCl2 += nClusters2;
@@ -107,10 +109,11 @@ void CompareClusters(const char *clusterFileName1, const char *clusterFileName2,
 }
 
 //------------------------------------------------------------------
-int LoadClusters(AliMUONVClusterStore *clusterStore, std::list<preCluster> *preclusters)
+int LoadClusters(AliMUONVClusterStore* clusterStore, std::list<preCluster>* preclusters, bool perPrecluster)
 {
-  /// fill the precluster structures with reconstructed clusters
-  
+  /// fill the precluster structures with reconstructed clusters per DE
+  /// if perPrecluster = false, attach all clusters to the same dummy precluster without digit
+
   int nClusters(0);
   AliMUONVCluster* cluster(nullptr);
   TIter nextCluster(clusterStore->CreateIterator());
@@ -126,12 +129,14 @@ int LoadClusters(AliMUONVClusterStore *clusterStore, std::list<preCluster> *prec
       iDE = itDE->second;
     }
 
-    // get the list of digits
+    // get the list of digits if the comparison is done per precluster
     std::list<u_int32_t> digitIds;
-    for (int iDigit = 0; iDigit < cluster->GetNDigits(); ++iDigit) {
-      digitIds.push_back(cluster->GetDigitId(iDigit));
+    if (perPrecluster) {
+      for (int iDigit = 0; iDigit < cluster->GetNDigits(); ++iDigit) {
+        digitIds.push_back(cluster->GetDigitId(iDigit));
+      }
+      digitIds.sort();
     }
-    digitIds.sort();
 
     // find the precluster with the same digits, or create it, and attached the cluster to it
     auto* precluster = FindPrecluster(digitIds, preclusters[iDE]);
