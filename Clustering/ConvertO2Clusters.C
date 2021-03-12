@@ -126,17 +126,13 @@ void StoreClusters(std::vector<ClusterStruct>& clusters, std::vector<Digit>& dig
   /// convert the clusters in AliRoot clusters and store them in the cluster store
   /// change clusters position from local to global coordinate system if requested
 
-  int clIndex = clusterStore->GetSize();
   std::vector<uint32_t> digitIds(100);
 
   for (const auto& o2Cluster : clusters) {
 
-    int deId = o2Cluster.getDEId();
-    int chId = deId / 100 - 1;
-
     // store a new cluster (its ID has to be unique to add it to the new store)
-    AliMUONVCluster* cluster = clusterStore->Add(chId, deId, clIndex);
-    ++clIndex;
+    int deId = o2Cluster.getDEId();
+    AliMUONVCluster* cluster = clusterStore->Add(o2Cluster.getChamberId(), deId, o2Cluster.getClusterIndex());
 
     // change the coordinate system if needed
     if (alirootTransformer.GetNofModuleTransformers() > 0) {
@@ -151,6 +147,9 @@ void StoreClusters(std::vector<ClusterStruct>& clusters, std::vector<Digit>& dig
     } else {
       cluster->SetXYZ(o2Cluster.x, o2Cluster.y, o2Cluster.z);
     }
+
+    // store cluster resolution
+    cluster->SetErrXY(o2Cluster.ex, o2Cluster.ey);
 
     // add the list of digit Ids, if any
     if (!digits.empty()) {
