@@ -146,7 +146,7 @@ void FindExtraDigits(AliMUONVDigitStore *digitStore, std::list<UInt_t> *extraDig
   
   // loop over digits
   AliMUONVDigit* digit = 0x0;
-  TIter nextDigit(digitStore->CreateIterator());
+  TIter nextDigit(digitStore->CreateTrackerIterator());
   while ((digit = static_cast<AliMUONVDigit*>(nextDigit()))) {
     
     if (digit->Charge() <= 0 || digit->IsUsed()) continue;
