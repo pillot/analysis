@@ -35,7 +35,7 @@ void ConvertO2Clusters(TString inFileName, TString outFileName = "clusters.root"
 {
   /// convert O2 clusters to AliRoot clusters
   /// change clusters position from local to global coordinate system if requested,
-  /// using the provided geometry (with AliRoot if *.root or O2 if *.json) or loading it from the OCDB
+  /// using provided geometry (with AliRoot if *.root or O2 if *.json) or loading it from OCDB (location or snapshot)
   /// the OCDB is also needed when using an AliRoot geometry file to get the mapping segmentation
   ///
   /// gSystem->Load("libO2MCHGeometryTransformer") is needed for compilation
@@ -49,7 +49,12 @@ void ConvertO2Clusters(TString inFileName, TString outFileName = "clusters.root"
   // load geometry to change cluster position from local to global coordinates, if needed
   if (localtoGobal) {
     if (geoFileName.IsNull()) {
-      AliCDBManager::Instance()->SetDefaultStorage(ocdb.Data());
+      if (ocdb.EndsWith(".root")) {
+        AliCDBManager::Instance()->SetDefaultStorage("local:///dev/null");
+        AliCDBManager::Instance()->SetSnapshotMode(ocdb.Data());
+      } else {
+        AliCDBManager::Instance()->SetDefaultStorage(ocdb.Data());
+      }
       AliCDBManager::Instance()->SetRun(run);
       AliGeomManager::LoadGeometry();
       if (!AliGeomManager::GetGeometry() || !AliGeomManager::ApplyAlignObjsFromCDB("MUON")) {
@@ -61,7 +66,12 @@ void ConvertO2Clusters(TString inFileName, TString outFileName = "clusters.root"
       Error("ConvertO2Clusters", "geometry file %s not found", geoFileName.Data());
       return;
     } else if (geoFileName.EndsWith(".root")) {
-      AliCDBManager::Instance()->SetDefaultStorage(ocdb.Data());
+      if (ocdb.EndsWith(".root")) {
+        AliCDBManager::Instance()->SetDefaultStorage("local:///dev/null");
+        AliCDBManager::Instance()->SetSnapshotMode(ocdb.Data());
+      } else {
+        AliCDBManager::Instance()->SetDefaultStorage(ocdb.Data());
+      }
       AliCDBManager::Instance()->SetRun(run);
       AliGeomManager::LoadGeometry(geoFileName.Data());
       alirootTransformer.LoadGeometryData(); // also load the mapping segmentation
