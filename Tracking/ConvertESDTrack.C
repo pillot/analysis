@@ -1,49 +1,62 @@
 #include <fstream>
 #include <iostream>
+#include <vector>
 
 #include <TString.h>
 #include <TFile.h>
 #include <TTree.h>
+#include <TMath.h>
 #include <TGeoGlobalMagField.h>
 
 #include "AliCDBManager.h"
-#include "AliGeomManager.h"
+#include "AliGRPManager.h"
+#include "AliGRPObject.h"
 
 #include "AliESDEvent.h"
 #include "AliESDMuonTrack.h"
-#include "AliESDMuonCluster.h"
 
 #include "AliMUONCDB.h"
 #include "AliMUONTrack.h"
 #include "AliMUONTrackParam.h"
-#include "AliMUONRecoParam.h"
+#include "AliMUONVCluster.h"
 #include "AliMUONESDInterface.h"
 
 #include "Field/MagneticField.h"
 
+#include "DataFormatsMCH/TrackMCH.h"
 #include "MCHBase/ClusterBlock.h"
 #include "MCHBase/TrackBlock.h"
 
 using namespace std;
 using namespace o2::mch;
 
-void ConvertESDTrack(TString esdFileName, TString outFileName = "AliESDs.in", Bool_t refit = kFALSE, Int_t LastEvent = -1)
+struct TrackAtVtxStruct {
+  TrackParamStruct paramAtVertex{};
+  double dca = 0.;
+  double rAbs = 0.;
+  int mchTrackIdx = 0;
+};
+
+bool PrepareRefitting(int runNumber);
+bool SetMagField();
+void ConvertTracks(AliESDEvent& esd, bool refit, std::vector<TrackAtVtxStruct>& o2TracksAtVtx,
+                   std::vector<TrackMCH>& o2Tracks, std::vector<ClusterStruct>& o2Clusters);
+
+//_________________________________________________________________________________________________
+void ConvertESDTrack(TString esdFileName, TString outFileName = "AliESDTracks.out", bool refit = false, int LastEvent = -1)
 {
   /// convert ESD tracks+clusters into O2 structures
   /// saved in a binary file with the following format:
   ///
-  /// #tracks in event 1
-  /// TrackParamStruct of 1st track
-  /// #clusters in track 1
-  /// ClusterStruct of 1st cluster
-  /// ClusterStruct of 2nd cluster
+  /// number of tracks at vertex in event 1 (= 0 if tracks refitted)
+  /// number of MCH tracks in event 1
+  /// number of associated clusters in event 1
+  /// list of TrackAtVtxStruct (unless tracks are refitted)
+  /// list of TrackMCH
+  /// list of ClusterStruct
+  /// number of tracks at vertex in event 2 (= 0)
   /// ...
-  /// ClusterStruct of nth cluster
-  /// TrackParamStruct of 2nd track
-  /// #clusters in track 2
-  /// ...
-  /// #tracks in event 2
-  /// ...
+  /// if the tracks are refitted, the extrapolation to vertex is left to another code
 
   // open the ESD file
   TFile* esdFile = TFile::Open(esdFileName);
@@ -59,123 +72,180 @@ void ConvertESDTrack(TString esdFileName, TString outFileName = "AliESDs.in", Bo
   }
   esd->ReadFromTree(tree);
   
-  // output file
-  ofstream out(outFileName.Data(),ios::out | ios::binary);
-  if (!out.is_open()) {
+  // open output file
+  ofstream outFile(outFileName.Data(),ios::out | ios::binary);
+  if (!outFile.is_open()) {
     return;
   }
-  
-  Int_t nevents = (LastEvent >= 0) ? TMath::Min(LastEvent+1, (Int_t)tree->GetEntries()) : (Int_t)tree->GetEntries();
 
-  TrackParamStruct sTrackParam;
-  ClusterStruct sCluster;
-  AliMUONTrack muonTrack;
+  // prepare refitting if needed
+  if (refit && (tree->GetEvent(0) <= 0 || !PrepareRefitting(esd->GetRunNumber()))) {
+    Error("ConvertESDTrack", "cannot refit tracks");
+    return;
+  }
 
-  for (Int_t iEvent = 0; iEvent < nevents; iEvent++) {
-    
+  std::vector<TrackAtVtxStruct> o2TracksAtVtx{};
+  std::vector<TrackMCH> o2Tracks{};
+  std::vector<ClusterStruct> o2Clusters{};
+
+  int nevents = (LastEvent >= 0) ? TMath::Min(LastEvent + 1, (int)tree->GetEntries()) : (int)tree->GetEntries();
+  for (int iEvent = 0; iEvent < nevents; iEvent++) {
+
     // get the ESD event
     if (tree->GetEvent(iEvent) <= 0) {
       Error("ConvertESDTrack", "no ESD object found for event %d", iEvent);
       return;
     }
-    out.write((char*)&iEvent,sizeof(Int_t));
-    
-    // need OCDB access for refitting
-    if (iEvent == 0 && refit) {
-      AliCDBManager *man = AliCDBManager::Instance();
-      if (gSystem->AccessPathName("OCDB.root", kFileExists)==0) {
-        man->SetDefaultStorage("local:///dev/null");
-        man->SetSnapshotMode("OCDB.root");
-      } else {
-        man->SetDefaultStorage("local://./OCDB");
-      }
-      man->SetRun(esd->GetRunNumber());
-      auto field =
-      o2::field::MagneticField::createFieldMap(-30000., -5999.95, o2::field::MagneticField::kConvLHC, false, 3500., "A-A",
-                                               "$(O2_ROOT)/share/Common/maps/mfchebKGI_sym.root");
-      TGeoGlobalMagField::Instance()->SetField(field);
-      TGeoGlobalMagField::Instance()->Lock();
-      AliGeomManager::LoadGeometry();
-      if (!AliGeomManager::GetGeometry()) return;
-      if (!AliGeomManager::ApplyAlignObjsFromCDB("MUON")) return;
-      AliMUONRecoParam* recoParam = AliMUONCDB::LoadRecoParam();
-      if (!recoParam) return;
-      //recoParam->UseSmoother(false);
-      AliMUONESDInterface::ResetTracker(recoParam);
-    }
 
-    // count the number of tracks to be stored, excluding ghost,
-    // as well as the total number of bytes requested to store
-    // the event, excluding event number and total size
-    Int_t nTracks = (Int_t)esd->GetNumberOfMuonTracks();
-    Int_t nTrkTracks = 0;
-    Int_t size = 0;
-    for (Int_t iTrack = 0; iTrack < nTracks; iTrack++) {
-      AliESDMuonTrack *track = esd->GetMuonTrack(iTrack);
-      if (!track->ContainTrackerData()) continue;
-      ++nTrkTracks;
-      size += sizeof(TrackParamStruct) + sizeof(Int_t) + track->GetNClusters()*sizeof(ClusterStruct);
-      
-    }
-    if (nTrkTracks > 0) size += sizeof(Int_t);
-    out.write((char*)&size,sizeof(Int_t));
-    
-    if (nTrkTracks < 1) continue;
-    
-    out.write((char*)&nTrkTracks,sizeof(Int_t));
-    
-    for (Int_t iTrack = 0; iTrack < nTracks; iTrack++) {
-      
-      AliESDMuonTrack *track = esd->GetMuonTrack(iTrack);
-      if (!track->ContainTrackerData()) continue;
+    // convert the (refitted) tracks in O2 format
+    ConvertTracks(*esd, refit, o2TracksAtVtx, o2Tracks, o2Clusters);
 
-      // refit the track if requested
-      AliMUONESDInterface::ESDToMUON(*track, muonTrack, refit);
-      AliMUONTrackParam *param = static_cast<AliMUONTrackParam*>(muonTrack.GetTrackParamAtCluster()->First());
-      /*
-      // store track parameters at vertex
-      sTrackParam.x = track->GetNonBendingCoor();
-      sTrackParam.y = track->GetBendingCoor();
-      sTrackParam.z = track->GetZ();
-      sTrackParam.px = track->Px();
-      sTrackParam.py = track->Py();
-      sTrackParam.pz = track->Pz();
-      sTrackParam.sign = track->Charge();
-      out.write((char*)&sTrackParam,sizeof(TrackParamStruct));
-      */
-      // store track parameters at first cluster
-      sTrackParam.x = param->GetNonBendingCoor();
-      sTrackParam.y = param->GetBendingCoor();
-      sTrackParam.z = param->GetZ();
-      sTrackParam.px = param->Px();
-      sTrackParam.py = param->Py();
-      sTrackParam.pz = param->Pz();
-      sTrackParam.sign = param->GetCharge();
-      out.write((char*)&sTrackParam,sizeof(TrackParamStruct));
-
-      Int_t nClusters = track->GetNClusters();
-      out.write((char*)&nClusters,sizeof(Int_t));
-      
-      for (Int_t iCl = 0; iCl < nClusters; iCl++) {
-        
-        AliESDMuonCluster *cluster = esd->FindMuonCluster(track->GetClusterId(iCl));
-        
-        // store cluster information
-        sCluster.x = cluster->GetX();
-        sCluster.y = cluster->GetY();
-        sCluster.z = cluster->GetZ();
-        sCluster.ex = cluster->GetErrX();
-        sCluster.ey = cluster->GetErrY();
-        sCluster.uid = cluster->GetUniqueID();
-        out.write((char*)&sCluster,sizeof(ClusterStruct));
-        
-      }
-      
-    }
-    
+    // write the tracks in the binary file
+    int nTracksAtVtx = o2TracksAtVtx.size();
+    outFile.write(reinterpret_cast<char*>(&nTracksAtVtx), sizeof(int));
+    int nTracks = o2Tracks.size();
+    outFile.write(reinterpret_cast<char*>(&nTracks), sizeof(int));
+    int nClusters = o2Clusters.size();
+    outFile.write(reinterpret_cast<char*>(&nClusters), sizeof(int));
+    outFile.write(reinterpret_cast<char*>(o2TracksAtVtx.data()), o2TracksAtVtx.size() * sizeof(TrackAtVtxStruct));
+    outFile.write(reinterpret_cast<char*>(o2Tracks.data()), o2Tracks.size() * sizeof(TrackMCH));
+    outFile.write(reinterpret_cast<char*>(o2Clusters.data()), o2Clusters.size() * sizeof(ClusterStruct));
   }
-  
-  out.close();
-  
+
+  esdFile->Close();
+  outFile.close();
 }
 
+//_________________________________________________________________________________________________
+bool PrepareRefitting(int runNumber)
+{
+  /// prepare the tracker with access to recoParam (from OCDB) and magnetic field (from OCDB/GRP + O2 maps)
+
+  AliCDBManager* man = AliCDBManager::Instance();
+  if (gSystem->AccessPathName("OCDB.root", kFileExists) == 0) {
+    man->SetDefaultStorage("local:///dev/null");
+    man->SetSnapshotMode("OCDB.root");
+  } else {
+    man->SetDefaultStorage("local://./OCDB");
+  }
+  man->SetRun(runNumber);
+
+  if (!SetMagField()) {
+//  if (!AliMUONCDB::LoadField()) {
+    return false;
+  }
+
+  AliMUONESDInterface::ResetTracker();
+
+  return true;
+}
+
+//_________________________________________________________________________________________________
+bool SetMagField()
+{
+  /// set the magnetic field using O2 maps and GRP info
+
+  AliGRPManager grpMan;
+  if (!grpMan.ReadGRPEntry()) {
+    Error("SetMagField", "failed to load GRP Data from OCDB");
+    return false;
+  }
+
+  const AliGRPObject* grpData = grpMan.GetGRPData();
+  if (!grpData) {
+    Error("SetMagField", "GRP Data is not loaded");
+    return false;
+  }
+
+  float l3Current = grpData->GetL3Current((AliGRPObject::Stats)0);
+  if (l3Current == AliGRPObject::GetInvalidFloat()) {
+    Error("SetMagField", "GRP/GRP/Data entry:  missing value for the L3 current !");
+    return false;
+  }
+
+  char l3Polarity = grpData->GetL3Polarity();
+  if (l3Polarity == AliGRPObject::GetInvalidChar()) {
+    Error("SetMagField", "GRP/GRP/Data entry:  missing value for the L3 polarity !");
+    return false;
+  }
+
+  float diCurrent = grpData->GetDipoleCurrent((AliGRPObject::Stats)0);
+  if (diCurrent == AliGRPObject::GetInvalidFloat()) {
+    Error("SetMagField", "GRP/GRP/Data entry:  missing value for the dipole current !");
+    return false;
+  }
+
+  char diPolarity = grpData->GetDipolePolarity();
+  if (diPolarity == AliGRPObject::GetInvalidChar()) {
+    Error("SetMagField", "GRP/GRP/Data entry:  missing value for the dipole polarity !");
+    return false;
+  }
+
+  float beamEnergy = grpData->GetBeamEnergy();
+  if (beamEnergy == AliGRPObject::GetInvalidFloat()) {
+    Error("SetMagField", "GRP/GRP/Data entry:  missing value for the beam energy !");
+    return false;
+  }
+
+  TString beamType = grpData->GetBeamType();
+  if (beamType == AliGRPObject::GetInvalidString()) {
+    Error("SetMagField", "GRP/GRP/Data entry:  missing value for the beam type !");
+    return false;
+  }
+
+  Info("SetMagField", "l3Current = %f, diCurrent = %f", TMath::Abs(l3Current) * (l3Polarity ? -1 : 1),
+       TMath::Abs(diCurrent) * (diPolarity ? -1 : 1));
+
+  auto field = o2::field::MagneticField::createFieldMap(TMath::Abs(l3Current) * (l3Polarity ? -1 : 1),
+                                                        TMath::Abs(diCurrent) * (diPolarity ? -1 : 1),
+                                                        o2::field::MagneticField::kConvLHC, false, beamEnergy, beamType.Data(),
+                                                        "$(O2_ROOT)/share/Common/maps/mfchebKGI_sym.root");
+  TGeoGlobalMagField::Instance()->SetField(field);
+  TGeoGlobalMagField::Instance()->Lock();
+
+  return true;
+}
+
+//_________________________________________________________________________________________________
+void ConvertTracks(AliESDEvent& esd, bool refit, std::vector<TrackAtVtxStruct>& o2TracksAtVtx,
+                   std::vector<TrackMCH>& o2Tracks, std::vector<ClusterStruct>& o2Clusters)
+{
+  /// write the tracks in O2 format in the output file, refitting them before if requested
+  /// if the tracks are refitted, the extrapolation to vertex is left to another code
+
+  static AliMUONTrack muonTrack{};
+
+  o2TracksAtVtx.clear();
+  o2Tracks.clear();
+  o2Clusters.clear();
+
+  for (int iTrack = 0; iTrack < esd.GetNumberOfMuonTracks(); ++iTrack) {
+
+    AliESDMuonTrack* esdTrack = esd.GetMuonTrack(iTrack);
+    if (!esdTrack->ContainTrackerData()) {
+      continue;
+    }
+
+    if (!refit) {
+      double dcaX = esdTrack->GetNonBendingCoorAtDCA() - esdTrack->GetNonBendingCoor();
+      double dcaY = esdTrack->GetBendingCoorAtDCA() - esdTrack->GetBendingCoor();
+      o2TracksAtVtx.push_back({{esdTrack->GetNonBendingCoor(), esdTrack->GetBendingCoor(), esdTrack->GetZ(),
+                                esdTrack->Px(), esdTrack->Py(), esdTrack->Pz(), esdTrack->Charge()},
+                               TMath::Sqrt(dcaX * dcaX + dcaY * dcaY),
+                               esdTrack->GetRAtAbsorberEnd(),
+                               static_cast<int>(o2Tracks.size())});
+    }
+
+    AliMUONESDInterface::ESDToMUON(*esdTrack, muonTrack, refit);
+    AliMUONTrackParam* param = static_cast<AliMUONTrackParam*>(muonTrack.GetTrackParamAtCluster()->First());
+    o2Tracks.emplace_back(param->GetZ(), param->GetParameters(), param->GetCovariances(),
+                          muonTrack.GetGlobalChi2(), o2Clusters.size(), muonTrack.GetNClusters());
+
+    for (int iCl = 0; iCl < muonTrack.GetNClusters(); ++iCl) {
+      AliMUONVCluster* cluster = static_cast<AliMUONTrackParam*>(muonTrack.GetTrackParamAtCluster()->UncheckedAt(iCl))->GetClusterPtr();
+      o2Clusters.push_back({static_cast<float>(cluster->GetX()), static_cast<float>(cluster->GetY()),
+                            static_cast<float>(cluster->GetZ()), static_cast<float>(cluster->GetErrX()),
+                            static_cast<float>(cluster->GetErrY()), cluster->GetUniqueID(), 0, 0});
+    }
+  }
+}
