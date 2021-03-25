@@ -93,7 +93,7 @@ struct TrackStruct {
           double dx = cl1.getX() - cl2.getX();
           double dy = cl1.getY() - cl2.getY();
           double chi2 = dx * dx / (cl1.getEx2() + cl2.getEx2()) + dy * dy / (cl1.getEy2() + cl2.getEy2());
-          if (chi2 < chi2Max) {
+          if (chi2 <= chi2Max) {
             matchCluster[cl1.getChamberId()] = true;
             ++nMatchClusters;
             break;
@@ -110,9 +110,9 @@ struct TrackStruct {
 
 //_________________________________________________________________________________________________
 int ReadNextEvent(ifstream& inFile, bool selectTracks, std::vector<TrackStruct>& tracks);
-void ReadTrack(ifstream& inFile, TrackStruct& track);
+bool ReadTrack(ifstream& inFile, TrackStruct& track);
 void ReadNextEventV5(ifstream& inFile, int& event, bool selectTracks, std::vector<TrackStruct>& tracks);
-void FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const TrackMCH& mchTrack, std::vector<ClusterStruct>& clusters);
+bool FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const TrackMCH& mchTrack, std::vector<ClusterStruct>& clusters);
 bool IsSelected(TrackStruct& track);
 void CompareTracks(std::vector<TrackStruct>& tracks1, std::vector<TrackStruct>& tracks2, std::vector<TH1*>& histos);
 void CreateResiduals(std::vector<TH1*>& histos, const char* extension, double range);
@@ -120,11 +120,13 @@ void FillResiduals(std::vector<TrackStruct>& tracks, std::vector<TH1*>& histos, 
 void FillResiduals(TrackStruct& track1, TrackStruct& track2, std::vector<TH1*>& histos);
 void DrawResiduals(std::vector<TH1*>& histos, const char* extension);
 void DrawResiduals(std::vector<TH1*>& histos1, std::vector<TH1*>& histos2, const char* extension);
+void DrawRatios(std::vector<TH1*>& histos1, std::vector<TH1*>& histos2, const char* extension);
 pair<double, double> GetSigma(TH1* h, int color);
 double CrystalBallSymmetric(double* xx, double* par);
 
 //_________________________________________________________________________________________________
-void CompareTrackResolution(string inFileName1, int versionFile1,
+void CompareTrackResolution(float l3Current, float dipoleCurrent,
+                            string inFileName1, int versionFile1,
                             string inFileName2, int versionFile2,
                             bool selectTracks = false)
 {
@@ -142,7 +144,7 @@ void CompareTrackResolution(string inFileName1, int versionFile1,
   }
 
   // prepare the track fitter
-  trackFitter.initField(-30000.025391, -5999.954590);
+  trackFitter.initField(l3Current, dipoleCurrent);
   trackFitter.smoothTracks(true);
   TrackExtrap::useExtrapV2();
 
@@ -158,6 +160,8 @@ void CompareTrackResolution(string inFileName1, int versionFile1,
   CreateResiduals(residuals[4], "ClCl", 0.2);
 
   while (true) {
+
+    cout << "\rprocessing event " << event1 + 1 << "..." << flush;
 
     if (readNextEvent1) {
       if (versionFile1 < 5) {
@@ -199,11 +203,14 @@ void CompareTrackResolution(string inFileName1, int versionFile1,
       readNextEvent2 = true;
     }
   }
-  
+
+  cout << "\r\033[Kprocessing completed" << endl;
+
   gStyle->SetOptStat(1);
   DrawResiduals(residuals[4], "ClCl");
   DrawResiduals(residuals[0], residuals[1], "All");
   DrawResiduals(residuals[2], residuals[3], "Matched");
+  DrawRatios(residuals[0], residuals[1], "All");
 
   inFile1.close();
   inFile2.close();
@@ -235,7 +242,9 @@ int ReadNextEvent(ifstream& inFile, bool selectTracks, std::vector<TrackStruct>&
   tracks.reserve(nTracks);
   for (Int_t iTrack = 0; iTrack < nTracks; ++iTrack) {
     tracks.emplace_back();
-    ReadTrack(inFile, tracks.back());
+    if (!ReadTrack(inFile, tracks.back())) {
+      tracks.pop_back();
+    }
     if (selectTracks && !IsSelected(tracks.back())) {
       tracks.pop_back();
     }
@@ -245,9 +254,10 @@ int ReadNextEvent(ifstream& inFile, bool selectTracks, std::vector<TrackStruct>&
 }
 
 //_________________________________________________________________________________________________
-void ReadTrack(ifstream& inFile, TrackStruct& track)
+bool ReadTrack(ifstream& inFile, TrackStruct& track)
 {
   /// read one track from the input file and refit it to get the parameters at each cluster
+  /// return false if the refitting fails
 
   TrackParamStruct paramAtVtx{};
   inFile.read(reinterpret_cast<char*>(&paramAtVtx), sizeof(TrackParamStruct));
@@ -275,8 +285,9 @@ void ReadTrack(ifstream& inFile, TrackStruct& track)
 
   try {
     trackFitter.fit(track.track);
+    return true;
   } catch (exception const& e) {
-    throw runtime_error(std::string("Track fit failed: ") + e.what());
+    return false;
   }
 }
 
@@ -317,7 +328,9 @@ void ReadNextEventV5(ifstream& inFile, int& event, bool selectTracks, std::vecto
     tracks.reserve(nTracksAtVtx);
     for (const auto& trackAtVtx : tracksAtVtx) {
       tracks.emplace_back();
-      FillTrack(tracks.back(), &trackAtVtx, mchTracks[trackAtVtx.mchTrackIdx], clusters);
+      if (!FillTrack(tracks.back(), &trackAtVtx, mchTracks[trackAtVtx.mchTrackIdx], clusters)) {
+        tracks.pop_back();
+      }
       if (selectTracks && !IsSelected(tracks.back())) {
         tracks.pop_back();
       }
@@ -329,7 +342,9 @@ void ReadNextEventV5(ifstream& inFile, int& event, bool selectTracks, std::vecto
     tracks.reserve(nMCHTracks);
     for (const auto& mchTrack : mchTracks) {
       tracks.emplace_back();
-      FillTrack(tracks.back(), nullptr, mchTrack, clusters);
+      if (!FillTrack(tracks.back(), nullptr, mchTrack, clusters)) {
+        tracks.pop_back();
+      }
       if (selectTracks && !IsSelected(tracks.back())) {
         tracks.pop_back();
       }
@@ -338,9 +353,10 @@ void ReadNextEventV5(ifstream& inFile, int& event, bool selectTracks, std::vecto
 }
 
 //_________________________________________________________________________________________________
-void FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const TrackMCH& mchTrack, std::vector<ClusterStruct>& clusters)
+bool FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const TrackMCH& mchTrack, std::vector<ClusterStruct>& clusters)
 {
   /// fill the internal track structure from the provided informations
+  /// return false if the refitting fails
 
   if (trackAtVtx) {
     track.pxpypzm.SetPx(trackAtVtx->paramAtVertex.px);
@@ -369,8 +385,9 @@ void FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const Tra
 
   try {
     trackFitter.fit(track.track);
+    return true;
   } catch (exception const& e) {
-    throw runtime_error(std::string("Track fit failed: ") + e.what());
+    return false;
   }
 }
 
@@ -384,7 +401,11 @@ bool IsSelected(TrackStruct& track)
   static const double nSigmaPDCA = 6.;
   static const double relPRes = 0.0004;
   static const double slopeRes = 0.0005;
-
+/*
+  if (track.pxpypzm.Pt() < 1.) {
+    return false;
+  }
+*/
   double thetaAbs = TMath::ATan(track.rAbs/505.) * TMath::RadToDeg();
   if (thetaAbs < 2. || thetaAbs > 10.) {
     return false;
@@ -572,6 +593,27 @@ void DrawResiduals(std::vector<TH1*>& histos1, std::vector<TH1*>& histos2, const
   lHist->AddEntry(histos2[0], "file 2", "l");
   c->cd(1);
   lHist->Draw("same");
+}
+
+//_________________________________________________________________________________________________
+void DrawRatios(std::vector<TH1*>& histos1, std::vector<TH1*>& histos2, const char* extension)
+{
+  /// draw ratios of cluster-track residuals
+
+  int nPadsx = (histos1.size() + 1) / 2;
+  TCanvas* c = new TCanvas(Form("ratio%s", extension), Form("ratio%s", extension), 10, 10, nPadsx * 300, 600);
+  c->Divide(nPadsx, 2);
+  int i(0);
+  for (const auto& h : histos2) {
+    c->cd((i % 2) * nPadsx + i / 2 + 1);
+    TH1* hRat = new TH1F(*static_cast<TH1F*>(h));
+    hRat->Divide(histos1[i]);
+    hRat->SetStats(false);
+    hRat->SetLineColor(2);
+    hRat->Draw();
+    hRat->GetXaxis()->SetRangeUser(-0.5, 0.5);
+    ++i;
+  }
 }
 
 //_________________________________________________________________________________________________
