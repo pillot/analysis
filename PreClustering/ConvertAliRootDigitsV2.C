@@ -1,5 +1,7 @@
+#include <cstring>
 #include <iostream>
 #include <fstream>
+#include <limits>
 #include <vector>
 
 #include <TString.h>
@@ -10,13 +12,13 @@
 #include "AliMUONVDigit.h"
 #include "AliMUONVDigitStore.h"
 
-#include "MCHBase/Digit.h"
+#include "DataFormatsMCH/Digit.h"
 
 using namespace o2::mch;
 using namespace std;
 
 //------------------------------------------------------------------
-void ConvertAliRootDigitsV2(TString inFileName, TString outFileName = "digits.v2.in")
+void ConvertAliRootDigitsV2(TString inFileName, TString outFileName = "digits.v3.in")
 {
   /// Convert AliRoot digits to O2 digits
   /// saved in a binary file with the following format:
@@ -41,6 +43,10 @@ void ConvertAliRootDigitsV2(TString inFileName, TString outFileName = "digits.v2
   ofstream out(outFileName.Data(),ios::out | ios::binary);
   if (!out.is_open()) return;
 
+  // write the file format
+  uint64_t fileFormat = 2305844383603244847;
+  out.write((char*)&fileFormat, sizeof(uint64_t));
+
   // loop over events
   Long64_t nEvents = treeD->GetEntries();
   std::vector<Digit> digits;
@@ -50,14 +56,18 @@ void ConvertAliRootDigitsV2(TString inFileName, TString outFileName = "digits.v2
     treeD->GetEntry(iEv);
 
     // fill the vector of digits
-    auto digitIt = digitStore->CreateIterator();
+//    auto digitIt = digitStore->CreateIterator();        // ! this changes the order of the output digits !
+    auto digitIt = digitStore->CreateTrackerIterator(); // ! this changes the order of the output digits !
     AliMUONVDigit *digit(nullptr);
     while ((digit = static_cast<AliMUONVDigit*>(digitIt->Next()))) {
       if (digit->Charge() <= 0) continue;
 //      if (digit->Charge() > 610) cout << digit->Charge() << endl;
-      unsigned long charge = (digit->Charge() / 1024) * ULONG_MAX;
-      Digit::Time time{static_cast<uint64_t>(digit->IsSaturated() ? 1 : 0)};
-      digits.push_back({digit->DetElemId(), static_cast<int>(digit->GetUniqueID()), charge, time});
+//      unsigned long charge = (static_cast<double>(digit->Charge()) / 1024) * static_cast<double>(std::numeric_limits<unsigned long>::max());
+//      unsigned long charge = (static_cast<double>(digit->Charge()) / 0x8000000000) * static_cast<double>(std::numeric_limits<unsigned long>::max());
+      float charge = digit->Charge();
+      uint32_t adc(0);
+      std::memcpy(&adc, &charge, sizeof(charge));
+      digits.push_back({digit->DetElemId(), static_cast<int>(digit->GetUniqueID()), adc, 0, 0, digit->IsSaturated()});
     }
 
     // write the number of digits

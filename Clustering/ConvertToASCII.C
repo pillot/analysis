@@ -2,7 +2,7 @@
 #include <iostream>
 #include <vector>
 
-#include "MCHBase/Digit.h"
+#include "DataFormatsMCH/Digit.h"
 #include "MCHBase/ClusterBlock.h"
 
 using namespace std;

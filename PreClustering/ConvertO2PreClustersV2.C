@@ -9,7 +9,7 @@
 #include "AliMUONClusterStoreV2.h"
 
 #include "MCHBase/PreCluster.h"
-#include "MCHBase/Digit.h"
+#include "DataFormatsMCH/Digit.h"
 
 using namespace o2::mch;
 

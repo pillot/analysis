@@ -18,7 +18,7 @@
 #include "MathUtils/Cartesian.h"
 
 #include "MCHBase/ClusterBlock.h"
-#include "MCHBase/Digit.h"
+#include "DataFormatsMCH/Digit.h"
 
 using namespace o2::mch;
 using namespace std;
