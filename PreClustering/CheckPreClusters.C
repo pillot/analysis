@@ -53,6 +53,9 @@ void CheckPreClusters(const char *clusterFileName, const char *digitFileName)
   std::list<UInt_t> multiUsedDigitId[nDEs];
   std::list<UInt_t> missingDigitId[nDEs];
   std::list<UInt_t> extraDigitId[nDEs];
+  int nMultiUsedDigits(0);
+  int nMissingDigits(0);
+  int nExtraDigits(0);
   
   // loop over events
   Long64_t nEvents = treeR->GetEntries();
@@ -70,9 +73,11 @@ void CheckPreClusters(const char *clusterFileName, const char *digitFileName)
     
     Bool_t print = kFALSE;
     for (Int_t iDE = 1; iDE <= iDEmax; iDE++) {
+      nMultiUsedDigits += multiUsedDigitId[iDE].size();
+      nMissingDigits += missingDigitId[iDE].size();
+      nExtraDigits += extraDigitId[iDE].size();
       if (missingDigitId[iDE].size() > 0 || multiUsedDigitId[iDE].size() > 0 || extraDigitId[iDE].size() > 0) {
         print = kTRUE;
-        break;
       }
     }
     if (print) {
@@ -87,6 +92,10 @@ void CheckPreClusters(const char *clusterFileName, const char *digitFileName)
     
   }
   
+  printf("Total number of missing digits = %d\n", nMissingDigits);
+  printf("Total number of multi-used digits = %d\n", nMultiUsedDigits);
+  printf("Total number of extra digits = %d\n", nExtraDigits);
+
   AliCodeTimer::Instance()->Print();
   
 }
