@@ -6,6 +6,8 @@
 #include "MCHBase/ClusterBlock.h"
 #include "MCHBase/TrackBlock.h"
 
+#include "/Users/PILLOT/Work/Alice/Macros/Tracking/TrackMCHv1.h"
+
 using namespace std;
 using namespace o2::mch;
 
@@ -40,8 +42,10 @@ struct TrackStruct {
 //_________________________________________________________________________________________________
 int ReadNextEvent(ifstream& inFile, int version, std::vector<TrackStruct>& tracks, int& size);
 void ReadTrack(ifstream& inFile, TrackStruct& track, int version);
+template <class T>
 int ReadNextEventV5(ifstream& inFile, std::vector<TrackStruct>& tracks, int& size);
-void FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const TrackMCH* mchTrack, std::vector<ClusterStruct>& clusters);
+template <typename T>
+void FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const T* mchTrack, std::vector<ClusterStruct>& clusters);
 void WriteTracks(std::vector<TrackStruct>& tracks, ofstream& outFile);
 
 //_________________________________________________________________________________________________
@@ -68,8 +72,10 @@ void ConvertToASCII(string trackFileName, int versionFile)
     int event(-1);
     if (versionFile < 5) {
       event = ReadNextEvent(inFileTrack, versionFile, tracks, size);
+    } else if (versionFile == 5) {
+      event = ReadNextEventV5<TrackMCHv1>(inFileTrack, tracks, size);
     } else {
-      event = ReadNextEventV5(inFileTrack, tracks, size);
+      event = ReadNextEventV5<TrackMCH>(inFileTrack, tracks, size);
     }
     if (event < 0) {
       // reaching end of file
@@ -145,6 +151,7 @@ void ReadTrack(ifstream& inFile, TrackStruct& track, int version)
 }
 
 //_________________________________________________________________________________________________
+template <class T>
 int ReadNextEventV5(ifstream& inFile, std::vector<TrackStruct>& tracks, int& size)
 {
   /// read the next event in the input file
@@ -171,8 +178,8 @@ int ReadNextEventV5(ifstream& inFile, std::vector<TrackStruct>& tracks, int& siz
   // read the tracks at vertex, the MCH tracks and the attached clusters
   std::vector<TrackAtVtxStruct> tracksAtVtx(nTracksAtVtx);
   inFile.read(reinterpret_cast<char*>(tracksAtVtx.data()), nTracksAtVtx * sizeof(TrackAtVtxStruct));
-  std::vector<TrackMCH> mchTracks(nMCHTracks);
-  inFile.read(reinterpret_cast<char*>(mchTracks.data()), nMCHTracks * sizeof(TrackMCH));
+  std::vector<T> mchTracks(nMCHTracks);
+  inFile.read(reinterpret_cast<char*>(mchTracks.data()), nMCHTracks * sizeof(T));
   std::vector<ClusterStruct> clusters(nClusters);
   inFile.read(reinterpret_cast<char*>(clusters.data()), nClusters * sizeof(ClusterStruct));
 
@@ -195,12 +202,13 @@ int ReadNextEventV5(ifstream& inFile, std::vector<TrackStruct>& tracks, int& siz
     }
   }
 
-  size = 3 * sizeof(int) + nTracksAtVtx * sizeof(TrackAtVtxStruct) + nMCHTracks * sizeof(TrackMCH) + nClusters * sizeof(ClusterStruct);
+  size = 3 * sizeof(int) + nTracksAtVtx * sizeof(TrackAtVtxStruct) + nMCHTracks * sizeof(T) + nClusters * sizeof(ClusterStruct);
   return event;
 }
 
 //_________________________________________________________________________________________________
-void FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const TrackMCH* mchTrack, std::vector<ClusterStruct>& clusters)
+template <typename T>
+void FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const T* mchTrack, std::vector<ClusterStruct>& clusters)
 {
   /// fill the internal track structure from the provided informations
 

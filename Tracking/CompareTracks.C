@@ -3,6 +3,7 @@
 #include <list>
 #include <vector>
 #include <algorithm>
+#include <type_traits>
 
 #include <TMath.h>
 #include <TStyle.h>
@@ -33,6 +34,8 @@
 #include "MCHTracking/Track.h"
 #include "MCHTracking/TrackFitter.h"
 #include "MCHTracking/TrackExtrap.h"
+
+#include "/Users/PILLOT/Work/Alice/Macros/Tracking/TrackMCHv1.h"
 
 using namespace std;
 using namespace o2::mch;
@@ -78,6 +81,8 @@ struct TrackStruct {
   double chi2 = 0.;
   TrackParamStruct param{};
   TMatrixD cov{5, 5};
+  TrackParamStruct paramAtMID{};
+  TMatrixD covAtMID{5, 5};
   std::vector<Cluster> clusters{};
   bool matchFound = false;
   bool matchIdentical = false;
@@ -385,8 +390,10 @@ struct TrackStruct {
 int ReadNextEvent(ifstream& inFile, std::vector<VertexStruct>& vertices);
 int ReadNextEvent(ifstream& inFile, int version, std::list<TrackStruct>& tracks);
 void ReadTrack(ifstream& inFile, TrackStruct& track, int version);
+template <class T>
 void ReadNextEventV5(ifstream& inFile, int& event, std::list<TrackStruct>& tracks);
-void FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const TrackMCH* mchTrack, std::vector<ClusterStruct>& clusters);
+template <typename T>
+void FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const T* mchTrack, std::vector<ClusterStruct>& clusters);
 void UpdateTrack(TrackStruct& track, const Track& tmpTrack);
 void RefitTracks(std::list<TrackStruct>& tracks);
 void ImproveTracks(std::list<TrackStruct>& tracks);
@@ -396,6 +403,7 @@ bool LoadOCDB();
 bool SetMagField();
 void ExtrapToVertex(std::list<TrackStruct>& tracks, const std::vector<VertexStruct>& vertices, int event);
 void ExtrapToVertex(TrackStruct& track, VertexStruct& vertex);
+void ExtrapToMID(TrackParam& param);
 void selectTracks(std::list<TrackStruct>& tracks);
 bool IsSelected(TrackStruct& track);
 int CompareEvents(std::list<TrackStruct>& tracks1, std::list<TrackStruct>& tracks2, double precision, bool printAll, std::vector<TH1*>& histos);
@@ -425,7 +433,8 @@ void CompareTracks(int runNumber, string inFileName1, int versionFile1, string i
   /// file version 2: param at 1st cluster + chi2 + clusters
   /// file version 3: param at vertex + dca + rAbs + chi2 + param at 1st cluster + clusters
   /// file version 4: param at vertex + dca + rAbs + chi2 + param at 1st cluster + clusters (v2)
-  /// file version 5: nTracksAtVtx + nMCHTracks + nClusters + list of Tracks at vertex (param at vertex + dca + rAbs + mchTrackIdx) + list of MCH tracks + list of clusters (v2)
+  /// file version 5: nTracksAtVtx + nMCHTracks + nClusters + list of Tracks at vertex (param at vertex + dca + rAbs + mchTrackIdx) + list of MCH tracks (v1) + list of clusters (v2)
+  /// file version 6: nTracksAtVtx + nMCHTracks + nClusters + list of Tracks at vertex (param at vertex + dca + rAbs + mchTrackIdx) + list of MCH tracks (v2) + list of clusters (v2)
 
   run = runNumber;
 
@@ -475,8 +484,10 @@ void CompareTracks(int runNumber, string inFileName1, int versionFile1, string i
     if (readNextEvent1) {
       if (versionFile1 < 5) {
         event1 = ReadNextEvent(inFile1, versionFile1, tracks1);
+      } else if (versionFile1 == 5) {
+        ReadNextEventV5<TrackMCHv1>(inFile1, event1, tracks1);
       } else {
-        ReadNextEventV5(inFile1, event1, tracks1);
+        ReadNextEventV5<TrackMCH>(inFile1, event1, tracks1);
       }
       //trackFitter.useChamberResolution();
       //ImproveTracks(tracks1);
@@ -494,8 +505,10 @@ void CompareTracks(int runNumber, string inFileName1, int versionFile1, string i
     if (readNextEvent2) {
       if (versionFile2 < 5) {
         event2 = ReadNextEvent(inFile2, versionFile2, tracks2);
+      } else if (versionFile2 == 5) {
+        ReadNextEventV5<TrackMCHv1>(inFile2, event2, tracks2);
       } else {
-        ReadNextEventV5(inFile2, event2, tracks2);
+        ReadNextEventV5<TrackMCH>(inFile2, event2, tracks2);
       }
       //RemoveInvalidTracks(tracks2);
       //RemoveConnectedTracks(tracks2, 2, 4, &TrackStruct::isBetter42);
@@ -646,6 +659,7 @@ void ReadTrack(ifstream& inFile, TrackStruct& track, int version)
 }
 
 //_________________________________________________________________________________________________
+template <class T>
 void ReadNextEventV5(ifstream& inFile, int& event, std::list<TrackStruct>& tracks)
 {
   /// read the next event in the input file
@@ -670,8 +684,8 @@ void ReadNextEventV5(ifstream& inFile, int& event, std::list<TrackStruct>& track
   // read the tracks at vertex, the MCH tracks and the attached clusters
   std::vector<TrackAtVtxStruct> tracksAtVtx(nTracksAtVtx);
   inFile.read(reinterpret_cast<char*>(tracksAtVtx.data()), nTracksAtVtx * sizeof(TrackAtVtxStruct));
-  std::vector<TrackMCH> mchTracks(nMCHTracks);
-  inFile.read(reinterpret_cast<char*>(mchTracks.data()), nMCHTracks * sizeof(TrackMCH));
+  std::vector<T> mchTracks(nMCHTracks);
+  inFile.read(reinterpret_cast<char*>(mchTracks.data()), nMCHTracks * sizeof(T));
   std::vector<ClusterStruct> clusters(nClusters);
   inFile.read(reinterpret_cast<char*>(clusters.data()), nClusters * sizeof(ClusterStruct));
 
@@ -695,7 +709,8 @@ void ReadNextEventV5(ifstream& inFile, int& event, std::list<TrackStruct>& track
 }
 
 //_________________________________________________________________________________________________
-void FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const TrackMCH* mchTrack, std::vector<ClusterStruct>& clusters)
+template <typename T>
+void FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const T* mchTrack, std::vector<ClusterStruct>& clusters)
 {
   /// fill the internal track structure from the provided informations
 
@@ -723,6 +738,20 @@ void FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const Tra
         track.cov(i, j) = mchTrack->getCovariance(i, j);
       }
     }
+
+    if (std::is_same_v<T, TrackMCH>) {
+      const auto* t = reinterpret_cast<const TrackMCH*>(mchTrack);
+      TrackParam paramAtMID(t->getZAtMID(), t->getParametersAtMID(), t->getCovariancesAtMID());
+      track.paramAtMID.x = paramAtMID.getNonBendingCoor();
+      track.paramAtMID.y = paramAtMID.getBendingCoor();
+      track.paramAtMID.z = paramAtMID.getZ();
+      track.paramAtMID.px = paramAtMID.px();
+      track.paramAtMID.py = paramAtMID.py();
+      track.paramAtMID.pz = paramAtMID.pz();
+      track.paramAtMID.sign = paramAtMID.getCharge();
+      track.covAtMID = paramAtMID.getCovariances();
+    }
+
     track.clusters.reserve(mchTrack->getNClusters());
     for (int iCl = mchTrack->getFirstClusterIdx(); iCl <= mchTrack->getLastClusterIdx(); ++iCl) {
       track.clusters.emplace_back(clusters[iCl]);
@@ -749,6 +778,23 @@ void UpdateTrack(TrackStruct& track, const Track& tmpTrack)
   for (int i = 0; i < 5; i++) {
     for (int j = 0; j <= i; j++) {
       track.cov(i, j) = track.cov(j, i) = cov(i, j);
+    }
+  }
+
+  TrackParam paramAtMID(tmpTrack.last());
+  ExtrapToMID(paramAtMID);
+  track.paramAtMID.x = paramAtMID.getNonBendingCoor();
+  track.paramAtMID.y = paramAtMID.getBendingCoor();
+  track.paramAtMID.z = paramAtMID.getZ();
+  track.paramAtMID.px = paramAtMID.px();
+  track.paramAtMID.py = paramAtMID.py();
+  track.paramAtMID.pz = paramAtMID.pz();
+  track.paramAtMID.sign = paramAtMID.getCharge();
+
+  const TMatrixD& covAtMID = paramAtMID.getCovariances();
+  for (int i = 0; i < 5; i++) {
+    for (int j = 0; j <= i; j++) {
+      track.covAtMID(i, j) = track.covAtMID(j, i) = covAtMID(i, j);
     }
   }
 
@@ -795,7 +841,7 @@ void RefitTracks(std::list<TrackStruct>& tracks)
     }
 
     try {
-      trackFitter.fit(track, false);
+      trackFitter.fit(track);
       UpdateTrack(*itTrack, track);
       ++itTrack;
     } catch (exception const& e) {
@@ -905,6 +951,10 @@ void ImproveTracks(std::list<TrackStruct>& tracks)
     if (removeTrack) {
       itTrack = tracks.erase(itTrack);
     } else {
+      for (auto& param : track) {
+        param.setParameters(param.getSmoothParameters());
+        param.setCovariances(param.getSmoothCovariances());
+      }
       UpdateTrack(*itTrack, track);
       ++itTrack;
     }
@@ -1155,12 +1205,34 @@ void ExtrapToVertex(TrackStruct& track, VertexStruct& vertex)
   double dcaX = trackParamAtDCA.getNonBendingCoor() - vertex.x;
   double dcaY = trackParamAtDCA.getBendingCoor() - vertex.y;
   track.dca = TMath::Sqrt(dcaX*dcaX + dcaY*dcaY);
- 
+
   // extrapolate to the end of the absorber
   TrackExtrap::extrapToZ(&trackParam, -505.);
   double xAbs = trackParam.getNonBendingCoor();
   double yAbs = trackParam.getBendingCoor();
   track.rAbs = TMath::Sqrt(xAbs*xAbs + yAbs*yAbs);
+
+  track.needExtrapToVtx = false;
+}
+
+//_________________________________________________________________________________________________
+void ExtrapToMID(TrackParam& param)
+{
+  /// extrapolate the track parameters to the z position of the first MID chamber
+
+  // load OCDB (only once)
+  if (!ocdbLoaded) {
+    if (!LoadOCDB()) {
+      cout << "fail loading OCDB objects for track extrapolation" << endl;
+      exit(1);
+    }
+    ocdbLoaded = true;
+  }
+
+  // same extrapolation method as in TrackFinder
+  TrackExtrap::useExtrapV2();
+
+  TrackExtrap::extrapToMID(&param);
 }
 
 //_________________________________________________________________________________________________
@@ -1244,6 +1316,15 @@ int CompareEvents(std::list<TrackStruct>& tracks1, std::list<TrackStruct>& track
         PrintCovResiduals(track1.cov, itTrack2->cov);
       }
       FillResiduals(track1.param, itTrack2->param, histos);
+      // compare the track parameters at MID (if any)
+      if (track1.paramAtMID.z < 0. && itTrack2->paramAtMID.z < 0.) {
+        if (!AreTrackParamCompatible(track1.paramAtMID, itTrack2->paramAtMID, precision)) {
+          PrintResiduals(track1.paramAtMID, itTrack2->paramAtMID);
+        }
+        if (!AreTrackParamCovCompatible(track1.covAtMID, itTrack2->covAtMID, precision)) {
+          PrintCovResiduals(track1.covAtMID, itTrack2->covAtMID);
+        }
+      }
     }
   }
 
@@ -1277,6 +1358,15 @@ int CompareEvents(std::list<TrackStruct>& tracks1, std::list<TrackStruct>& track
           PrintCovResiduals(track1.cov, track2.cov);
         }
         FillResiduals(track1.param, track2.param, histos);
+        // compare the track parameters at MID (if any)
+        if (track1.paramAtMID.z < 0. && track2.paramAtMID.z < 0.) {
+          if (!AreTrackParamCompatible(track1.paramAtMID, track2.paramAtMID, precision)) {
+            PrintResiduals(track1.paramAtMID, track2.paramAtMID);
+          }
+          if (!AreTrackParamCovCompatible(track1.covAtMID, track2.covAtMID, precision)) {
+            PrintCovResiduals(track1.covAtMID, track2.covAtMID);
+          }
+        }
         break;
       }
     }

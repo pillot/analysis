@@ -29,6 +29,7 @@
 #include "AliMpSegmentation.h"
 
 #include "AliMUONCDB.h"
+#include "AliMUONConstants.h"
 #include "AliMUONRecoParam.h"
 #include "AliMUONESDInterface.h"
 #include "AliMUONVDigit.h"
@@ -36,6 +37,7 @@
 #include "AliMUONVClusterStore.h"
 #include "AliMUONTrack.h"
 #include "AliMUONTrackParam.h"
+#include "AliMUONTrackExtrap.h"
 #include "AliMUONVTrackStore.h"
 #include "AliMUONTracker.h"
 #include "AliMUONVTrackReconstructor.h"
@@ -467,6 +469,14 @@ void MUONToO2(AliMUONTrack& track, TrackMCH& o2Track, std::vector<ClusterStruct>
   o2Track.setCovariances(param->GetCovariances());
   o2Track.setChi2(track.GetGlobalChi2());
   o2Track.setClusterRef(o2Clusters.size(), track.GetNClusters());
+
+  AliMUONTrackParam paramAtMID(*static_cast<AliMUONTrackParam*>(track.GetTrackParamAtCluster()->Last()));
+  AliMUONTrackExtrap::ExtrapToZCov(&paramAtMID, AliMUONConstants::MuonFilterZEnd());
+  AliMUONTrackExtrap::AddMCSEffect(&paramAtMID, AliMUONConstants::MuonFilterZEnd() - AliMUONConstants::MuonFilterZBeg(), AliMUONConstants::MuonFilterX0());
+  AliMUONTrackExtrap::ExtrapToZCov(&paramAtMID, AliMUONConstants::DefaultChamberZ(AliMUONConstants::NTrackingCh()));
+  o2Track.setZAtMID(paramAtMID.GetZ());
+  o2Track.setParametersAtMID(paramAtMID.GetParameters());
+  o2Track.setCovariancesAtMID(paramAtMID.GetCovariances());
 
   for (int iCl = 0; iCl < track.GetNClusters(); ++iCl) {
     o2Clusters.emplace_back();

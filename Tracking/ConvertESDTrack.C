@@ -16,8 +16,10 @@
 #include "AliESDMuonTrack.h"
 
 #include "AliMUONCDB.h"
+#include "AliMUONConstants.h"
 #include "AliMUONTrack.h"
 #include "AliMUONTrackParam.h"
+#include "AliMUONTrackExtrap.h"
 #include "AliMUONVCluster.h"
 #include "AliMUONESDInterface.h"
 
@@ -57,6 +59,7 @@ void ConvertESDTrack(TString esdFileName, TString outFileName = "AliESDTracks.ou
   /// number of tracks at vertex in event 2 (= 0)
   /// ...
   /// if the tracks are refitted, the extrapolation to vertex is left to another code
+  /// if the tracks are not refitted, the parameters at MID as set to 0 as they cannot be computed
 
   // open the ESD file
   TFile* esdFile = TFile::Open(esdFileName);
@@ -237,9 +240,18 @@ void ConvertTracks(AliESDEvent& esd, bool refit, std::vector<TrackAtVtxStruct>& 
     }
 
     AliMUONESDInterface::ESDToMUON(*esdTrack, muonTrack, refit);
+    AliMUONTrackParam paramAtMID{};
+    if (refit) {
+      paramAtMID = *static_cast<AliMUONTrackParam*>(muonTrack.GetTrackParamAtCluster()->Last());
+      AliMUONTrackExtrap::ExtrapToZCov(&paramAtMID, AliMUONConstants::MuonFilterZEnd());
+      AliMUONTrackExtrap::AddMCSEffect(&paramAtMID, AliMUONConstants::MuonFilterZEnd() - AliMUONConstants::MuonFilterZBeg(), AliMUONConstants::MuonFilterX0());
+      AliMUONTrackExtrap::ExtrapToZCov(&paramAtMID, AliMUONConstants::DefaultChamberZ(AliMUONConstants::NTrackingCh()));
+    }
+
     AliMUONTrackParam* param = static_cast<AliMUONTrackParam*>(muonTrack.GetTrackParamAtCluster()->First());
     o2Tracks.emplace_back(param->GetZ(), param->GetParameters(), param->GetCovariances(),
-                          muonTrack.GetGlobalChi2(), o2Clusters.size(), muonTrack.GetNClusters());
+                          muonTrack.GetGlobalChi2(), o2Clusters.size(), muonTrack.GetNClusters(),
+                          paramAtMID.GetZ(), paramAtMID.GetParameters(), paramAtMID.GetCovariances());
 
     for (int iCl = 0; iCl < muonTrack.GetNClusters(); ++iCl) {
       AliMUONVCluster* cluster = static_cast<AliMUONTrackParam*>(muonTrack.GetTrackParamAtCluster()->UncheckedAt(iCl))->GetClusterPtr();

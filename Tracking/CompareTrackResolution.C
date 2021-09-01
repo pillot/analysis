@@ -25,6 +25,8 @@
 #include "MCHTracking/TrackFitter.h"
 #include "MCHTracking/TrackExtrap.h"
 
+#include "/Users/PILLOT/Work/Alice/Macros/Tracking/TrackMCHv1.h"
+
 using namespace std;
 using namespace o2::mch;
 using namespace ROOT::Math;
@@ -111,8 +113,10 @@ struct TrackStruct {
 //_________________________________________________________________________________________________
 int ReadNextEvent(ifstream& inFile, bool selectTracks, std::vector<TrackStruct>& tracks);
 bool ReadTrack(ifstream& inFile, TrackStruct& track);
+template <class T>
 void ReadNextEventV5(ifstream& inFile, int& event, bool selectTracks, std::vector<TrackStruct>& tracks);
-bool FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const TrackMCH& mchTrack, std::vector<ClusterStruct>& clusters);
+template <typename T>
+bool FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const T& mchTrack, std::vector<ClusterStruct>& clusters);
 bool IsSelected(TrackStruct& track);
 void CompareTracks(std::vector<TrackStruct>& tracks1, std::vector<TrackStruct>& tracks2, std::vector<TH1*>& histos);
 void CreateResiduals(std::vector<TH1*>& histos, const char* extension, double range);
@@ -133,7 +137,8 @@ void CompareTrackResolution(float l3Current, float dipoleCurrent,
   /// Compare the cluster-track residuals between the tracks stored in the 2 binary files
   /// O2 tracking need to be loaded before: gSystem->Load("libO2MCHTracking")
   /// file version 4: param at vertex + dca + rAbs + chi2 + param at 1st cluster + clusters (v2)
-  /// file version 5: nTracksAtVtx + nMCHTracks + nClusters + list of Tracks at vertex (param at vertex + dca + rAbs + mchTrackIdx) + list of MCH tracks + list of clusters (v2)
+  /// file version 5: nTracksAtVtx + nMCHTracks + nClusters + list of Tracks at vertex (param at vertex + dca + rAbs + mchTrackIdx) + list of MCH tracks (v1) + list of clusters (v2)
+  /// file version 6: nTracksAtVtx + nMCHTracks + nClusters + list of Tracks at vertex (param at vertex + dca + rAbs + mchTrackIdx) + list of MCH tracks (v2) + list of clusters (v2)
 
   // open files
   ifstream inFile1(inFileName1, ios::binary);
@@ -166,8 +171,10 @@ void CompareTrackResolution(float l3Current, float dipoleCurrent,
     if (readNextEvent1) {
       if (versionFile1 < 5) {
         event1 = ReadNextEvent(inFile1, selectTracks, tracks1);
+      } else if (versionFile1 == 5) {
+        ReadNextEventV5<TrackMCHv1>(inFile1, event1, selectTracks, tracks1);
       } else {
-        ReadNextEventV5(inFile1, event1, selectTracks, tracks1);
+        ReadNextEventV5<TrackMCH>(inFile1, event1, selectTracks, tracks1);
       }
       FillResiduals(tracks1, residuals[0]);
     }
@@ -175,8 +182,10 @@ void CompareTrackResolution(float l3Current, float dipoleCurrent,
     if (readNextEvent2) {
       if (versionFile2 < 5) {
         event2 = ReadNextEvent(inFile2, selectTracks, tracks2);
+      } else if (versionFile2 == 5) {
+        ReadNextEventV5<TrackMCHv1>(inFile2, event2, selectTracks, tracks2);
       } else {
-        ReadNextEventV5(inFile2, event2, selectTracks, tracks2);
+        ReadNextEventV5<TrackMCH>(inFile2, event2, selectTracks, tracks2);
       }
       FillResiduals(tracks2, residuals[1]);
     }
@@ -211,6 +220,7 @@ void CompareTrackResolution(float l3Current, float dipoleCurrent,
   DrawResiduals(residuals[0], residuals[1], "All");
   DrawResiduals(residuals[2], residuals[3], "Matched");
   DrawRatios(residuals[0], residuals[1], "All");
+  DrawRatios(residuals[2], residuals[3], "Matched");
 
   inFile1.close();
   inFile2.close();
@@ -292,6 +302,7 @@ bool ReadTrack(ifstream& inFile, TrackStruct& track)
 }
 
 //_________________________________________________________________________________________________
+template <class T>
 void ReadNextEventV5(ifstream& inFile, int& event, bool selectTracks, std::vector<TrackStruct>& tracks)
 {
   /// read the next event in the input file
@@ -313,8 +324,8 @@ void ReadNextEventV5(ifstream& inFile, int& event, bool selectTracks, std::vecto
   // read the tracks at vertex, the MCH tracks and the attached clusters
   std::vector<TrackAtVtxStruct> tracksAtVtx(nTracksAtVtx);
   inFile.read(reinterpret_cast<char*>(tracksAtVtx.data()), nTracksAtVtx * sizeof(TrackAtVtxStruct));
-  std::vector<TrackMCH> mchTracks(nMCHTracks);
-  inFile.read(reinterpret_cast<char*>(mchTracks.data()), nMCHTracks * sizeof(TrackMCH));
+  std::vector<T> mchTracks(nMCHTracks);
+  inFile.read(reinterpret_cast<char*>(mchTracks.data()), nMCHTracks * sizeof(T));
   std::vector<ClusterStruct> clusters(nClusters);
   inFile.read(reinterpret_cast<char*>(clusters.data()), nClusters * sizeof(ClusterStruct));
 
@@ -353,7 +364,8 @@ void ReadNextEventV5(ifstream& inFile, int& event, bool selectTracks, std::vecto
 }
 
 //_________________________________________________________________________________________________
-bool FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const TrackMCH& mchTrack, std::vector<ClusterStruct>& clusters)
+template <typename T>
+bool FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const T& mchTrack, std::vector<ClusterStruct>& clusters)
 {
   /// fill the internal track structure from the provided informations
   /// return false if the refitting fails
