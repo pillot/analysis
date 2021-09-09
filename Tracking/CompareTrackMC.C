@@ -195,7 +195,7 @@ bool extrapToVertex(const TrackMCH& track, double x, double y, double z, TrackAt
 
   // extrapolate to vertex
   TrackParam trackParamAtVertex(track.getZ(), track.getParameters());
-  if (!TrackExtrap::extrapToVertex(&trackParamAtVertex, x, y, z, 0., 0.)) {
+  if (!TrackExtrap::extrapToVertex(trackParamAtVertex, x, y, z, 0., 0.)) {
     return false;
   }
   trackAtVtx.paramAtVertex.x = trackParamAtVertex.getNonBendingCoor();
@@ -208,7 +208,7 @@ bool extrapToVertex(const TrackMCH& track, double x, double y, double z, TrackAt
 
   // extrapolate to DCA
   TrackParam trackParamAtDCA(track.getZ(), track.getParameters());
-  if (!TrackExtrap::extrapToVertexWithoutBranson(&trackParamAtDCA, z)) {
+  if (!TrackExtrap::extrapToVertexWithoutBranson(trackParamAtDCA, z)) {
     return false;
   }
   double dcaX = trackParamAtDCA.getNonBendingCoor() - x;
@@ -217,7 +217,7 @@ bool extrapToVertex(const TrackMCH& track, double x, double y, double z, TrackAt
 
   // extrapolate to the end of the absorber
   TrackParam trackParamAtRAbs(track.getZ(), track.getParameters());
-  if (!TrackExtrap::extrapToZ(&trackParamAtRAbs, -505.)) {
+  if (!TrackExtrap::extrapToZ(trackParamAtRAbs, -505.)) {
     return false;
   }
   double xAbs = trackParamAtRAbs.getNonBendingCoor();

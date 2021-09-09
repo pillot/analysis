@@ -1192,7 +1192,7 @@ void ExtrapToVertex(TrackStruct& track, VertexStruct& vertex)
 
   // extrapolate to vertex
   TrackParam trackParamAtVertex(trackParam);
-  TrackExtrap::extrapToVertex(&trackParamAtVertex, vertex.x, vertex.y, vertex.z, 0., 0.);
+  TrackExtrap::extrapToVertex(trackParamAtVertex, vertex.x, vertex.y, vertex.z, 0., 0.);
   track.pxpypzm.SetPx(trackParamAtVertex.px());
   track.pxpypzm.SetPy(trackParamAtVertex.py());
   track.pxpypzm.SetPz(trackParamAtVertex.pz());
@@ -1201,13 +1201,13 @@ void ExtrapToVertex(TrackStruct& track, VertexStruct& vertex)
 
   // extrapolate to DCA
   TrackParam trackParamAtDCA(trackParam);
-  TrackExtrap::extrapToVertexWithoutBranson(&trackParamAtDCA, vertex.z);
+  TrackExtrap::extrapToVertexWithoutBranson(trackParamAtDCA, vertex.z);
   double dcaX = trackParamAtDCA.getNonBendingCoor() - vertex.x;
   double dcaY = trackParamAtDCA.getBendingCoor() - vertex.y;
   track.dca = TMath::Sqrt(dcaX*dcaX + dcaY*dcaY);
 
   // extrapolate to the end of the absorber
-  TrackExtrap::extrapToZ(&trackParam, -505.);
+  TrackExtrap::extrapToZ(trackParam, -505.);
   double xAbs = trackParam.getNonBendingCoor();
   double yAbs = trackParam.getBendingCoor();
   track.rAbs = TMath::Sqrt(xAbs*xAbs + yAbs*yAbs);
@@ -1232,7 +1232,7 @@ void ExtrapToMID(TrackParam& param)
   // same extrapolation method as in TrackFinder
   TrackExtrap::useExtrapV2();
 
-  TrackExtrap::extrapToMID(&param);
+  TrackExtrap::extrapToMID(param);
 }
 
 //_________________________________________________________________________________________________
