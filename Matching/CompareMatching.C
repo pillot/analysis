@@ -45,6 +45,7 @@ void PrepareTrackExtrapolation(float l3Current, float dipoleCurrent);
 std::tuple<TFile*, TTreeReader*> LoadData(const char* fileName, const char* treeName);
 const dataformats::TrackMCHMID* FindMuon(uint32_t iMCHTrack, const std::vector<dataformats::TrackMCHMID>& muonTracks);
 bool ExtrapToVertex(const mch::TrackMCH& track, VertexStruct& vertex, TrackAtVtxStruct& trackAtVtx);
+bool IsSelected(const mch::TrackMCH& track, const TrackAtVtxStruct& trackAtVtx);
 void CreateHistosAtVertex(std::vector<TH1*>& histos, const char* extension);
 void FillHistosAtVertex(const mch::TrackMCH& track, const TrackAtVtxStruct& trackAtVtx, std::vector<TH1*>& histos);
 void DrawHistosAtVertex(std::vector<TH1*> histos[2]);
@@ -57,10 +58,9 @@ void DrawHistosAtMID(std::vector<TH1*>& histos);
 void CompareMatching(float l3Current, float dipoleCurrent, std::string vtxFileName, const char* mchFileName,
                      const char* midFileName1, const char* muonFileName1,
                      const char* midFileName2, const char* muonFileName2,
-                     double precision = 1.e-4)
+                     bool applyTrackSelection = false, bool printDifferences = true, double precision = 1.e-4)
 {
   /// compare the matching of the same MCH tracks with different MID track and/or different matching algorithm
-  /// O2 tracking need to be loaded before: gSystem->Load("libO2MCHTracking")
 
   // get vertices and prepare track extrapolation
   std::vector<VertexStruct> vertices{};
@@ -118,6 +118,11 @@ void CompareMatching(float l3Current, float dipoleCurrent, std::string vtxFileNa
           continue;
         }
 
+        // apply track selection if requested
+        if (applyTrackSelection && !IsSelected(mchTrack, mchTrackAtVtx)) {
+          continue;
+        }
+
         // find the corresponding MCH-MID matched tracks
         auto muon1 = FindMuon(iMCHTrack, *muonTracks1);
         auto muon2 = FindMuon(iMCHTrack, *muonTracks2);
@@ -139,15 +144,19 @@ void CompareMatching(float l3Current, float dipoleCurrent, std::string vtxFileNa
         }
         if (muon1 && muon2) {
           FillHistosAtVertex(mchTrack, mchTrackAtVtx, comparisonsAtVertex[1]);
-          if (abs(matchChi22 - matchChi21) > precision) {
+          if (printDifferences && abs(matchChi22 - matchChi21) > precision) {
             std::cout << "chi2 difference = " << matchChi22 - matchChi21 << std::endl;
           }
         } else if (muon2) {
           FillHistosAtVertex(mchTrack, mchTrackAtVtx, comparisonsAtVertex[2]);
-          std::cout << "additional matching: chi2 = " << matchChi22 << std::endl;
+          if (printDifferences) {
+            std::cout << "additional matching: chi2 = " << matchChi22 << std::endl;
+          }
         } else if (muon1) {
           FillHistosAtVertex(mchTrack, mchTrackAtVtx, comparisonsAtVertex[3]);
-          std::cout << "missing matching: chi2 = " << matchChi21 << std::endl;
+          if (printDifferences) {
+            std::cout << "missing matching: chi2 = " << matchChi21 << std::endl;
+          }
         }
         FillHistosAtMID(chi21, matchChi21, chi22, matchChi22, histosAtMID);
       }
@@ -274,6 +283,41 @@ bool ExtrapToVertex(const mch::TrackMCH& track, VertexStruct& vertex, TrackAtVtx
   double xAbs = trackParamAtRAbs.getNonBendingCoor();
   double yAbs = trackParamAtRAbs.getBendingCoor();
   trackAtVtx.rAbs = sqrt(xAbs * xAbs + yAbs * yAbs);
+
+  return true;
+}
+
+//_________________________________________________________________________________________________
+bool IsSelected(const mch::TrackMCH& track, const TrackAtVtxStruct& trackAtVtx)
+{
+  /// apply standard track selections + pDCA
+
+  static const double sigmaPDCA23 = 80.;
+  static const double sigmaPDCA310 = 54.;
+  static const double nSigmaPDCA = 6.;
+  static const double relPRes = 0.0004;
+  static const double slopeRes = 0.0005;
+
+  double thetaAbs = TMath::ATan(trackAtVtx.rAbs / 505.) * TMath::RadToDeg();
+  if (thetaAbs < 2. || thetaAbs > 10.) {
+    return false;
+  }
+
+  double p = trackAtVtx.paramAtVertex.p();
+  double eta = 0.5 * log((p + trackAtVtx.paramAtVertex.pz()) / (p - trackAtVtx.paramAtVertex.pz()));
+  if (eta < -4. || eta > -2.5) {
+    return false;
+  }
+
+  double pDCA = track.getP() * trackAtVtx.dca;
+  double sigmaPDCA = (thetaAbs < 3) ? sigmaPDCA23 : sigmaPDCA310;
+  double nrp = nSigmaPDCA * relPRes * p;
+  double pResEffect = sigmaPDCA / (1. - nrp / (1. + nrp));
+  double slopeResEffect = 535. * slopeRes * p;
+  double sigmaPDCAWithRes = TMath::Sqrt(pResEffect * pResEffect + slopeResEffect * slopeResEffect);
+  if (pDCA > nSigmaPDCA * sigmaPDCAWithRes) {
+    return false;
+  }
 
   return true;
 }
