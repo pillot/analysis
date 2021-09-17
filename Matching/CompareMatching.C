@@ -11,6 +11,7 @@
 #include <TTreeReaderValue.h>
 #include <TGeoGlobalMagField.h>
 #include <TH1F.h>
+#include <TH2F.h>
 #include <TCanvas.h>
 #include <TLegend.h>
 
@@ -45,9 +46,12 @@ std::tuple<TFile*, TTreeReader*> LoadData(const char* fileName, const char* tree
 const dataformats::TrackMCHMID* FindMuon(uint32_t iMCHTrack, const std::vector<dataformats::TrackMCHMID>& muonTracks);
 bool ExtrapToVertex(const mch::TrackMCH& track, VertexStruct& vertex, TrackAtVtxStruct& trackAtVtx);
 void CreateHistosAtVertex(std::vector<TH1*>& histos, const char* extension);
-void FillHistosAtVertex(const mch::TrackMCH& track, const TrackAtVtxStruct& trackAtVtx, double matchChi2, std::vector<TH1*>& histos);
+void FillHistosAtVertex(const mch::TrackMCH& track, const TrackAtVtxStruct& trackAtVtx, std::vector<TH1*>& histos);
 void DrawHistosAtVertex(std::vector<TH1*> histos[2]);
 void DrawComparisonsAtVertex(std::vector<TH1*> histos[4]);
+void CreateHistosAtMID(std::vector<TH1*>& histos);
+void FillHistosAtMID(double chi21, double matchChi21, double chi22, double matchChi22, std::vector<TH1*>& histos);
+void DrawHistosAtMID(std::vector<TH1*>& histos);
 
 //_________________________________________________________________________________________________
 void CompareMatching(float l3Current, float dipoleCurrent, std::string vtxFileName, const char* mchFileName,
@@ -84,6 +88,8 @@ void CompareMatching(float l3Current, float dipoleCurrent, std::string vtxFileNa
   std::vector<TH1*> histosAtVertex[2] = {{}, {}};
   CreateHistosAtVertex(histosAtVertex[0], "1");
   CreateHistosAtVertex(histosAtVertex[1], "2");
+  std::vector<TH1*> histosAtMID{};
+  CreateHistosAtMID(histosAtMID);
 
   VertexStruct vertex{};
   TrackAtVtxStruct mchTrackAtVtx{};
@@ -117,31 +123,40 @@ void CompareMatching(float l3Current, float dipoleCurrent, std::string vtxFileNa
         auto muon2 = FindMuon(iMCHTrack, *muonTracks2);
 
         // fill histograms
-        FillHistosAtVertex(mchTrack, mchTrackAtVtx, 0., comparisonsAtVertex[0]);
+        double chi21(-1.), matchChi21(-1.), chi22(-1.), matchChi22(-1.);
+        FillHistosAtVertex(mchTrack, mchTrackAtVtx, comparisonsAtVertex[0]);
         if (muon1) {
-          FillHistosAtVertex(mchTrack, mchTrackAtVtx, muon1->getMatchChi2OverNDF(), histosAtVertex[0]);
+          FillHistosAtVertex(mchTrack, mchTrackAtVtx, histosAtVertex[0]);
+          auto midTrack1 = reinterpret_cast<mid::Track*>(midTracks1->data()) + muon1->getMIDRef().getIndex();
+          chi21 = midTrack1->getNDF() ? midTrack1->getChi2OverNDF() : 0.;
+          matchChi21 = muon1->getMatchChi2OverNDF();
         }
         if (muon2) {
-          FillHistosAtVertex(mchTrack, mchTrackAtVtx, muon2->getMatchChi2OverNDF(), histosAtVertex[1]);
+          FillHistosAtVertex(mchTrack, mchTrackAtVtx, histosAtVertex[1]);
+          auto midTrack2 = reinterpret_cast<mid::Track*>(midTracks2->data()) + muon2->getMIDRef().getIndex();
+          chi22 = midTrack2->getNDF() ? midTrack2->getChi2OverNDF() : 0.;
+          matchChi22 = muon2->getMatchChi2OverNDF();
         }
         if (muon1 && muon2) {
-          FillHistosAtVertex(mchTrack, mchTrackAtVtx, muon2->getMatchChi2OverNDF(), comparisonsAtVertex[1]);
-          if (abs(muon2->getMatchChi2OverNDF() - muon1->getMatchChi2OverNDF()) > precision) {
-            std::cout << "chi2 difference = " << muon2->getMatchChi2OverNDF() - muon1->getMatchChi2OverNDF() << std::endl;
+          FillHistosAtVertex(mchTrack, mchTrackAtVtx, comparisonsAtVertex[1]);
+          if (abs(matchChi22 - matchChi21) > precision) {
+            std::cout << "chi2 difference = " << matchChi22 - matchChi21 << std::endl;
           }
         } else if (muon2) {
-          FillHistosAtVertex(mchTrack, mchTrackAtVtx, muon2->getMatchChi2OverNDF(), comparisonsAtVertex[2]);
-          std::cout << "additional matching: chi2 = " << muon2->getMatchChi2OverNDF() << std::endl;
+          FillHistosAtVertex(mchTrack, mchTrackAtVtx, comparisonsAtVertex[2]);
+          std::cout << "additional matching: chi2 = " << matchChi22 << std::endl;
         } else if (muon1) {
-          FillHistosAtVertex(mchTrack, mchTrackAtVtx, muon1->getMatchChi2OverNDF(), comparisonsAtVertex[3]);
-          std::cout << "missing matching: chi2 = " << muon1->getMatchChi2OverNDF() << std::endl;
+          FillHistosAtVertex(mchTrack, mchTrackAtVtx, comparisonsAtVertex[3]);
+          std::cout << "missing matching: chi2 = " << matchChi21 << std::endl;
         }
+        FillHistosAtMID(chi21, matchChi21, chi22, matchChi22, histosAtMID);
       }
     }
   }
 
   DrawHistosAtVertex(histosAtVertex);
   DrawComparisonsAtVertex(comparisonsAtVertex);
+  DrawHistosAtMID(histosAtMID);
 
   fMCH->Close();
   fMID1->Close();
@@ -266,18 +281,17 @@ bool ExtrapToVertex(const mch::TrackMCH& track, VertexStruct& vertex, TrackAtVtx
 //_________________________________________________________________________________________________
 void CreateHistosAtVertex(std::vector<TH1*>& histos, const char* extension)
 {
-  /// create single muon and dimuon histograms at vertex
+  /// create single muon histograms at vertex
 
   histos.emplace_back(new TH1F(Form("pT%s", extension), "pT;p_{T} (GeV/c)", 300, 0., 30.));
   histos.emplace_back(new TH1F(Form("eta%s", extension), "eta;eta", 200, -4.5, -2.));
   histos.emplace_back(new TH1F(Form("phi%s", extension), "phi;phi", 360, 0., 360.));
-  histos.emplace_back(new TH1F(Form("rAbs%s", extension), "rAbs;R_{abs} (cm)", 1000, 0., 100.));
   histos.emplace_back(new TH1F(Form("dca%s", extension), "DCA;DCA (cm)", 500, 0., 500.));
   histos.emplace_back(new TH1F(Form("pDCA23%s", extension), "pDCA for #theta_{abs} < 3#circ;pDCA (GeV.cm/c)", 2500, 0., 5000.));
   histos.emplace_back(new TH1F(Form("pDCA310%s", extension), "pDCA for #theta_{abs} > 3#circ;pDCA (GeV.cm/c)", 2500, 0., 5000.));
+  histos.emplace_back(new TH1F(Form("rAbs%s", extension), "rAbs;R_{abs} (cm)", 1000, 0., 100.));
   histos.emplace_back(new TH1F(Form("nClusters%s", extension), "number of clusters per track;n_{clusters}", 20, 0., 20.));
   histos.emplace_back(new TH1F(Form("chi2%s", extension), "normalized #chi^{2};#chi^{2} / ndf", 500, 0., 50.));
-  histos.emplace_back(new TH1F(Form("matchChi2%s", extension), "normalized matching #chi^{2};#chi^{2} / ndf", 500, 0., 50.));
 
   for (auto h : histos) {
     h->SetDirectory(0);
@@ -285,7 +299,7 @@ void CreateHistosAtVertex(std::vector<TH1*>& histos, const char* extension)
 }
 
 //_________________________________________________________________________________________________
-void FillHistosAtVertex(const mch::TrackMCH& track, const TrackAtVtxStruct& trackAtVtx, double matchChi2, std::vector<TH1*>& histos)
+void FillHistosAtVertex(const mch::TrackMCH& track, const TrackAtVtxStruct& trackAtVtx, std::vector<TH1*>& histos)
 {
   /// fill single muon histograms at vertex
 
@@ -300,16 +314,15 @@ void FillHistosAtVertex(const mch::TrackMCH& track, const TrackAtVtxStruct& trac
   histos[0]->Fill(pT);
   histos[1]->Fill(eta);
   histos[2]->Fill(phi);
-  histos[3]->Fill(trackAtVtx.rAbs);
-  histos[4]->Fill(trackAtVtx.dca);
+  histos[3]->Fill(trackAtVtx.dca);
   if (thetaAbs < 3) {
-    histos[5]->Fill(pDCA);
+    histos[4]->Fill(pDCA);
   } else {
-    histos[6]->Fill(pDCA);
+    histos[5]->Fill(pDCA);
   }
+  histos[6]->Fill(trackAtVtx.rAbs);
   histos[7]->Fill(track.getNClusters());
   histos[8]->Fill(track.getChi2OverNDF());
-  histos[9]->Fill(matchChi2);
 }
 
 //_________________________________________________________________________________________________
@@ -418,4 +431,117 @@ void DrawComparisonsAtVertex(std::vector<TH1*> histos[4])
   lHist->AddEntry(histos[3][0], Form("%g matched missing", histos[3][0]->GetEntries()), "l");
   cHist->cd(1);
   lHist->Draw("same");
+}
+
+//_________________________________________________________________________________________________
+void CreateHistosAtMID(std::vector<TH1*>& histos)
+{
+  /// create single muon histograms at MID
+
+  histos.emplace_back(new TH1F("matchChi2_1all", "normalized matching #chi^{2};#chi^{2} / ndf", 500, 0., 50.));
+  histos.emplace_back(new TH1F("matchChi2_2all", "normalized matching #chi^{2};#chi^{2} / ndf", 500, 0., 50.));
+  histos.emplace_back(new TH1F("matchChi2_1both", "normalized matching #chi^{2};#chi^{2} / ndf", 500, 0., 50.));
+  histos.emplace_back(new TH1F("matchChi2_2both", "normalized matching #chi^{2};#chi^{2} / ndf", 500, 0., 50.));
+  histos.emplace_back(new TH1F("matchChi2_1add", "normalized matching #chi^{2};#chi^{2} / ndf", 500, 0., 50.));
+  histos.emplace_back(new TH1F("matchChi2_2add", "normalized matching #chi^{2};#chi^{2} / ndf", 500, 0., 50.));
+  histos.emplace_back(new TH2F("chi2VsmatchChi2_1", "MID #chi^{2} vs matching #chi^{2} - track 1;match #chi^{2} / ndf;MID #chi^{2} / ndf", 500, 0., 50., 500, 0., 50.));
+  histos.emplace_back(new TH2F("chi2VsmatchChi2_2", "MID #chi^{2} vs matching #chi^{2} - track 2;match #chi^{2} / ndf;MID #chi^{2} / ndf", 500, 0., 50., 500, 0., 50.));
+
+  for (auto h : histos) {
+    h->SetDirectory(0);
+  }
+}
+
+//_________________________________________________________________________________________________
+void FillHistosAtMID(double chi21, double matchChi21, double chi22, double matchChi22, std::vector<TH1*>& histos)
+{
+  /// fill single muon histograms at MID
+
+  if (matchChi21 >= 0) {
+    histos[0]->Fill(matchChi21);
+    histos[6]->Fill(matchChi21, chi21);
+  }
+
+  if (matchChi22 >= 0) {
+    histos[1]->Fill(matchChi22);
+    histos[7]->Fill(matchChi22, chi22);
+  }
+
+  if (matchChi21 >= 0 && matchChi22 >= 0) {
+    histos[2]->Fill(matchChi21);
+    histos[3]->Fill(matchChi22);
+  } else if (matchChi21 >= 0) {
+    histos[4]->Fill(matchChi21);
+  } else if (matchChi22 >= 0) {
+    histos[5]->Fill(matchChi22);
+  }
+}
+
+//_________________________________________________________________________________________________
+void DrawHistosAtMID(std::vector<TH1*>& histos)
+{
+  /// draw single muon histograms at MID
+
+  TCanvas* cHist = new TCanvas("histosMID", "histosMID", 10, 10, 900, 600);
+  cHist->Divide(3, 2);
+  cHist->cd(1);
+  gPad->SetLogy();
+  histos[0]->SetStats(false);
+  histos[0]->SetLineColor(4);
+  histos[0]->Draw();
+  histos[1]->SetLineColor(2);
+  histos[1]->Draw("same");
+  cHist->cd(4);
+  TH1F* hRat = static_cast<TH1F*>(histos[1]->Clone());
+  hRat->SetDirectory(0);
+  hRat->SetTitle("track2 / track1 ratio");
+  hRat->Divide(histos[0]);
+  hRat->SetStats(false);
+  hRat->SetLineColor(2);
+  hRat->Draw();
+  cHist->cd(2);
+  gPad->SetLogy();
+  histos[2]->SetStats(false);
+  histos[2]->SetLineColor(4);
+  histos[2]->Draw();
+  histos[3]->SetLineColor(877);
+  histos[3]->Draw("same");
+  histos[4]->SetLineColor(2);
+  histos[4]->Draw("same");
+  histos[5]->SetLineColor(3);
+  histos[5]->Draw("same");
+  cHist->cd(5);
+  hRat = static_cast<TH1F*>(histos[3]->Clone());
+  hRat->SetDirectory(0);
+  hRat->SetTitle("track2 / track1 ratio");
+  hRat->Divide(histos[2]);
+  hRat->SetStats(false);
+  hRat->SetLineColor(2);
+  hRat->Draw();
+  cHist->cd(3);
+  gPad->SetLogz();
+  histos[6]->SetStats(false);
+  histos[6]->Draw("colz");
+  cHist->cd(6);
+  gPad->SetLogz();
+  histos[7]->SetStats(false);
+  histos[7]->Draw("colz");
+
+  TLegend* lHist1 = new TLegend(0.5, 0.75, 0.9, 0.85);
+  lHist1->SetFillStyle(0);
+  lHist1->SetBorderSize(0);
+  lHist1->AddEntry(histos[0], Form("%g tracks in file 1", histos[0]->GetEntries()), "l");
+  lHist1->AddEntry(histos[1], Form("%g tracks in file 2", histos[1]->GetEntries()), "l");
+  cHist->cd(1);
+  lHist1->Draw("same");
+
+  TLegend* lHist2 = new TLegend(0.4, 0.65, 0.9, 0.85);
+  lHist2->SetFillStyle(0);
+  lHist2->SetBorderSize(0);
+  lHist2->AddEntry(histos[2], Form("%g tracks 1 match both", histos[2]->GetEntries()), "l");
+  lHist2->AddEntry(histos[3], Form("%g tracks 2 match both", histos[3]->GetEntries()), "l");
+  lHist2->AddEntry(histos[4], Form("%g tracks 1 match add", histos[4]->GetEntries()), "l");
+  lHist2->AddEntry(histos[5], Form("%g tracks 2 match add", histos[5]->GetEntries()), "l");
+  cHist->cd(2);
+  lHist2->Draw("same");
 }
