@@ -42,7 +42,7 @@ bool Prepare(int runNumber);
 bool SetMagField();
 void GetTriggers(AliESDEvent& esd, AliMUONVTriggerStore& trigStore);
 void ConvertTriggers(const AliMUONVTriggerTrackStore& trigTrackStore, const AliMUONVTriggerStore& trigStore,
-                     std::vector<char>& midTracks);
+                     std::vector<Track>& midTracks);
 
 //_________________________________________________________________________________________________
 void ConvertESDTrigger(TString esdFileName, TString outFileName = "MIDTracks.root")
@@ -63,14 +63,12 @@ void ConvertESDTrigger(TString esdFileName, TString outFileName = "MIDTracks.roo
   }
   esd->ReadFromTree(tree);
 
-  uint32_t midTracksSize(0);
-  std::vector<char> midTracks{};
+  std::vector<Track> midTracks{};
   std::vector<ROFRecord> midROFs(1);
 
   // prepare output file
   TFile* outFile = TFile::Open(outFileName, "RECREATE");
   TTree* outTree = new TTree("midreco", "midreco");
-  TBranch* outTracksSize = outTree->Branch("MIDTrackSize", &midTracksSize, "MIDTrackSize/i");
   TBranch* outTracks = outTree->Branch("MIDTrack", &midTracks);
   TBranch* outROFs = outTree->Branch("MIDTrackROF", &midROFs);
 
@@ -101,11 +99,11 @@ void ConvertESDTrigger(TString esdFileName, TString outFileName = "MIDTracks.roo
     AliMUONESDInterface::GetTracker()->EventReconstructTrigger(*triggerCircuit, *trigStore, *trigTrackStore);
 
     // convert in O2 format
+    midTracks.clear();
     ConvertTriggers(*trigTrackStore, *trigStore, midTracks);
     midROFs[0] = ROFRecord({0, static_cast<uint32_t>(iEvent)}, EventType::Standard, 0, trigTrackStore->GetSize());
 
     // fill the output file
-    midTracksSize = midTracks.size();
     outTree->Fill();
   }
 
@@ -243,34 +241,31 @@ void GetTriggers(AliESDEvent& esd, AliMUONVTriggerStore& trigStore)
 
 //_________________________________________________________________________________________________
 void ConvertTriggers(const AliMUONVTriggerTrackStore& trigTrackStore, const AliMUONVTriggerStore& trigStore,
-                     std::vector<char>& midTracks)
+                     std::vector<Track>& midTracks)
 {
   /// convert MUON trigger tracks in O2 format
-
-  midTracks.resize(trigTrackStore.GetSize() * sizeof(Track));
-  Track* midTrack = reinterpret_cast<Track*>(midTracks.data());
 
   AliMUONTriggerTrack* triggerTrack = nullptr;
   TIter next(trigTrackStore.CreateIterator());
   while ((triggerTrack = static_cast<AliMUONTriggerTrack*>(next()))) {
 
-    midTrack->setPosition(triggerTrack->GetX11(), triggerTrack->GetY11(), triggerTrack->GetZ11());
+    auto& midTrack = midTracks.emplace_back();
 
-    midTrack->setDirection(triggerTrack->GetSlopeX(), triggerTrack->GetSlopeY(), 1.);
+    midTrack.setPosition(triggerTrack->GetX11(), triggerTrack->GetY11(), triggerTrack->GetZ11());
+
+    midTrack.setDirection(triggerTrack->GetSlopeX(), triggerTrack->GetSlopeY(), 1.);
 
     const TMatrixD& trigCov = triggerTrack->GetCovariances();
-    midTrack->setCovarianceParameters(trigCov(0, 0), trigCov(1, 1), std::numeric_limits<float>::max(),
+    midTrack.setCovarianceParameters(trigCov(0, 0), trigCov(1, 1), std::numeric_limits<float>::max(),
                                      trigCov(2, 2), 0., trigCov(1, 2));
 
     AliMUONLocalTrigger* locTrg = trigStore.FindLocal(triggerTrack->GetLoTrgNum());
     if (locTrg->LoHpt() > 0) {
-      midTrack->setChi2(1.);
+      midTrack.setChi2(1.);
     } else if (locTrg->LoLpt() > 0) {
-      midTrack->setChi2(2.);
+      midTrack.setChi2(2.);
     } else {
-      midTrack->setChi2(3.);
+      midTrack.setChi2(3.);
     }
-
-    ++midTrack;
   }
 }

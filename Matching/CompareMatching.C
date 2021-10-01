@@ -72,11 +72,11 @@ void CompareMatching(float l3Current, float dipoleCurrent, std::string vtxFileNa
   TTreeReaderValue<std::vector<mch::ROFRecord>> mchROFs = {*mchReader, "trackrofs"};
   TTreeReaderValue<std::vector<mch::TrackMCH>> mchTracks = {*mchReader, "tracks"};
   auto [fMID1, midReader1] = LoadData(midFileName1, "midreco");
-  TTreeReaderValue<std::vector<char>> midTracks1 = {*midReader1, "MIDTrack"};
+  TTreeReaderValue<std::vector<mid::Track>> midTracks1 = {*midReader1, "MIDTrack"};
   auto [fMUON1, muonReader1] = LoadData(muonFileName1, "o2sim");
   TTreeReaderValue<std::vector<dataformats::TrackMCHMID>> muonTracks1 = {*muonReader1, "tracks"};
   auto [fMID2, midReader2] = LoadData(midFileName2, "midreco");
-  TTreeReaderValue<std::vector<char>> midTracks2 = {*midReader2, "MIDTrack"};
+  TTreeReaderValue<std::vector<mid::Track>> midTracks2 = {*midReader2, "MIDTrack"};
   auto [fMUON2, muonReader2] = LoadData(muonFileName2, "o2sim");
   TTreeReaderValue<std::vector<dataformats::TrackMCHMID>> muonTracks2 = {*muonReader2, "tracks"};
 
@@ -132,14 +132,14 @@ void CompareMatching(float l3Current, float dipoleCurrent, std::string vtxFileNa
         FillHistosAtVertex(mchTrack, mchTrackAtVtx, comparisonsAtVertex[0]);
         if (muon1) {
           FillHistosAtVertex(mchTrack, mchTrackAtVtx, histosAtVertex[0]);
-          auto midTrack1 = reinterpret_cast<mid::Track*>(midTracks1->data()) + muon1->getMIDRef().getIndex();
-          chi21 = midTrack1->getNDF() ? midTrack1->getChi2OverNDF() : 0.;
+          const auto& midTrack1 = (*midTracks1)[muon1->getMIDRef().getIndex()];
+          chi21 = (midTrack1.getNDF() > 0) ? midTrack1.getChi2OverNDF() : 0.;
           matchChi21 = muon1->getMatchChi2OverNDF();
         }
         if (muon2) {
           FillHistosAtVertex(mchTrack, mchTrackAtVtx, histosAtVertex[1]);
-          auto midTrack2 = reinterpret_cast<mid::Track*>(midTracks2->data()) + muon2->getMIDRef().getIndex();
-          chi22 = midTrack2->getNDF() ? midTrack2->getChi2OverNDF() : 0.;
+          const auto& midTrack2 = (*midTracks2)[muon2->getMIDRef().getIndex()];
+          chi22 = (midTrack2.getNDF() > 0) ? midTrack2.getChi2OverNDF() : 0.;
           matchChi22 = muon2->getMatchChi2OverNDF();
         }
         if (muon1 && muon2) {

@@ -61,7 +61,7 @@ void ConvertTracks(const AliMUONVTrackStore& trackStore, std::map<uint32_t, AliM
                    std::vector<mch::TrackMCH>& mchTracks, std::vector<mch::ClusterStruct>& mchClusters,
                    std::map<uint32_t, int>& mchTracksIdx);
 void ConvertTriggers(const AliMUONVTriggerTrackStore& trigTrackStore, const AliMUONVTriggerStore& trigStore,
-                     std::vector<char>& midTracks, std::map<uint32_t, int>& midTracksIdx);
+                     std::vector<mid::Track>& midTracks, std::map<uint32_t, int>& midTracksIdx);
 void ConvertMatched(const AliMUONVTrackStore& trackStore, const AliMUONVTriggerStore& trigStore,
                     const std::map<uint32_t, int>& mchTracksIdx, const std::map<uint32_t, int>& midTracksIdx,
                     const InteractionRecord& midIR, std::vector<dataformats::TrackMCHMID>& muonTracks);
@@ -96,9 +96,7 @@ void ConvertESD(TString esdFileName, int nROFsPerTF)
   outTreeMCH->Branch("trackclusters", &mchClusters);
   TFile* outFileMID = TFile::Open("ESDMIDTracks.root", "RECREATE");
   TTree* outTreeMID = new TTree("midreco", "midreco");
-  uint32_t midTracksSize(0);
-  outTreeMID->Branch("MIDTrackSize", &midTracksSize, "MIDTrackSize/i");
-  std::vector<char> midTracks{};
+  std::vector<mid::Track> midTracks{};
   outTreeMID->Branch("MIDTrack", &midTracks);
   std::vector<mid::ROFRecord> midROFs{};
   outTreeMID->Branch("MIDTrackROF", &midROFs);
@@ -145,9 +143,8 @@ void ConvertESD(TString esdFileName, int nROFsPerTF)
     AliMUONESDInterface::GetTracker()->EventReconstructTrigger(*triggerCircuit, *trigStore, *trigTrackStore);
 
     // convert them in O2 format
-    size_t firstMIDIdx = midTracks.size() / sizeof(mid::Track);
+    size_t firstMIDIdx = midTracks.size();
     ConvertTriggers(*trigTrackStore, *trigStore, midTracks, midTracksIdx);
-    midTracksSize = midTracks.size();
     midROFs.emplace_back(InteractionRecord{0, static_cast<uint32_t>(iEvent)}, mid::EventType::Standard, firstMIDIdx,
                          static_cast<size_t>(trigTrackStore->GetSize()));
 
@@ -382,39 +379,37 @@ void ConvertTracks(const AliMUONVTrackStore& trackStore, std::map<uint32_t, AliM
 
 //_________________________________________________________________________________________________
 void ConvertTriggers(const AliMUONVTriggerTrackStore& trigTrackStore, const AliMUONVTriggerStore& trigStore,
-                     std::vector<char>& midTracks, std::map<uint32_t, int>& midTracksIdx)
+                     std::vector<mid::Track>& midTracks, std::map<uint32_t, int>& midTracksIdx)
 {
   /// convert MUON trigger tracks in O2 format
 
-  int currentNtracks = midTracks.size() / sizeof(mid::Track);
-  midTracks.resize(midTracks.size() + trigTrackStore.GetSize() * sizeof(mid::Track));
-  mid::Track* midTrack = reinterpret_cast<mid::Track*>(midTracks.data()) + currentNtracks;
   midTracksIdx.clear();
-  int midTrackIdx = currentNtracks - 1;
+  int midTrackIdx = midTracks.size() - 1;
 
   AliMUONTriggerTrack* triggerTrack = nullptr;
   TIter next(trigTrackStore.CreateIterator());
   while ((triggerTrack = static_cast<AliMUONTriggerTrack*>(next()))) {
 
-    midTrack->setPosition(triggerTrack->GetX11(), triggerTrack->GetY11(), triggerTrack->GetZ11());
+    auto& midTrack = midTracks.emplace_back();
 
-    midTrack->setDirection(triggerTrack->GetSlopeX(), triggerTrack->GetSlopeY(), 1.);
+    midTrack.setPosition(triggerTrack->GetX11(), triggerTrack->GetY11(), triggerTrack->GetZ11());
+
+    midTrack.setDirection(triggerTrack->GetSlopeX(), triggerTrack->GetSlopeY(), 1.);
 
     const TMatrixD& trigCov = triggerTrack->GetCovariances();
-    midTrack->setCovarianceParameters(trigCov(0, 0), trigCov(1, 1), std::numeric_limits<float>::max(),
+    midTrack.setCovarianceParameters(trigCov(0, 0), trigCov(1, 1), std::numeric_limits<float>::max(),
                                      trigCov(2, 2), 0., trigCov(1, 2));
 
     AliMUONLocalTrigger* locTrg = trigStore.FindLocal(triggerTrack->GetLoTrgNum());
     if (locTrg->LoHpt() > 0) {
-      midTrack->setChi2(1.);
+      midTrack.setChi2(1.);
     } else if (locTrg->LoLpt() > 0) {
-      midTrack->setChi2(2.);
+      midTrack.setChi2(2.);
     } else {
-      midTrack->setChi2(3.);
+      midTrack.setChi2(3.);
     }
 
     midTracksIdx[triggerTrack->GetUniqueID()] = ++midTrackIdx;
-    ++midTrack;
   }
 }
 
