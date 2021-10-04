@@ -44,7 +44,7 @@
 #include "DataFormatsMCH/TrackMCH.h"
 #include "DataFormatsMID/ROFRecord.h"
 #include "DataFormatsMID/Track.h"
-#include "MCHBase/ClusterBlock.h"
+#include "DataFormatsMCH/ClusterBlock.h"
 
 using namespace std;
 using namespace o2;

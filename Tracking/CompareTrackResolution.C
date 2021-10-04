@@ -17,7 +17,7 @@
 #include <Math/Vector4D.h>
 
 #include "DataFormatsMCH/TrackMCH.h"
-#include "MCHBase/ClusterBlock.h"
+#include "DataFormatsMCH/ClusterBlock.h"
 #include "MCHBase/TrackBlock.h"
 #include "MCHTracking/TrackParam.h"
 #include "MCHTracking/Cluster.h"
@@ -135,7 +135,6 @@ void CompareTrackResolution(float l3Current, float dipoleCurrent,
                             bool selectTracks = false)
 {
   /// Compare the cluster-track residuals between the tracks stored in the 2 binary files
-  /// O2 tracking need to be loaded before: gSystem->Load("libO2MCHTracking")
   /// file version 4: param at vertex + dca + rAbs + chi2 + param at 1st cluster + clusters (v2)
   /// file version 5: nTracksAtVtx + nMCHTracks + nClusters + list of Tracks at vertex (param at vertex + dca + rAbs + mchTrackIdx) + list of MCH tracks (v1) + list of clusters (v2)
   /// file version 6: nTracksAtVtx + nMCHTracks + nClusters + list of Tracks at vertex (param at vertex + dca + rAbs + mchTrackIdx) + list of MCH tracks (v2) + list of clusters (v2)

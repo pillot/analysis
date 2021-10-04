@@ -17,7 +17,7 @@
 #include "MCHGeometryTransformer/Transformations.h"
 #include "MathUtils/Cartesian.h"
 
-#include "MCHBase/ClusterBlock.h"
+#include "DataFormatsMCH/ClusterBlock.h"
 #include "DataFormatsMCH/Digit.h"
 
 using namespace o2::mch;

@@ -27,7 +27,7 @@
 #include "Field/MagneticField.h"
 
 #include "DataFormatsMCH/TrackMCH.h"
-#include "MCHBase/ClusterBlock.h"
+#include "DataFormatsMCH/ClusterBlock.h"
 #include "MCHBase/TrackBlock.h"
 #include "MCHTracking/TrackParam.h"
 #include "MCHTracking/Cluster.h"
@@ -428,7 +428,6 @@ void CompareTracks(int runNumber, string inFileName1, int versionFile1, string i
                    string vtxFileName = "", double precision = 1.e-4, bool applyTrackSelection = false, bool printAll = false)
 {
   /// Compare the tracks stored in the 2 binary files
-  /// O2 tracking need to be loaded before: gSystem->Load("libO2MCHTracking")
   /// file version 1: param at 1st cluster + clusters
   /// file version 2: param at 1st cluster + chi2 + clusters
   /// file version 3: param at vertex + dca + rAbs + chi2 + param at 1st cluster + clusters

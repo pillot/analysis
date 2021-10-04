@@ -46,7 +46,7 @@
 #include "Field/MagneticField.h"
 
 #include "DataFormatsMCH/TrackMCH.h"
-#include "MCHBase/ClusterBlock.h"
+#include "DataFormatsMCH/ClusterBlock.h"
 
 using namespace std;
 using namespace o2::mch;

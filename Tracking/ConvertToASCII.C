@@ -3,7 +3,7 @@
 #include <vector>
 
 #include "DataFormatsMCH/TrackMCH.h"
-#include "MCHBase/ClusterBlock.h"
+#include "DataFormatsMCH/ClusterBlock.h"
 #include "MCHBase/TrackBlock.h"
 
 #include "/Users/PILLOT/Work/Alice/Macros/Tracking/TrackMCHv1.h"

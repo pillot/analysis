@@ -3,7 +3,7 @@
 #include <vector>
 
 #include "DataFormatsMCH/Digit.h"
-#include "MCHBase/ClusterBlock.h"
+#include "DataFormatsMCH/ClusterBlock.h"
 
 using namespace std;
 using namespace o2::mch;
