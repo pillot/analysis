@@ -12,10 +12,21 @@
 #include "AliMUONVDigit.h"
 #include "AliMUONVDigitStore.h"
 
-#include "DataFormatsMCH/Digit.h"
-
-using namespace o2::mch;
 using namespace std;
+
+struct DigitD0 {
+  int32_t tfTime{0};      /// time since the beginning of the time frame, in bunch crossing units
+  uint16_t nofSamples{0}; /// number of samples in the signal + saturated bit
+  int detID{0};           /// ID of the Detection Element to which the digit corresponds to
+  int padID{0};           /// PadIndex to which the digit corresponds to
+  uint32_t adc{0};        /// Amplitude of signal
+
+  void setNofSamples(uint16_t n) { nofSamples = (nofSamples & 0x8000) + (n & 0x7FFF); }
+  uint16_t getNofSamples() const { return (nofSamples & 0x7FFF); }
+
+  void setSaturated(bool sat) { nofSamples = sat ? nofSamples | 0x8000 : nofSamples & 0x7FFF; }
+  bool isSaturated() const { return ((nofSamples & 0x8000) > 0); }
+};
 
 //------------------------------------------------------------------
 void ConvertAliRootDigitsV2(TString inFileName, TString outFileName = "digits.v3.in")
@@ -49,8 +60,8 @@ void ConvertAliRootDigitsV2(TString inFileName, TString outFileName = "digits.v3
 
   // loop over events
   Long64_t nEvents = treeD->GetEntries();
-  std::vector<Digit> digits;
-  int sizeofDigit = sizeof(Digit);
+  std::vector<DigitD0> digits;
+  int sizeofDigit = sizeof(DigitD0);
   for (Long64_t iEv = 0; iEv < nEvents; ++iEv) {
     
     treeD->GetEntry(iEv);
@@ -67,7 +78,8 @@ void ConvertAliRootDigitsV2(TString inFileName, TString outFileName = "digits.v3
       float charge = digit->Charge();
       uint32_t adc(0);
       std::memcpy(&adc, &charge, sizeof(charge));
-      digits.push_back({digit->DetElemId(), static_cast<int>(digit->GetUniqueID()), adc, 0, 0, digit->IsSaturated()});
+      digits.push_back({0, 0, digit->DetElemId(), static_cast<int>(digit->GetUniqueID()), adc});
+      digits.back().setSaturated(digit->IsSaturated());
     }
 
     // write the number of digits
