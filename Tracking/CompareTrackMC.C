@@ -25,7 +25,7 @@
 #include "DetectorsCommonDataFormats/NameConf.h"
 #include "DataFormatsMCH/ROFRecord.h"
 #include "DataFormatsMCH/TrackMCH.h"
-#include "DataFormatsMCH/ClusterBlock.h"
+#include "DataFormatsMCH/Cluster.h"
 #include "MCHBase/TrackBlock.h"
 #include "MCHTracking/TrackParam.h"
 #include "MCHTracking/TrackExtrap.h"
@@ -46,7 +46,7 @@ struct TrackAtVtxStruct {
 };
 
 constexpr double pi() { return 3.14159265358979323846; }
-void makeMCClusters(gsl::span<const TrackReference> mcTrackRefs, std::vector<ClusterStruct>& mcClusters);
+void makeMCClusters(gsl::span<const TrackReference> mcTrackRefs, std::vector<Cluster>& mcClusters);
 bool extrapToVertex(const TrackMCH& track, double x, double y, double z, TrackAtVtxStruct& trackAtVtx);
 void CreateHistos(std::vector<TH1*>& histos, const char* extension);
 void CreateHistosExtra(std::vector<TH1*>& histos);
@@ -57,7 +57,7 @@ void CreateResiduals(std::vector<TH1*>& histos);
 void FillResiduals(const TrackAtVtxStruct& trackAtVtx, const MCTrack& mcTrack, std::vector<TH1*>& histos);
 void DrawResiduals(std::vector<TH1*>& histos);
 void CreateClResiduals(std::vector<TH1*>& histos);
-void FillClResiduals(const gsl::span<const ClusterStruct> clusters, std::vector<ClusterStruct>& mcClusters,
+void FillClResiduals(const gsl::span<const Cluster> clusters, std::vector<Cluster>& mcClusters,
                      std::vector<TH1*>& histos);
 void DrawClResiduals(std::vector<TH1*>& histos);
 
@@ -96,7 +96,7 @@ void CompareTrackMC()
   TTreeReader dataReader;
   TTreeReaderValue<std::vector<ROFRecord>> rofs = {dataReader, "trackrofs"};
   TTreeReaderValue<std::vector<TrackMCH>> tracks = {dataReader, "tracks"};
-  TTreeReaderValue<std::vector<ClusterStruct>> clusters = {dataReader, "trackclusters"};
+  TTreeReaderValue<std::vector<Cluster>> clusters = {dataReader, "trackclusters"};
   TTreeReaderValue<MCTruthContainer<MCCompLabel>> labels = {dataReader, "tracklabels"};
   dataReader.SetTree(trackTree);
 
@@ -108,7 +108,7 @@ void CompareTrackMC()
 
   int nFakes(0);
   int nMultipleLabels(0);
-  std::vector<ClusterStruct> mcClusters{};
+  std::vector<Cluster> mcClusters{};
   TrackAtVtxStruct trackAtVtx{};
 
   while (dataReader.Next()) {
@@ -117,7 +117,7 @@ void CompareTrackMC()
 
         // get the reconstructed track and associated clusters and labels
         const auto& track = (*tracks)[iTrack];
-        const gsl::span<const ClusterStruct> trackClusters(&(*clusters)[track.getFirstClusterIdx()], track.getNClusters());
+        const gsl::span<const Cluster> trackClusters(&(*clusters)[track.getFirstClusterIdx()], track.getNClusters());
         const auto trackLabels = labels->getLabels(iTrack);
 
         // skip fake tracks
@@ -162,7 +162,7 @@ void CompareTrackMC()
 }
 
 //_________________________________________________________________________________________________
-void makeMCClusters(gsl::span<const TrackReference> mcTrackRefs, std::vector<ClusterStruct>& mcClusters)
+void makeMCClusters(gsl::span<const TrackReference> mcTrackRefs, std::vector<Cluster>& mcClusters)
 {
   /// produce the MC clusters by taking the average position of the trackRefs at the entry and exit of each DE
   mcClusters.clear();
@@ -182,7 +182,7 @@ void makeMCClusters(gsl::span<const TrackReference> mcTrackRefs, std::vector<Clu
     } else {
       deId = trackRef.getUserId();
       mcClusters.push_back({trackRef.X(), trackRef.Y(), trackRef.Z(), 0.f, 0.f,
-                            ClusterStruct::buildUniqueId(deId / 100 - 1, deId, clusterIdx++), 0u, 0u});
+                            Cluster::buildUniqueId(deId / 100 - 1, deId, clusterIdx++), 0u, 0u});
     }
   }
 }
@@ -365,7 +365,7 @@ void CreateClResiduals(std::vector<TH1*>& histos)
 }
 
 //_________________________________________________________________________________________________
-void FillClResiduals(const gsl::span<const ClusterStruct> clusters, std::vector<ClusterStruct>& mcClusters,
+void FillClResiduals(const gsl::span<const Cluster> clusters, std::vector<Cluster>& mcClusters,
                      std::vector<TH1*>& histos)
 {
   /// fill residuals between simulated and reconstructed clusters

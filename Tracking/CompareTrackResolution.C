@@ -17,10 +17,9 @@
 #include <Math/Vector4D.h>
 
 #include "DataFormatsMCH/TrackMCH.h"
-#include "DataFormatsMCH/ClusterBlock.h"
+#include "DataFormatsMCH/Cluster.h"
 #include "MCHBase/TrackBlock.h"
 #include "MCHTracking/TrackParam.h"
-#include "MCHTracking/Cluster.h"
 #include "MCHTracking/Track.h"
 #include "MCHTracking/TrackFitter.h"
 #include "MCHTracking/TrackExtrap.h"
@@ -116,7 +115,7 @@ bool ReadTrack(ifstream& inFile, TrackStruct& track);
 template <class T>
 void ReadNextEventV5(ifstream& inFile, int& event, bool selectTracks, std::vector<TrackStruct>& tracks);
 template <typename T>
-bool FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const T& mchTrack, std::vector<ClusterStruct>& clusters);
+bool FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const T& mchTrack, std::vector<Cluster>& clusters);
 bool IsSelected(TrackStruct& track);
 void CompareTracks(std::vector<TrackStruct>& tracks1, std::vector<TrackStruct>& tracks2, std::vector<TH1*>& histos);
 void CreateResiduals(std::vector<TH1*>& histos, const char* extension, double range);
@@ -284,12 +283,10 @@ bool ReadTrack(ifstream& inFile, TrackStruct& track)
 
   int nClusters(0);
   inFile.read(reinterpret_cast<char*>(&nClusters), sizeof(int));
-  track.clusters.reserve(nClusters);
-  ClusterStruct clusterIn{};
-  for (Int_t iCl = 0; iCl < nClusters; ++iCl) {
-    inFile.read(reinterpret_cast<char*>(&clusterIn), sizeof(ClusterStruct));
-    track.clusters.emplace_back(clusterIn);
-    track.track.createParamAtCluster(track.clusters.back());
+  track.clusters.resize(nClusters);
+  inFile.read(reinterpret_cast<char*>(track.clusters.data()), nClusters * sizeof(Cluster));
+  for (const auto& cluster : track.clusters) {
+    track.track.createParamAtCluster(cluster);
   }
 
   try {
@@ -325,8 +322,8 @@ void ReadNextEventV5(ifstream& inFile, int& event, bool selectTracks, std::vecto
   inFile.read(reinterpret_cast<char*>(tracksAtVtx.data()), nTracksAtVtx * sizeof(TrackAtVtxStruct));
   std::vector<T> mchTracks(nMCHTracks);
   inFile.read(reinterpret_cast<char*>(mchTracks.data()), nMCHTracks * sizeof(T));
-  std::vector<ClusterStruct> clusters(nClusters);
-  inFile.read(reinterpret_cast<char*>(clusters.data()), nClusters * sizeof(ClusterStruct));
+  std::vector<Cluster> clusters(nClusters);
+  inFile.read(reinterpret_cast<char*>(clusters.data()), nClusters * sizeof(Cluster));
 
   if (nMCHTracks == 0) {
     return; // need MCH tracks to study the resolution
@@ -364,7 +361,7 @@ void ReadNextEventV5(ifstream& inFile, int& event, bool selectTracks, std::vecto
 
 //_________________________________________________________________________________________________
 template <typename T>
-bool FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const T& mchTrack, std::vector<ClusterStruct>& clusters)
+bool FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const T& mchTrack, std::vector<Cluster>& clusters)
 {
   /// fill the internal track structure from the provided informations
   /// return false if the refitting fails
@@ -388,10 +385,10 @@ bool FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const T& 
   track.param.pz = mchTrack.getPz();
   track.param.sign = mchTrack.getSign();
 
-  track.clusters.reserve(mchTrack.getNClusters());
-  for (int iCl = mchTrack.getFirstClusterIdx(); iCl <= mchTrack.getLastClusterIdx(); ++iCl) {
-    track.clusters.emplace_back(clusters[iCl]);
-    track.track.createParamAtCluster(track.clusters.back());
+  track.clusters.insert(track.clusters.begin(), clusters.begin() + mchTrack.getFirstClusterIdx(),
+                        clusters.begin() + mchTrack.getLastClusterIdx() + 1);
+  for (const auto& cluster : track.clusters) {
+    track.track.createParamAtCluster(cluster);
   }
 
   try {

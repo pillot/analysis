@@ -3,14 +3,14 @@
 #include <vector>
 
 #include "DataFormatsMCH/Digit.h"
-#include "DataFormatsMCH/ClusterBlock.h"
+#include "DataFormatsMCH/Cluster.h"
 
 using namespace std;
 using namespace o2::mch;
 
 //_________________________________________________________________________________________________
-void ReadNextEvent(ifstream& inFile, std::vector<ClusterStruct>& clusters);
-void WriteClusters(std::vector<ClusterStruct>& clusters, ofstream& outFile);
+void ReadNextEvent(ifstream& inFile, std::vector<Cluster>& clusters);
+void WriteClusters(std::vector<Cluster>& clusters, ofstream& outFile);
 
 //_________________________________________________________________________________________________
 void ConvertToASCII(string inFileName, string outFileName)
@@ -28,7 +28,7 @@ void ConvertToASCII(string inFileName, string outFileName)
     return;
   }
 
-  std::vector<ClusterStruct> clusters{};
+  std::vector<Cluster> clusters{};
   while (inFile.peek() != EOF) {
     ReadNextEvent(inFile, clusters);
     WriteClusters(clusters, outFile);
@@ -39,7 +39,7 @@ void ConvertToASCII(string inFileName, string outFileName)
 }
 
 //_________________________________________________________________________________________________
-void ReadNextEvent(ifstream& inFile, std::vector<ClusterStruct>& clusters)
+void ReadNextEvent(ifstream& inFile, std::vector<Cluster>& clusters)
 {
   /// read the next event in the input file
 
@@ -64,7 +64,7 @@ void ReadNextEvent(ifstream& inFile, std::vector<ClusterStruct>& clusters)
   // fill clusters in O2 format, if any
   if (nClusters > 0) {
     clusters.resize(nClusters);
-    inFile.read(reinterpret_cast<char*>(&clusters[0]), nClusters * sizeof(ClusterStruct));
+    inFile.read(reinterpret_cast<char*>(&clusters[0]), nClusters * sizeof(Cluster));
     if (inFile.fail()) {
       throw std::length_error("invalid input");
     }
@@ -80,7 +80,7 @@ void ReadNextEvent(ifstream& inFile, std::vector<ClusterStruct>& clusters)
 }
 
 //_________________________________________________________________________________________________
-void WriteClusters(std::vector<ClusterStruct>& clusters, ofstream& outFile)
+void WriteClusters(std::vector<Cluster>& clusters, ofstream& outFile)
 {
   /// write the clusters in the output file
   outFile << clusters.size() << " clusters:" << endl;

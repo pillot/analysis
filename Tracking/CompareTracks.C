@@ -27,10 +27,9 @@
 #include "Field/MagneticField.h"
 
 #include "DataFormatsMCH/TrackMCH.h"
-#include "DataFormatsMCH/ClusterBlock.h"
+#include "DataFormatsMCH/Cluster.h"
 #include "MCHBase/TrackBlock.h"
 #include "MCHTracking/TrackParam.h"
-#include "MCHTracking/Cluster.h"
 #include "MCHTracking/Track.h"
 #include "MCHTracking/TrackFitter.h"
 #include "MCHTracking/TrackExtrap.h"
@@ -147,7 +146,7 @@ struct TrackStruct {
     for (const auto& cluster1 : clusters) {
       bool found(false);
       for (const auto& cluster2 : track.clusters) {
-        if (cluster1.getUniqueId() == cluster2.getUniqueId()) {
+        if (cluster1.uid == cluster2.uid) {
           found = true;
           break;
         }
@@ -170,7 +169,7 @@ struct TrackStruct {
     for (const auto& cluster2 : track.clusters) {
       bool found(false);
       for (const auto& cluster1 : clusters) {
-        if (cluster1.getUniqueId() == cluster2.getUniqueId()) {
+        if (cluster1.uid == cluster2.uid) {
           found = true;
           break;
         }
@@ -198,7 +197,7 @@ struct TrackStruct {
     int nClustersInCommon(0);
     for (const auto& cluster1 : clusters) {
       for (const auto& cluster2 : track.clusters) {
-        if (cluster1.getUniqueId() == cluster2.getUniqueId()) {
+        if (cluster1.uid == cluster2.uid) {
           ++nClustersInCommon;
           break;
         }
@@ -219,7 +218,7 @@ struct TrackStruct {
         if (cluster2.getChamberId() < 4) {
           continue;
         }
-        if (cluster1.getUniqueId() == cluster2.getUniqueId()) {
+        if (cluster1.uid == cluster2.uid) {
           found = true;
           break;
         }
@@ -393,7 +392,7 @@ void ReadTrack(ifstream& inFile, TrackStruct& track, int version);
 template <class T>
 void ReadNextEventV5(ifstream& inFile, int& event, std::list<TrackStruct>& tracks);
 template <typename T>
-void FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const T* mchTrack, std::vector<ClusterStruct>& clusters);
+void FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const T* mchTrack, std::vector<Cluster>& clusters);
 void UpdateTrack(TrackStruct& track, const Track& tmpTrack);
 void RefitTracks(std::list<TrackStruct>& tracks);
 void ImproveTracks(std::list<TrackStruct>& tracks);
@@ -645,15 +644,13 @@ void ReadTrack(ifstream& inFile, TrackStruct& track, int version)
 
   int nClusters(0);
   inFile.read(reinterpret_cast<char*>(&nClusters), sizeof(int));
-  track.clusters.reserve(nClusters);
-  ClusterStruct clusterIn{};
+  track.clusters.resize(nClusters);
   for (Int_t iCl = 0; iCl < nClusters; ++iCl) {
     if (version < 4) {
-      inFile.read(reinterpret_cast<char*>(&clusterIn), sizeof(ClusterStructV1));
+      inFile.read(reinterpret_cast<char*>(&track.clusters[iCl]), sizeof(ClusterStructV1));
     } else {
-      inFile.read(reinterpret_cast<char*>(&clusterIn), sizeof(ClusterStruct));
+      inFile.read(reinterpret_cast<char*>(&track.clusters[iCl]), sizeof(Cluster));
     }
-    track.clusters.emplace_back(clusterIn);
   }
 }
 
@@ -685,8 +682,8 @@ void ReadNextEventV5(ifstream& inFile, int& event, std::list<TrackStruct>& track
   inFile.read(reinterpret_cast<char*>(tracksAtVtx.data()), nTracksAtVtx * sizeof(TrackAtVtxStruct));
   std::vector<T> mchTracks(nMCHTracks);
   inFile.read(reinterpret_cast<char*>(mchTracks.data()), nMCHTracks * sizeof(T));
-  std::vector<ClusterStruct> clusters(nClusters);
-  inFile.read(reinterpret_cast<char*>(clusters.data()), nClusters * sizeof(ClusterStruct));
+  std::vector<Cluster> clusters(nClusters);
+  inFile.read(reinterpret_cast<char*>(clusters.data()), nClusters * sizeof(Cluster));
 
   if (nTracksAtVtx > 0) {
 
@@ -709,7 +706,7 @@ void ReadNextEventV5(ifstream& inFile, int& event, std::list<TrackStruct>& track
 
 //_________________________________________________________________________________________________
 template <typename T>
-void FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const T* mchTrack, std::vector<ClusterStruct>& clusters)
+void FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const T* mchTrack, std::vector<Cluster>& clusters)
 {
   /// fill the internal track structure from the provided informations
 
@@ -751,10 +748,8 @@ void FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const T* 
       track.covAtMID = paramAtMID.getCovariances();
     }
 
-    track.clusters.reserve(mchTrack->getNClusters());
-    for (int iCl = mchTrack->getFirstClusterIdx(); iCl <= mchTrack->getLastClusterIdx(); ++iCl) {
-      track.clusters.emplace_back(clusters[iCl]);
-    }
+    track.clusters.insert(track.clusters.begin(), clusters.begin() + mchTrack->getFirstClusterIdx(),
+                          clusters.begin() + mchTrack->getLastClusterIdx() + 1);
   }
 }
 
@@ -1001,7 +996,7 @@ void RemoveConnectedTracks(std::list<TrackStruct>& tracks, int stMin, int stMax,
       } else if (ch < chMin) {
         break;
       }
-      ClIds[nPlane * iTrack + 2 * (ch - chMin) + itCl->getDEId() % 2] = itCl->getUniqueId();
+      ClIds[nPlane * iTrack + 2 * (ch - chMin) + itCl->getDEId() % 2] = itCl->uid;
     }
   }
 

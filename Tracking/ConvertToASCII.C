@@ -3,7 +3,7 @@
 #include <vector>
 
 #include "DataFormatsMCH/TrackMCH.h"
-#include "DataFormatsMCH/ClusterBlock.h"
+#include "DataFormatsMCH/Cluster.h"
 #include "MCHBase/TrackBlock.h"
 
 #include "/Users/PILLOT/Work/Alice/Macros/Tracking/TrackMCHv1.h"
@@ -36,7 +36,7 @@ struct TrackStruct {
   double rAbs = 0.;
   TrackParamStruct paramAt1stCluster{};
   double chi2 = 0.;
-  std::vector<ClusterStruct> clusters{};
+  std::vector<Cluster> clusters{};
 };
 
 //_________________________________________________________________________________________________
@@ -45,7 +45,7 @@ void ReadTrack(ifstream& inFile, TrackStruct& track, int version);
 template <class T>
 int ReadNextEventV5(ifstream& inFile, std::vector<TrackStruct>& tracks, int& size);
 template <typename T>
-void FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const T* mchTrack, std::vector<ClusterStruct>& clusters);
+void FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const T* mchTrack, std::vector<Cluster>& clusters);
 void WriteTracks(std::vector<TrackStruct>& tracks, ofstream& outFile);
 
 //_________________________________________________________________________________________________
@@ -145,7 +145,7 @@ void ReadTrack(ifstream& inFile, TrackStruct& track, int version)
     if (version < 4) {
       inFile.read(reinterpret_cast<char*>(&(track.clusters[iCl])), sizeof(ClusterStructV1));
     } else {
-      inFile.read(reinterpret_cast<char*>(&(track.clusters[iCl])), sizeof(ClusterStruct));
+      inFile.read(reinterpret_cast<char*>(&(track.clusters[iCl])), sizeof(Cluster));
     }
   }
 }
@@ -180,8 +180,8 @@ int ReadNextEventV5(ifstream& inFile, std::vector<TrackStruct>& tracks, int& siz
   inFile.read(reinterpret_cast<char*>(tracksAtVtx.data()), nTracksAtVtx * sizeof(TrackAtVtxStruct));
   std::vector<T> mchTracks(nMCHTracks);
   inFile.read(reinterpret_cast<char*>(mchTracks.data()), nMCHTracks * sizeof(T));
-  std::vector<ClusterStruct> clusters(nClusters);
-  inFile.read(reinterpret_cast<char*>(clusters.data()), nClusters * sizeof(ClusterStruct));
+  std::vector<Cluster> clusters(nClusters);
+  inFile.read(reinterpret_cast<char*>(clusters.data()), nClusters * sizeof(Cluster));
 
   if (nTracksAtVtx > 0) {
 
@@ -202,13 +202,13 @@ int ReadNextEventV5(ifstream& inFile, std::vector<TrackStruct>& tracks, int& siz
     }
   }
 
-  size = 3 * sizeof(int) + nTracksAtVtx * sizeof(TrackAtVtxStruct) + nMCHTracks * sizeof(T) + nClusters * sizeof(ClusterStruct);
+  size = 3 * sizeof(int) + nTracksAtVtx * sizeof(TrackAtVtxStruct) + nMCHTracks * sizeof(T) + nClusters * sizeof(Cluster);
   return event;
 }
 
 //_________________________________________________________________________________________________
 template <typename T>
-void FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const T* mchTrack, std::vector<ClusterStruct>& clusters)
+void FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const T* mchTrack, std::vector<Cluster>& clusters)
 {
   /// fill the internal track structure from the provided informations
 

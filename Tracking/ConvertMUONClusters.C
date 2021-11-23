@@ -46,7 +46,7 @@
 #include "Field/MagneticField.h"
 
 #include "DataFormatsMCH/TrackMCH.h"
-#include "DataFormatsMCH/ClusterBlock.h"
+#include "DataFormatsMCH/Cluster.h"
 
 using namespace std;
 using namespace o2::mch;
@@ -57,9 +57,9 @@ bool SetMagField();
 AliMUONGeometryTransformer* LoadGeometry(int runNumber);
 AliMUONVTrackReconstructor* CreateTrackReconstructor();
 void ChangeMonoCathodClusterRes(AliMUONVClusterStore& clusterStore);
-void MUONToO2(AliMUONVCluster& cluster, ClusterStruct& o2Cluster);
+void MUONToO2(AliMUONVCluster& cluster, Cluster& o2Cluster);
 void WriteClusters(AliMUONVClusterStore& clusterStore, ofstream& outFile);
-void MUONToO2(AliMUONTrack& track, TrackMCH& o2Track, std::vector<ClusterStruct>& o2Clusters);
+void MUONToO2(AliMUONTrack& track, TrackMCH& o2Track, std::vector<Cluster>& o2Clusters);
 void WriteTracks(AliMUONVTrackStore& trackStore, ofstream& outFile);
 
 //------------------------------------------------------------------
@@ -71,10 +71,10 @@ void ConvertMUONClusters(int runNumber, TString inFileName, TString outFileName 
   ///
   /// number of clusters in event 1
   /// number of associated digits (= 0)
-  /// ClusterStruct of 1st cluster
-  /// ClusterStruct of 2nd cluster
+  /// 1st cluster
+  /// 2nd cluster
   /// ...
-  /// ClusterStruct of nth cluster
+  /// nth cluster
   /// number of clusters in event 2
   /// ...
   ///
@@ -85,7 +85,7 @@ void ConvertMUONClusters(int runNumber, TString inFileName, TString outFileName 
   /// number of MCH tracks in event 1
   /// number of associated clusters in event 1
   /// list of TrackMCH
-  /// list of ClusterStruct
+  /// list of Cluster
   /// number of tracks at vertex in event 2 (= 0)
   /// ...
 
@@ -421,7 +421,7 @@ void ChangeMonoCathodClusterRes(AliMUONVClusterStore& clusterStore)
 }
 
 //------------------------------------------------------------------
-void MUONToO2(AliMUONVCluster& cluster, ClusterStruct& o2Cluster)
+void MUONToO2(AliMUONVCluster& cluster, Cluster& o2Cluster)
 {
   /// copy the cluster information from the MUON cluster into the O2 cluster
   o2Cluster.x = cluster.GetX();
@@ -447,19 +447,19 @@ void WriteClusters(AliMUONVClusterStore& clusterStore, ofstream& outFile)
   outFile.write((char*)&nDigits, sizeof(int));
 
   // write the clusters
-  ClusterStruct o2Cluster{};
+  Cluster o2Cluster{};
   for (int iChamber = 0; iChamber < 10; ++iChamber) {
     TIter nextInCh(clusterStore.CreateChamberIterator(iChamber, iChamber));
     AliMUONVCluster* cluster(nullptr);
     while ((cluster = static_cast<AliMUONVCluster*>(nextInCh()))) {
       MUONToO2(*cluster, o2Cluster);
-      outFile.write((char*)&o2Cluster, sizeof(ClusterStruct));
+      outFile.write((char*)&o2Cluster, sizeof(Cluster));
     }
   }
 }
 
 //------------------------------------------------------------------
-void MUONToO2(AliMUONTrack& track, TrackMCH& o2Track, std::vector<ClusterStruct>& o2Clusters)
+void MUONToO2(AliMUONTrack& track, TrackMCH& o2Track, std::vector<Cluster>& o2Clusters)
 {
   /// copy the track info from the MUON track into the O2 TrackMCH
 
@@ -509,7 +509,7 @@ void WriteTracks(AliMUONVTrackStore& trackStore, ofstream& outFile)
   }
 
   // write the MCH tracks and store the attached clusters
-  std::vector<ClusterStruct> o2Clusters{};
+  std::vector<Cluster> o2Clusters{};
   o2Clusters.reserve(nClusters);
   TrackMCH o2Track{};
   next.Reset();
@@ -519,5 +519,5 @@ void WriteTracks(AliMUONVTrackStore& trackStore, ofstream& outFile)
   }
 
   // write the attached clusters
-  outFile.write(reinterpret_cast<char*>(o2Clusters.data()), o2Clusters.size() * sizeof(ClusterStruct));
+  outFile.write(reinterpret_cast<char*>(o2Clusters.data()), o2Clusters.size() * sizeof(Cluster));
 }

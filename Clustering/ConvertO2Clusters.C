@@ -17,7 +17,7 @@
 #include "MCHGeometryTransformer/Transformations.h"
 #include "MathUtils/Cartesian.h"
 
-#include "DataFormatsMCH/ClusterBlock.h"
+#include "DataFormatsMCH/Cluster.h"
 #include "DataFormatsMCH/Digit.h"
 
 using namespace o2::mch;
@@ -26,7 +26,7 @@ using namespace std;
 AliMUONGeometryTransformer alirootTransformer;
 geo::TransformationCreator o2Transformer;
 
-void StoreClusters(std::vector<ClusterStruct>& clusters, std::vector<Digit>& digits, AliMUONClusterStoreV2* clusterStore);
+void StoreClusters(std::vector<Cluster>& clusters, std::vector<Digit>& digits, AliMUONClusterStoreV2* clusterStore);
 
 //------------------------------------------------------------------
 void ConvertO2Clusters(TString inFileName, TString outFileName = "clusters.root",
@@ -99,7 +99,7 @@ void ConvertO2Clusters(TString inFileName, TString outFileName = "clusters.root"
 
   int nClusters(0);
   int nDigits(0);
-  std::vector<ClusterStruct> clusters{};
+  std::vector<Cluster> clusters{};
   std::vector<Digit> digits{};
 
   // loop over events, each event starting with the number of clusters
@@ -111,7 +111,7 @@ void ConvertO2Clusters(TString inFileName, TString outFileName = "clusters.root"
 
     // get the clusters
     clusters.resize(nClusters);
-    inFile.read(reinterpret_cast<char*>(clusters.data()), nClusters * sizeof(ClusterStruct));
+    inFile.read(reinterpret_cast<char*>(clusters.data()), nClusters * sizeof(Cluster));
 
     // get the digits
     digits.resize(nDigits);
@@ -131,7 +131,7 @@ void ConvertO2Clusters(TString inFileName, TString outFileName = "clusters.root"
 }
 
 //------------------------------------------------------------------
-void StoreClusters(std::vector<ClusterStruct>& clusters, std::vector<Digit>& digits, AliMUONClusterStoreV2* clusterStore)
+void StoreClusters(std::vector<Cluster>& clusters, std::vector<Digit>& digits, AliMUONClusterStoreV2* clusterStore)
 {
   /// convert the clusters in AliRoot clusters and store them in the cluster store
   /// change clusters position from local to global coordinate system if requested

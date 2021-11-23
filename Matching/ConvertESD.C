@@ -44,7 +44,7 @@
 #include "DataFormatsMCH/TrackMCH.h"
 #include "DataFormatsMID/ROFRecord.h"
 #include "DataFormatsMID/Track.h"
-#include "DataFormatsMCH/ClusterBlock.h"
+#include "DataFormatsMCH/Cluster.h"
 
 using namespace std;
 using namespace o2;
@@ -58,7 +58,7 @@ void LoadEvent(AliESDEvent& esd, AliMUONVTrackStore& trackStore, AliMUONVTrigger
 void MatchTracks(AliMUONVTrackStore& trackStore, std::map<uint32_t, AliMUONTrackParam>& paramsAtMID,
                  const AliMUONVTriggerTrackStore& trigTrackStore, const AliMUONVTriggerStore& trigStore);
 void ConvertTracks(const AliMUONVTrackStore& trackStore, std::map<uint32_t, AliMUONTrackParam>& paramsAtMID,
-                   std::vector<mch::TrackMCH>& mchTracks, std::vector<mch::ClusterStruct>& mchClusters,
+                   std::vector<mch::TrackMCH>& mchTracks, std::vector<mch::Cluster>& mchClusters,
                    std::map<uint32_t, int>& mchTracksIdx);
 void ConvertTriggers(const AliMUONVTriggerTrackStore& trigTrackStore, const AliMUONVTriggerStore& trigStore,
                      std::vector<mid::Track>& midTracks, std::map<uint32_t, int>& midTracksIdx);
@@ -92,7 +92,7 @@ void ConvertESD(TString esdFileName, int nROFsPerTF)
   outTreeMCH->Branch("tracks", &mchTracks);
   std::vector<mch::ROFRecord> mchROFs{};
   outTreeMCH->Branch("trackrofs", &mchROFs);
-  std::vector<mch::ClusterStruct> mchClusters{};
+  std::vector<mch::Cluster> mchClusters{};
   outTreeMCH->Branch("trackclusters", &mchClusters);
   TFile* outFileMID = TFile::Open("ESDMIDTracks.root", "RECREATE");
   TTree* outTreeMID = new TTree("midreco", "midreco");
@@ -342,7 +342,7 @@ void MatchTracks(AliMUONVTrackStore& trackStore, std::map<uint32_t, AliMUONTrack
 
 //_________________________________________________________________________________________________
 void ConvertTracks(const AliMUONVTrackStore& trackStore, std::map<uint32_t, AliMUONTrackParam>& paramsAtMID,
-                   std::vector<mch::TrackMCH>& mchTracks, std::vector<mch::ClusterStruct>& mchClusters,
+                   std::vector<mch::TrackMCH>& mchTracks, std::vector<mch::Cluster>& mchClusters,
                    std::map<uint32_t, int>& mchTracksIdx)
 {
   /// convert MUON tracks in O2 format

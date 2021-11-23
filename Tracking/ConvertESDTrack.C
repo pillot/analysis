@@ -26,7 +26,7 @@
 #include "Field/MagneticField.h"
 
 #include "DataFormatsMCH/TrackMCH.h"
-#include "DataFormatsMCH/ClusterBlock.h"
+#include "DataFormatsMCH/Cluster.h"
 #include "MCHBase/TrackBlock.h"
 
 using namespace std;
@@ -42,7 +42,7 @@ struct TrackAtVtxStruct {
 bool PrepareRefitting(int runNumber);
 bool SetMagField();
 void ConvertTracks(AliESDEvent& esd, bool refit, std::vector<TrackAtVtxStruct>& o2TracksAtVtx,
-                   std::vector<TrackMCH>& o2Tracks, std::vector<ClusterStruct>& o2Clusters);
+                   std::vector<TrackMCH>& o2Tracks, std::vector<Cluster>& o2Clusters);
 
 //_________________________________________________________________________________________________
 void ConvertESDTrack(TString esdFileName, TString outFileName = "AliESDTracks.out", bool refit = false, int LastEvent = -1)
@@ -55,7 +55,7 @@ void ConvertESDTrack(TString esdFileName, TString outFileName = "AliESDTracks.ou
   /// number of associated clusters in event 1
   /// list of TrackAtVtxStruct (unless tracks are refitted)
   /// list of TrackMCH
-  /// list of ClusterStruct
+  /// list of Cluster
   /// number of tracks at vertex in event 2 (= 0)
   /// ...
   /// if the tracks are refitted, the extrapolation to vertex is left to another code
@@ -89,7 +89,7 @@ void ConvertESDTrack(TString esdFileName, TString outFileName = "AliESDTracks.ou
 
   std::vector<TrackAtVtxStruct> o2TracksAtVtx{};
   std::vector<TrackMCH> o2Tracks{};
-  std::vector<ClusterStruct> o2Clusters{};
+  std::vector<Cluster> o2Clusters{};
 
   int nevents = (LastEvent >= 0) ? TMath::Min(LastEvent + 1, (int)tree->GetEntries()) : (int)tree->GetEntries();
   for (int iEvent = 0; iEvent < nevents; iEvent++) {
@@ -112,7 +112,7 @@ void ConvertESDTrack(TString esdFileName, TString outFileName = "AliESDTracks.ou
     outFile.write(reinterpret_cast<char*>(&nClusters), sizeof(int));
     outFile.write(reinterpret_cast<char*>(o2TracksAtVtx.data()), o2TracksAtVtx.size() * sizeof(TrackAtVtxStruct));
     outFile.write(reinterpret_cast<char*>(o2Tracks.data()), o2Tracks.size() * sizeof(TrackMCH));
-    outFile.write(reinterpret_cast<char*>(o2Clusters.data()), o2Clusters.size() * sizeof(ClusterStruct));
+    outFile.write(reinterpret_cast<char*>(o2Clusters.data()), o2Clusters.size() * sizeof(Cluster));
   }
 
   esdFile->Close();
@@ -211,7 +211,7 @@ bool SetMagField()
 
 //_________________________________________________________________________________________________
 void ConvertTracks(AliESDEvent& esd, bool refit, std::vector<TrackAtVtxStruct>& o2TracksAtVtx,
-                   std::vector<TrackMCH>& o2Tracks, std::vector<ClusterStruct>& o2Clusters)
+                   std::vector<TrackMCH>& o2Tracks, std::vector<Cluster>& o2Clusters)
 {
   /// write the tracks in O2 format in the output file, refitting them before if requested
   /// if the tracks are refitted, the extrapolation to vertex is left to another code
