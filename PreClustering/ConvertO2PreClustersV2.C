@@ -1,6 +1,8 @@
 #include <fstream>
 #include <vector>
 
+#include <TROOT.h>
+#include <TSystem.h>
 #include <TString.h>
 #include <TFile.h>
 #include <TTree.h>
@@ -13,10 +15,11 @@
 
 using namespace o2::mch;
 
-void StorePreclusters(std::vector<PreCluster>& preClusters, std::vector<Digit>& digits, AliMUONClusterStoreV2* clusterStore);
+void StorePreclusters(std::vector<PreCluster>& preClusters, std::vector<Digit>& digits, AliMUONClusterStoreV2* clusterStore, bool impl4);
+uint32_t PadId2DigitId(int deId, int padId, bool impl4);
 
 //------------------------------------------------------------------
-void ConvertO2PreClustersV2(TString inFileName, TString outFileName = "preclusters.v2.root")
+void ConvertO2PreClustersV2(TString inFileName, TString outFileName = "preclusters.v2.root", bool impl4 = true)
 {
   /// Convert O2 preclusters to AliRoot clusters
   /// input binary file with the following format:
@@ -25,6 +28,10 @@ void ConvertO2PreClustersV2(TString inFileName, TString outFileName = "precluste
   /// Number of digits
   /// All PreClusters
   /// All Digits
+
+  // load the digitId converter linked with the requested mapping implementation
+  gSystem->Load(impl4 ? "libO2MCHMappingImpl4" : "libO2MCHMappingImpl3");
+  gROOT->LoadMacro("/Users/PILLOT/Work/Alice/Macros/PreClustering/ConvertDigitId.C++");
 
   // open input file
   ifstream inFile(inFileName,ios::binary);
@@ -60,7 +67,7 @@ void ConvertO2PreClustersV2(TString inFileName, TString outFileName = "precluste
     inFile.read(reinterpret_cast<char*>(digits.data()), nDigits * sizeof(Digit));
 
     // convert preclusters in AliRoot clusters
-    StorePreclusters(preClusters, digits, clusterStore);
+    StorePreclusters(preClusters, digits, clusterStore, impl4);
 
     clusterTree->Fill();
     clusterStore->Clear();
@@ -73,7 +80,7 @@ void ConvertO2PreClustersV2(TString inFileName, TString outFileName = "precluste
 }
 
 //------------------------------------------------------------------
-void StorePreclusters(std::vector<PreCluster>& preClusters, std::vector<Digit>& digits, AliMUONClusterStoreV2* clusterStore)
+void StorePreclusters(std::vector<PreCluster>& preClusters, std::vector<Digit>& digits, AliMUONClusterStoreV2* clusterStore, bool impl4)
 {
   /// convert the preclusters in AliRoot clusters and store them in the cluster store
 
@@ -92,7 +99,10 @@ void StorePreclusters(std::vector<PreCluster>& preClusters, std::vector<Digit>& 
     // add the list of digit Ids
     digitIds.clear();
     for (auto iDigit = preCluster.firstDigit; iDigit <= preCluster.lastDigit(); ++iDigit) {
-      digitIds.push_back(static_cast<uint32_t>(digits[iDigit].getPadID()));
+      uint32_t digitId = PadId2DigitId(deId, digits[iDigit].getPadID(), impl4);
+      if (digitId > 0) {
+        digitIds.push_back(digitId);
+      }
     }
     cluster->SetDigitsId(preCluster.nDigits, digitIds.data());
   }

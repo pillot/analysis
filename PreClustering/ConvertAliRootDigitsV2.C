@@ -4,6 +4,8 @@
 #include <limits>
 #include <vector>
 
+#include <TROOT.h>
+#include <TSystem.h>
 #include <TString.h>
 #include <TFile.h>
 #include <TTree.h>
@@ -28,8 +30,10 @@ struct DigitD0 {
   bool isSaturated() const { return ((nofSamples & 0x8000) > 0); }
 };
 
+int DigitId2PadId(UInt_t digitId, bool impl4);
+
 //------------------------------------------------------------------
-void ConvertAliRootDigitsV2(TString inFileName, TString outFileName = "digits.v3.in")
+void ConvertAliRootDigitsV2(TString inFileName, TString outFileName = "digits.v3.in", bool impl4 = true)
 {
   /// Convert AliRoot digits to O2 digits
   /// saved in a binary file with the following format:
@@ -41,6 +45,10 @@ void ConvertAliRootDigitsV2(TString inFileName, TString outFileName = "digits.v3
   /// Digit n
   /// Number of digits in event 2
   /// ...
+
+  // load the digitId converter linked with the requested mapping implementation
+  gSystem->Load(impl4 ? "libO2MCHMappingImpl4" : "libO2MCHMappingImpl3");
+  gROOT->LoadMacro("/Users/PILLOT/Work/Alice/Macros/PreClustering/ConvertDigitId.C++");
 
   // read digits
   TFile* digitFile = TFile::Open(inFileName);
@@ -78,7 +86,11 @@ void ConvertAliRootDigitsV2(TString inFileName, TString outFileName = "digits.v3
       float charge = digit->Charge();
       uint32_t adc(0);
       std::memcpy(&adc, &charge, sizeof(charge));
-      digits.push_back({0, 0, digit->DetElemId(), static_cast<int>(digit->GetUniqueID()), adc});
+      int padId = DigitId2PadId(digit->GetUniqueID(), impl4);
+      if (padId < 0) {
+        continue;
+      }
+      digits.push_back({0, 0, digit->DetElemId(), padId, adc});
       digits.back().setSaturated(digit->IsSaturated());
     }
 

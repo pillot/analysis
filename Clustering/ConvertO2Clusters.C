@@ -2,6 +2,7 @@
 #include <vector>
 
 #include <TError.h>
+#include <TROOT.h>
 #include <TSystem.h>
 #include <TString.h>
 #include <TFile.h>
@@ -26,10 +27,11 @@ using namespace std;
 AliMUONGeometryTransformer alirootTransformer;
 geo::TransformationCreator o2Transformer;
 
-void StoreClusters(std::vector<Cluster>& clusters, std::vector<Digit>& digits, AliMUONClusterStoreV2* clusterStore);
+void StoreClusters(std::vector<Cluster>& clusters, std::vector<Digit>& digits, AliMUONClusterStoreV2* clusterStore, bool impl4);
+uint32_t PadId2DigitId(int deId, int padId, bool impl4);
 
 //------------------------------------------------------------------
-void ConvertO2Clusters(TString inFileName, TString outFileName = "clusters.root",
+void ConvertO2Clusters(TString inFileName, TString outFileName = "clusters.root", bool impl4 = true,
                        bool localtoGobal = true, TString geoFileName = "",
                        TString ocdb = "local://./OCDB", int run = 169099)
 {
@@ -38,13 +40,15 @@ void ConvertO2Clusters(TString inFileName, TString outFileName = "clusters.root"
   /// using provided geometry (with AliRoot if *.root or O2 if *.json) or loading it from OCDB (location or snapshot)
   /// the OCDB is also needed when using an AliRoot geometry file to get the mapping segmentation
   ///
-  /// gSystem->Load("libO2MCHGeometryTransformer") is needed for compilation
-  ///
   /// input binary file must have the following format:
   /// number of clusters
   /// number of digits
   /// all Clusters
   /// all Digits
+
+  // load the digitId converter linked with the requested mapping implementation
+  gSystem->Load(impl4 ? "libO2MCHMappingImpl4" : "libO2MCHMappingImpl3");
+  gROOT->LoadMacro("/Users/PILLOT/Work/Alice/Macros/PreClustering/ConvertDigitId.C++");
 
   // load geometry to change cluster position from local to global coordinates, if needed
   if (localtoGobal) {
@@ -118,7 +122,7 @@ void ConvertO2Clusters(TString inFileName, TString outFileName = "clusters.root"
     inFile.read(reinterpret_cast<char*>(digits.data()), nDigits * sizeof(Digit));
 
     // convert clusters in AliRoot clusters
-    StoreClusters(clusters, digits, clusterStore);
+    StoreClusters(clusters, digits, clusterStore, impl4);
 
     clusterTree->Fill();
     clusterStore->Clear();
@@ -131,7 +135,7 @@ void ConvertO2Clusters(TString inFileName, TString outFileName = "clusters.root"
 }
 
 //------------------------------------------------------------------
-void StoreClusters(std::vector<Cluster>& clusters, std::vector<Digit>& digits, AliMUONClusterStoreV2* clusterStore)
+void StoreClusters(std::vector<Cluster>& clusters, std::vector<Digit>& digits, AliMUONClusterStoreV2* clusterStore, bool impl4)
 {
   /// convert the clusters in AliRoot clusters and store them in the cluster store
   /// change clusters position from local to global coordinate system if requested
@@ -164,8 +168,11 @@ void StoreClusters(std::vector<Cluster>& clusters, std::vector<Digit>& digits, A
     // add the list of digit Ids, if any
     if (!digits.empty()) {
       digitIds.clear();
-      for (uint32_t iDigit = 0; iDigit <= o2Cluster.nDigits; ++iDigit) {
-        digitIds.push_back(static_cast<uint32_t>(digits[o2Cluster.firstDigit + iDigit].getPadID()));
+      for (uint32_t iDigit = 0; iDigit < o2Cluster.nDigits; ++iDigit) {
+        uint32_t digitId = PadId2DigitId(deId, digits[o2Cluster.firstDigit + iDigit].getPadID(), impl4);
+        if (digitId > 0) {
+          digitIds.push_back(digitId);
+        }
       }
       cluster->SetDigitsId(o2Cluster.nDigits, digitIds.data());
     }

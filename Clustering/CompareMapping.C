@@ -1,4 +1,4 @@
-#include <stdexcept>
+#include <array>
 
 #include <TH1D.h>
 #include <TCanvas.h>
@@ -17,10 +17,23 @@
 
 #include "MCHMappingInterface/Segmentation.h"
 
-void CompareMapping()
+// conversion matrix between the original channels numbering of the RUN2 readout electronics and the final version of the RUN3 DualSAMPA-based readout
+static const std::array<int, 64> refManu2ds_st12 = {
+  36, 35, 34, 33, 32, 37, 38, 43, 45, 47, 49, 50, 53, 41, 39, 40,
+  63, 62, 61, 60, 59, 58, 56, 57, 54, 55, 52, 51, 48, 46, 44, 42,
+  31, 30, 29, 28, 27, 26, 25, 24, 22, 23, 20, 18, 17, 15, 13, 11,
+  4, 3, 2, 1, 0, 5, 6, 10, 12, 14, 16, 19, 21, 8, 7, 9};
+static const std::array<int, 64> refManu2ds_st345_v5 = {
+  63, 62, 61, 60, 59, 57, 56, 53, 51, 50, 47, 45, 44, 41, 38, 35,
+  36, 33, 34, 37, 32, 39, 40, 42, 43, 46, 48, 49, 52, 54, 55, 58,
+  7, 8, 5, 2, 6, 1, 3, 0, 4, 9, 10, 15, 17, 18, 22, 25,
+  31, 30, 29, 28, 27, 26, 24, 23, 20, 21, 16, 19, 12, 14, 11, 13};
+
+void CompareMapping(bool impl4 = false)
 {
   /// Compare the mapping between O2 and AliRoot
   /// O2 mapping need to be loaded before: gSystem->Load("libO2MCHMappingImpl3")
+  /// The macro must be re-compiled to link to a different mapping implementation
 
   // load AliRoot mapping
   AliCDBManager* man = AliCDBManager::Instance();
@@ -57,10 +70,15 @@ void CompareMapping()
 
           int manuId = pad.GetManuId();
           int manuCh = pad.GetManuChannel();
+          if (impl4) {
+            manuCh = (deId < 500) ? refManu2ds_st12[manuCh] : refManu2ds_st345_v5[manuCh];
+          }
           auto& segO2 = o2::mch::mapping::segmentation(deId);
           int padId = segO2.findPadByFEE(manuId, manuCh);
           if (!segO2.isValid(padId)) {
-            throw std::runtime_error("pad not found");
+            printf("pad not found (DE %d, manu %d)\n", deId, manuId);
+            padIt->Next();
+            continue;
           }
 
           hXDiff->Fill(segO2.padPositionX(padId) - pad.GetPositionX());
