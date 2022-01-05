@@ -18,11 +18,10 @@
 #include "SimulationDataFormat/MCTrack.h"
 #include "SimulationDataFormat/TrackReference.h"
 #include "SimulationDataFormat/MCCompLabel.h"
-#include "SimulationDataFormat/MCTruthContainer.h"
 #include "SimulationDataFormat/MCEventHeader.h"
 #include "DataFormatsParameters/GRPObject.h"
 #include "DetectorsCommonDataFormats/DetID.h"
-#include "DetectorsCommonDataFormats/NameConf.h"
+#include "CommonUtils/NameConf.h"
 #include "DataFormatsMCH/ROFRecord.h"
 #include "DataFormatsMCH/TrackMCH.h"
 #include "DataFormatsMCH/Cluster.h"
@@ -97,7 +96,7 @@ void CompareTrackMC()
   TTreeReaderValue<std::vector<ROFRecord>> rofs = {dataReader, "trackrofs"};
   TTreeReaderValue<std::vector<TrackMCH>> tracks = {dataReader, "tracks"};
   TTreeReaderValue<std::vector<Cluster>> clusters = {dataReader, "trackclusters"};
-  TTreeReaderValue<MCTruthContainer<MCCompLabel>> labels = {dataReader, "tracklabels"};
+  TTreeReaderValue<std::vector<MCCompLabel>> labels = {dataReader, "tracklabels"};
   dataReader.SetTree(trackTree);
 
   // prepare track extrapolation to vertex
@@ -107,7 +106,6 @@ void CompareTrackMC()
   GeometryManager::loadGeometry();
 
   int nFakes(0);
-  int nMultipleLabels(0);
   std::vector<Cluster> mcClusters{};
   TrackAtVtxStruct trackAtVtx{};
 
@@ -118,21 +116,15 @@ void CompareTrackMC()
         // get the reconstructed track and associated clusters and labels
         const auto& track = (*tracks)[iTrack];
         const gsl::span<const Cluster> trackClusters(&(*clusters)[track.getFirstClusterIdx()], track.getNClusters());
-        const auto trackLabels = labels->getLabels(iTrack);
+        const auto& l = (*labels)[iTrack];
 
         // skip fake tracks
-        if (trackLabels.size() < 1) {
+        if (l.isFake()) {
           ++nFakes;
           continue;
         }
 
-        // check if the reconstructed track matches several MC tracks
-        if (trackLabels.size() > 1) {
-          ++nMultipleLabels;
-        }
-
         // get the MC track and make the MC clusters from the associated trackRefs
-        const auto& l = trackLabels[0];
         const auto* mcTrack = mcReader.getTrack(l);
         const auto mcTrackRefs = mcReader.getTrackRefs(l.getSourceID(), l.getEventID(), l.getTrackID());
         makeMCClusters(mcTrackRefs, mcClusters);
@@ -158,7 +150,6 @@ void CompareTrackMC()
   DrawClResiduals(clResiduals);
 
   cout << "number of fake tracks = " << nFakes << endl;
-  cout << "number of tracks matched with several MC tracks = " << nMultipleLabels << endl;
 }
 
 //_________________________________________________________________________________________________
