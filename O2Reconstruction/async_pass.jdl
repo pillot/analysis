@@ -1,0 +1,59 @@
+Executable = "/alice/cern.ch/user/p/ppillot/run3/data/beamtest/$1/apass1/async_pass.sh";
+
+Packages =
+{
+  "VO_ALICE@O2PDPSuite::nightly-20220206-1"
+};
+
+Jobtag =
+{
+  "comment:MCH+MID reco"
+};
+
+# all are needed
+Requirements = member(other.GridPartitions,"multicore_8");
+CPUCores = "8";
+MemorySize = "64GB";
+
+TTL = "14400";
+Price = "1";
+
+Validationcommand = "/alice/cern.ch/user/p/ppillot/run3/data/beamtest/$1/apass1/validation.sh";
+
+InputFile =
+{
+  "LF:/alice/cern.ch/user/p/ppillot/run3/data/beamtest/$1/apass1/ctf_dictionary.root",
+  "LF:/alice/cern.ch/user/p/ppillot/run3/data/beamtest/$1/apass1/o2sim_geometry.root",
+  "LF:/alice/cern.ch/user/p/ppillot/run3/data/beamtest/$1/apass1/o2sim_grp.root",
+  "LF:/alice/cern.ch/user/p/ppillot/run3/data/beamtest/$1/apass1/dpl-workflow.sh"
+};
+
+InputDataCollection = "LF:/alice/data/2021/OCT/$1/raw/CTFs.xml,nodownload";
+Split = "se";
+SplitMaxInputFileNumber = "100";
+InputDataList = "wn.xml";
+InputDataListFormat = "xml-single";
+SplitArguments = {"wn.xml"};
+
+OutputDir = "/alice/cern.ch/user/p/ppillot/run3/data/beamtest/$1/apass1/output/#alien_counter_03i#";
+
+Output =
+{
+  "log_archive.zip:std*,*.log,*.json,*.ini@disk=1",
+  "root_archive.zip:o2_tfidinfo.root,mid-reco.root,mchtracks.root,muontracks.root@disk=2"
+};
+
+FilesToCheck = "o2_tfidinfo.root mid-reco.root mchtracks.root muontracks.root";
+
+JDLVariables =
+{
+  "Packages",
+  "OutputDir",
+  "FilesToCheck"
+};
+
+#Store ERROR_E jobs output
+OutputErrorE=
+{
+  "log_archive.zip:std*,*.log,*.json,*.ini@disk=1"
+};
