@@ -91,4 +91,8 @@ fi
 WORKFLOWMODE=print ./run-workflow-on-inputlist.sh CTF wn.txt > workflowconfig.log
 
 # run workflow
-WORKFLOWMODE=run ./run-workflow-on-inputlist.sh CTF wn.txt 
+WORKFLOWMODE=run ./run-workflow-on-inputlist.sh CTF wn.txt
+
+# check ouput
+root -l -b -q 'check.C+({{"mchtracks.root","o2sim"},{"mid-reco.root","midreco"},{"muontracks.root","o2sim"}})'
+exit $?

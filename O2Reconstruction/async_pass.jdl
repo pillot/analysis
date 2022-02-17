@@ -25,7 +25,8 @@ InputFile =
   "LF:/alice/cern.ch/user/p/ppillot/run3/data/beamtest/$1/apass1/ctf_dictionary.root",
   "LF:/alice/cern.ch/user/p/ppillot/run3/data/beamtest/$1/apass1/o2sim_geometry.root",
   "LF:/alice/cern.ch/user/p/ppillot/run3/data/beamtest/$1/apass1/o2sim_grp.root",
-  "LF:/alice/cern.ch/user/p/ppillot/run3/data/beamtest/$1/apass1/dpl-workflow.sh"
+  "LF:/alice/cern.ch/user/p/ppillot/run3/data/beamtest/$1/apass1/dpl-workflow.sh",
+  "LF:/alice/cern.ch/user/p/ppillot/run3/data/beamtest/$1/apass1/check.C"
 };
 
 InputDataCollection = "LF:/alice/data/2021/OCT/$1/raw/CTFs.xml,nodownload";
