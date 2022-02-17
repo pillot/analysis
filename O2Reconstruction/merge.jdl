@@ -1,0 +1,56 @@
+Executable = "/alice/cern.ch/user/p/ppillot/run3/data/beamtest/$1/apass1/merge.sh";
+
+Packages =
+{
+  "VO_ALICE@O2PDPSuite::nightly-20220206-1"
+};
+
+Jobtag =
+{
+  "comment:MCH+MID reco merging stage $2"
+};
+
+# all are needed
+Requirements = member(other.GridPartitions,"multicore_8");
+CPUCores = "8";
+MemorySize = "64GB";
+
+TTL = "3600";
+Price = "1";
+
+Validationcommand = "/alice/cern.ch/user/p/ppillot/run3/data/beamtest/$1/apass1/validation.sh";
+
+InputFile =
+{
+  "LF:/alice/cern.ch/user/p/ppillot/run3/data/beamtest/$1/apass1/merge.C"
+};
+
+InputDataCollection = "LF:/alice/cern.ch/user/p/ppillot/run3/data/beamtest/$1/apass1/stage$2.xml,nodownload";
+Split = "se";
+SplitMaxInputFileNumber = "10";
+InputDataList = "wn.xml";
+InputDataListFormat = "xml-single";
+SplitArguments = {"wn.xml mchtracks.root muontracks.root"};
+
+OutputDir = "/alice/cern.ch/user/p/ppillot/run3/data/beamtest/$1/apass1/stage$2/#alien_counter_03i#";
+
+Output =
+{
+  "log_archive.zip:std*@disk=1",
+  "root_archive.zip:mchtracks.root,muontracks.root@disk=2"
+};
+
+FilesToCheck = "mchtracks.root muontracks.root";
+
+JDLVariables =
+{
+  "Packages",
+  "OutputDir",
+  "FilesToCheck"
+};
+
+#Store ERROR_E jobs output
+OutputErrorE=
+{
+  "log_archive.zip:std*@disk=1"
+};
