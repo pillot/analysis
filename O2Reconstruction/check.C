@@ -47,7 +47,7 @@ std::tuple<TFile*, TTreeReader*> LoadData(const char* fileName, const char* tree
   /// open the input file and get the intput tree
 
   TFile* f = TFile::Open(fileName, "READ");
-  if (f->IsZombie()) {
+  if (!f || f->IsZombie()) {
     printf("* check failed: cannot open file %s\n", fileName);
     exit(1);
   }
