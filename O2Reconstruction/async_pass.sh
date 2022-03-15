@@ -29,6 +29,8 @@ ls -altr
 MODE="local"
 if [[ "${1##*.}" == "root" ]]; then
   echo "${1}" > wn.txt
+elif [[ "${1##*.}" == "txt" ]]; then
+  cp $1 wn.txt
 elif [[ "${1##*.}" == "xml" ]]; then
   sed -rn 's/.*turl="([^"]*)".*/\1/p' $1 > wn.txt
   if [ -f `head -n1 wn.txt | xargs -L 1 basename` ]; then
