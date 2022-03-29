@@ -10,11 +10,14 @@
 #include <TTree.h>
 #include <TTreeReader.h>
 #include <TTreeReaderValue.h>
+#include <TF1.h>
 #include <TH1F.h>
 #include <TH2F.h>
 #include <TCanvas.h>
 #include <TLegend.h>
 #include <TParameter.h>
+#include <TDatabasePDG.h>
+#include <Math/Vector4D.h>
 
 #include "Framework/Logger.h"
 #include "DetectorsBase/Propagator.h"
@@ -89,6 +92,12 @@ struct TrackInfo {
 };
 
 o2::mch::geo::TransformationCreator transformation;
+static const double muMass = TDatabasePDG::Instance()->GetParticle("mu-")->Mass();
+uint16_t minNSamplesSignal = 17;
+double signalParam[4] = {80., 16., 12., 1.2};
+double backgroundParam[4] = {18., 24., -20., 7.};
+bool selectSignal = true; // apply signal cut to display total charge vs nDigits correlations
+int bcIntegrationRange = 6; // time window ([-range, range]) to integrate digits
 
 constexpr double pi() { return 3.14159265358979323846; }
 std::tuple<TFile*, TTreeReader*> LoadData(const char* fileName, const char* treeName);
@@ -107,6 +116,11 @@ void DrawTimeHistos(gsl::span<TH1*> histos, const char* extension);
 void CreateChargeHistos(std::vector<TH1*>& histos, const char* extension);
 void FillChargeHistos(const std::vector<const mch::Digit*>& digits, gsl::span<TH1*> histos, int deMin = 100, int deMax = 1025);
 void DrawChargeHistos(gsl::span<TH1*> histos, const char* extension);
+void CreateCorrelationHistos(std::vector<TH1*>& histos);
+void FillCorrelationHistos(const std::vector<const mch::Digit*>& digits, TH1* hist, double timeRef, int deMin = 100, int deMax = 1025);
+void DrawCorrelationHistos(std::vector<TH1*>& histos);
+double signalCut(double* x, double* p);
+double backgroundCut(double* x, double* p);
 void WriteHistos(TFile* f, const char* dirName, const std::vector<TH1*>& histos);
 
 //_________________________________________________________________________________________________
@@ -189,6 +203,10 @@ void DisplayTracks(int runNumber, std::string mchFileName, std::string muonFileN
   std::vector<TH1*> chargeHistosSt345{};
   CreateChargeHistos(chargeHistosSt345, "St345AllDig");
   CreateChargeHistos(chargeHistosSt345, "St345");
+  std::vector<TH1*> corrHistos{};
+  CreateCorrelationHistos(corrHistos);
+  TH1F* hMass = new TH1F("mass", "#mu^{+}#mu^{-} invariant mass;mass (GeV/c^{2})", 1600, 0., 20.);
+  hMass->SetDirectory(0);
 
   while (mchReader->Next() && muonReader->Next()) {
 
@@ -198,6 +216,8 @@ void DisplayTracks(int runNumber, std::string mchFileName, std::string muonFileN
       //   continue;
       // }
 
+      std::vector<ROOT::Math::PxPyPzMVector> muVector{};
+      std::vector<int> muSign{};
       for (int iMCHTrack = mchROF.getFirstIdx(); iMCHTrack <= mchROF.getLastIdx(); ++iMCHTrack) {
 
         TrackInfo trackInfo((*mchTracks)[iMCHTrack]);
@@ -222,6 +242,8 @@ void DisplayTracks(int runNumber, std::string mchFileName, std::string muonFileN
           }
           uint32_t orbitInTF = (muon->getIR().orbit - firstTForbit0) % nOrbitsPerTF;
           trackInfo.midTime = orbitInTF * constants::lhc::LHCMaxBunches + muon->getIR().bc;
+          muVector.emplace_back(trackInfo.paramAtVertex.px(), trackInfo.paramAtVertex.py(), trackInfo.paramAtVertex.pz(), muMass);
+          muSign.emplace_back((trackInfo.paramAtVertex.getCharge() > 0) ? 1 : -1);
         }
 
         // fill digit info
@@ -254,6 +276,10 @@ void DisplayTracks(int runNumber, std::string mchFileName, std::string muonFileN
           FillChargeHistos(trackInfo.digitsAtClusterPos, {&chargeHistosSt2[9], 3}, 300, 403);
           FillChargeHistos(trackInfo.digits, {&chargeHistosSt345[3], 3}, 500, 1025);
           FillChargeHistos(trackInfo.digitsAtClusterPos, {&chargeHistosSt345[9], 3}, 500, 1025);
+          FillCorrelationHistos(trackInfo.digits, corrHistos[0], trackInfo.mchTime);
+          FillCorrelationHistos(trackInfo.digits, corrHistos[1], trackInfo.mchTime, 100, 203);
+          FillCorrelationHistos(trackInfo.digits, corrHistos[2], trackInfo.mchTime, 300, 403);
+          FillCorrelationHistos(trackInfo.digits, corrHistos[3], trackInfo.mchTime, 500, 1025);
         }
         FillTimeHistos(trackInfo.digits, trackInfo.mchTime, trackInfo.mchTimeRMS,
                        trackInfo.midTime, {&timeHistos[0], 6});
@@ -267,6 +293,17 @@ void DisplayTracks(int runNumber, std::string mchFileName, std::string muonFileN
                        trackInfo.midTime, {&timeHistosSt345[0], 6}, 500, 1025);
         FillTimeHistos(trackInfo.digitsAtClusterPos, trackInfo.mchTimeAtClusterPosSt345, trackInfo.mchTimeRMSAtClusterPosSt345,
                        trackInfo.midTime, {&timeHistosSt345[6], 6}, 500, 1025);
+      }
+
+      if (muVector.size() > 1) {
+        for (size_t i = 0; i < muVector.size(); ++i) {
+          for (size_t j = i + 1; j < muVector.size(); ++j) {
+            if (muSign[i] * muSign[j] < 0) {
+              ROOT::Math::PxPyPzMVector dimu = muVector[i] + muVector[j];
+              hMass->Fill(dimu.M());
+            }
+          }
+        }
       }
     }
   }
@@ -289,6 +326,7 @@ void DisplayTracks(int runNumber, std::string mchFileName, std::string muonFileN
     WriteHistos(fOut, "charge", chargeHistosSt1);
     WriteHistos(fOut, "charge", chargeHistosSt2);
     WriteHistos(fOut, "charge", chargeHistosSt345);
+    WriteHistos(fOut, "correlations", corrHistos);
     fOut->Close();
   }
 
@@ -311,6 +349,10 @@ void DisplayTracks(int runNumber, std::string mchFileName, std::string muonFileN
   DrawChargeHistos({&chargeHistosSt2[6], 6}, "St2_DigitsAtClusterPos");
   DrawChargeHistos({&chargeHistosSt345[0], 6}, "St345_AllDigits");
   DrawChargeHistos({&chargeHistosSt345[6], 6}, "St345_DigitsAtClusterPos");
+  DrawCorrelationHistos(corrHistos);
+  TCanvas* cMass = new TCanvas();
+  gPad->SetLogy();
+  hMass->Draw();
 }
 
 //_________________________________________________________________________________________________
@@ -658,11 +700,11 @@ void CreateChargeHistos(std::vector<TH1*>& histos, const char* extension)
 
   histos.emplace_back(new TH1F(Form("ADC%s", extension), "ADC;ADC", 10001, -0.5, 10000.5));
   histos.emplace_back(new TH1F(Form("Samples%s", extension), "N samples;N samples", 1024, -0.5, 1023.5));
-  histos.emplace_back(new TH2F(Form("ADCvsSample%s", extension), "ADC vs N samples (all tracks);N samples;ADC", 1024, -0.5, 1023.5, 1001, -0.5, 10009.5));
+  histos.emplace_back(new TH2F(Form("ADCvsSample%s", extension), "ADC vs N samples (all tracks);N samples;ADC", 1024, -0.5, 1023.5, 10001, -0.5, 100009.5));
 
   histos.emplace_back(new TH1F(Form("ADC%sMatch", extension), "ADC;ADC", 10001, -0.5, 10000.5));
   histos.emplace_back(new TH1F(Form("Samples%sMatch", extension), "N samples;N samples", 1024, -0.5, 1023.5));
-  histos.emplace_back(new TH2F(Form("ADCvsSample%sMatch", extension), "ADC vs N samples (matched tracks);N samples;ADC", 1024, -0.5, 1023.5, 1001, -0.5, 10009.5));
+  histos.emplace_back(new TH2F(Form("ADCvsSample%sMatch", extension), "ADC vs N samples (matched tracks);N samples;ADC", 1024, -0.5, 1023.5, 10001, -0.5, 100009.5));
 
   for (auto h : histos) {
     h->SetDirectory(0);
@@ -719,6 +761,100 @@ void DrawChargeHistos(gsl::span<TH1*> histos, const char* extension)
   lHist->AddEntry(histos[3], "matched tracks", "l");
   cHist->cd(1);
   lHist->Draw("same");
+
+  static TF1* fSignal = new TF1("fSignal", signalCut, 0, 1023, 4);
+  fSignal->SetParameters(signalParam);
+  fSignal->SetLineColor(2);
+  static TF1* fBackground = new TF1("fBackground", backgroundCut, 0, 1023, 4);
+  fBackground->SetParameters(backgroundParam);
+  fBackground->SetLineColor(4);
+  cHist->cd(3);
+  fSignal->Draw("same");
+  fBackground->Draw("same");
+  cHist->cd(4);
+  fSignal->Draw("same");
+  fBackground->Draw("same");
+}
+
+//_________________________________________________________________________________________________
+void CreateCorrelationHistos(std::vector<TH1*>& histos)
+{
+  /// create correlation histograms between number of digits and total charge
+
+  histos.emplace_back(new TH2F("ChargevsNDigits", "Charge vs N digits;N digits;ADC", 100, 0, 100, 10000, 0, 100000));
+  histos.emplace_back(new TH2F("ChargevsNDigitsSt1", "Charge vs N digits (St1);N digits;ADC", 100, 0, 100, 10000, 0, 100000));
+  histos.emplace_back(new TH2F("ChargevsNDigitsSt2", "Charge vs N digits (St2);N digits;ADC", 100, 0, 100, 10000, 0, 100000));
+  histos.emplace_back(new TH2F("ChargevsNDigitsSt345", "Charge vs N digits (St345);N digits;ADC", 100, 0, 100, 10000, 0, 100000));
+
+  for (auto h : histos) {
+    h->SetDirectory(0);
+  }
+}
+
+//_________________________________________________________________________________________________
+void FillCorrelationHistos(const std::vector<const mch::Digit*>& digits, TH1* hist, double timeRef, int deMin, int deMax)
+{
+  /// fill correlation histograms between number of digits and total charge
+
+  uint32_t charge(0);
+  int nDigits(0);
+
+  for (const auto digit : digits) {
+    if (digit->getDetID() < deMin || digit->getDetID() > deMax) {
+      continue;
+    }
+    if (digit->getTime() < timeRef - bcIntegrationRange || digit->getTime() > timeRef + bcIntegrationRange) {
+      continue;
+    }
+    if (selectSignal) {
+      double nSample = digit->getNofSamples();
+      if (digit->getNofSamples() < minNSamplesSignal || digit->getADC() < signalCut(&nSample, signalParam)) {
+        continue;
+      }
+    }
+    charge += digit->getADC();
+    ++nDigits;
+  }
+
+  hist->Fill(nDigits, charge);
+}
+
+//_________________________________________________________________________________________________
+void DrawCorrelationHistos(std::vector<TH1*>& histos)
+{
+  /// draw correlation histograms between number of digits and total charge
+
+  TCanvas* cCorr = new TCanvas("cCorr", "cCorr", 10, 10, 800, 800);
+  cCorr->Divide(2, 2);
+  for (int i = 0; i < 4; ++i) {
+    cCorr->cd(i + 1);
+    gPad->SetLogz();
+    histos[i]->Draw("boxcolz");
+  }
+}
+
+//_________________________________________________________________________________________________
+double signalCut(double* x, double* p)
+{
+  /// function used to select the signal
+  double x0 = pow(p[0] / p[2], 1. / p[3]) + p[1];
+  if (x[0] < x0) {
+    return p[0];
+  } else {
+    return p[2] * pow(x[0] - p[1], p[3]);
+  }
+}
+
+//_________________________________________________________________________________________________
+double backgroundCut(double* x, double* p)
+{
+  /// function used to select the signal
+  double x0 = (p[3] * p[2] - p[1] * p[0]) / (p[3] - p[1]);
+  if (x[0] < x0) {
+    return p[1] * (x[0] - p[0]);
+  } else {
+    return p[3] * (x[0] - p[2]);
+  }
 }
 
 //_________________________________________________________________________________________________
