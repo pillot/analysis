@@ -62,17 +62,26 @@ void FillTimeHistos(const std::vector<mch::Digit>& digits, bool selectSignal, bo
                     gsl::span<TH1*> histos, int deMin = 100, int deMax = 1025);
 void FillTimeHistos(const std::vector<mid::ROFRecord>& midROFs, TH1* histo);
 void DrawTimeHistos(TH1* hBC, std::vector<TH1*>& histos, std::vector<TH1*>* histosSt);
+void CreateCorrelationHistos(std::vector<TH1*>& histos, const char* extension);
+void FillCorrelationHistos(const std::vector<mch::Digit>& digits, bool selectSignal, bool rejectBackground,
+                           TH1* hist, int deMin = 100, int deMax = 1025);
+void FillCorrelationHistos(std::vector<TH1*>& timeHistos, gsl::span<TH1*> corrHistos);
+void DrawCorrelationHistos(gsl::span<TH1*> histos, const char* extension);
 void CreateChargeHistos(std::vector<TH1*>& histos, const char* extension);
 void FillChargeHistos(const std::vector<mch::Digit>& digits, gsl::span<TH1*> histos, int deMin = 100, int deMax = 1025);
 void DrawChargeHistos(std::vector<TH1*>& histos, const char* extension);
 double signalCut(double* x, double* p);
 double backgroundCut(double* x, double* p);
 
+int nHistosPerTF = -1; // number of time histos per TF
+
+// parameters defining signal selection and background rejection
 uint16_t minNSamplesSignal = 17;
-double signalParam[4] = {100., 16., 12., 1.2};
+double signalParam[4] = {80., 16., 12., 1.2};
 uint16_t minNSamplesBackground = 14;
 double backgroundParam[4] = {18., 24., -20., 7.};
-int integrationRange = 6;
+
+int bcIntegrationRange = 6; // time window ([-range, range]) to integrate digits
 
 //_________________________________________________________________________________________________
 void DisplayDigits(int runNumber, std::string mchDigitFileName, std::string mchTrackFileName, std::string midTrackFileName,
@@ -171,6 +180,11 @@ void DisplayDigits(int runNumber, std::string mchDigitFileName, std::string mchT
   CreateChargeHistos(chargeHistosCh2, "DE201");
   CreateChargeHistos(chargeHistosCh2, "DE202");
   CreateChargeHistos(chargeHistosCh2, "DE203");
+  std::vector<TH1*> corrHistos{};
+  CreateCorrelationHistos(corrHistos, "all");
+  CreateCorrelationHistos(corrHistos, "St1");
+  CreateCorrelationHistos(corrHistos, "St2");
+  CreateCorrelationHistos(corrHistos, "St345");
 
   int iTF(-1);
   while (mchReaderD->Next() && mchReaderT->Next() && midReader->Next()) {
@@ -178,24 +192,29 @@ void DisplayDigits(int runNumber, std::string mchDigitFileName, std::string mchT
 
     if (!mchTrackDigits->empty()) {
       CreateTimeHistos(timeHistos, BCRange, iTF, "all");
-      FillTimeHistos(*mchDigits, selectSignal, rejectBackground, {&timeHistos[timeHistos.size() - 5], 2});
-      FillTimeHistos(*mchTrackDigits, selectSignal, rejectBackground, {&timeHistos[timeHistos.size() - 3], 2});
+      FillTimeHistos(*mchDigits, selectSignal, rejectBackground, {&timeHistos[timeHistos.size() - 9], 4});
+      FillTimeHistos(*mchTrackDigits, selectSignal, rejectBackground, {&timeHistos[timeHistos.size() - 5], 4});
       FillTimeHistos(*midROFs, timeHistos[timeHistos.size() - 1]);
 
       CreateTimeHistos(timeHistosSt[0], BCRange, iTF, "St1");
-      FillTimeHistos(*mchDigits, selectSignal, rejectBackground, {&timeHistosSt[0][timeHistosSt[0].size() - 5], 2}, 100, 203);
-      FillTimeHistos(*mchTrackDigits, selectSignal, rejectBackground, {&timeHistosSt[0][timeHistosSt[0].size() - 3], 2}, 100, 203);
+      FillTimeHistos(*mchDigits, selectSignal, rejectBackground, {&timeHistosSt[0][timeHistosSt[0].size() - 9], 4}, 100, 203);
+      FillTimeHistos(*mchTrackDigits, selectSignal, rejectBackground, {&timeHistosSt[0][timeHistosSt[0].size() - 5], 4}, 100, 203);
       FillTimeHistos(*midROFs, timeHistosSt[0][timeHistosSt[0].size() - 1]);
 
       CreateTimeHistos(timeHistosSt[1], BCRange, iTF, "St2");
-      FillTimeHistos(*mchDigits, selectSignal, rejectBackground, {&timeHistosSt[1][timeHistosSt[1].size() - 5], 2}, 300, 403);
-      FillTimeHistos(*mchTrackDigits, selectSignal, rejectBackground, {&timeHistosSt[1][timeHistosSt[1].size() - 3], 2}, 300, 403);
+      FillTimeHistos(*mchDigits, selectSignal, rejectBackground, {&timeHistosSt[1][timeHistosSt[1].size() - 9], 4}, 300, 403);
+      FillTimeHistos(*mchTrackDigits, selectSignal, rejectBackground, {&timeHistosSt[1][timeHistosSt[1].size() - 5], 4}, 300, 403);
       FillTimeHistos(*midROFs, timeHistosSt[1][timeHistosSt[1].size() - 1]);
 
       CreateTimeHistos(timeHistosSt[2], BCRange, iTF, "St345");
-      FillTimeHistos(*mchDigits, selectSignal, rejectBackground, {&timeHistosSt[2][timeHistosSt[2].size() - 5], 2}, 500, 1025);
-      FillTimeHistos(*mchTrackDigits, selectSignal, rejectBackground, {&timeHistosSt[2][timeHistosSt[2].size() - 3], 2}, 500, 1025);
+      FillTimeHistos(*mchDigits, selectSignal, rejectBackground, {&timeHistosSt[2][timeHistosSt[2].size() - 9], 4}, 500, 1025);
+      FillTimeHistos(*mchTrackDigits, selectSignal, rejectBackground, {&timeHistosSt[2][timeHistosSt[2].size() - 5], 4}, 500, 1025);
       FillTimeHistos(*midROFs, timeHistosSt[2][timeHistosSt[2].size() - 1]);
+
+      FillCorrelationHistos(*mchTrackDigits, selectSignal, rejectBackground, corrHistos[3]);
+      FillCorrelationHistos(*mchTrackDigits, selectSignal, rejectBackground, corrHistos[7], 100, 203);
+      FillCorrelationHistos(*mchTrackDigits, selectSignal, rejectBackground, corrHistos[11], 300, 403);
+      FillCorrelationHistos(*mchTrackDigits, selectSignal, rejectBackground, corrHistos[15], 500, 1025);
     }
 
     FillChargeHistos(*mchDigits, {&chargeHistos[0], 3});
@@ -217,10 +236,19 @@ void DisplayDigits(int runNumber, std::string mchDigitFileName, std::string mchT
   fMCHD->Close();
   fMCHT->Close();
 
+  FillCorrelationHistos(timeHistos, {&corrHistos[0], 3});
+  FillCorrelationHistos(timeHistosSt[0], {&corrHistos[4], 3});
+  FillCorrelationHistos(timeHistosSt[1], {&corrHistos[8], 3});
+  FillCorrelationHistos(timeHistosSt[2], {&corrHistos[12], 3});
+
   DrawChargeHistos(chargeHistos, "PerStation");
   DrawChargeHistos(chargeHistosCh1, "Ch1");
   DrawChargeHistos(chargeHistosCh2, "Ch2");
   DrawTimeHistos(hBC, timeHistos, timeHistosSt);
+  DrawCorrelationHistos({&corrHistos[0], 4}, "all");
+  DrawCorrelationHistos({&corrHistos[4], 4}, "St1");
+  DrawCorrelationHistos({&corrHistos[8], 4}, "St2");
+  DrawCorrelationHistos({&corrHistos[12], 4}, "St345");
 }
 
 //_________________________________________________________________________________________________
@@ -248,13 +276,23 @@ void CreateTimeHistos(std::vector<TH1*>& histos, int BCRange[2], int iTF, const 
 {
   /// create digit time histograms
 
+  nHistosPerTF = 9;
+
   histos.emplace_back(new TH1F(Form("nDigitsTF%d%s", iTF, extension), Form("nDigits - TF %d - %s;nDigits", iTF, extension),
+                               BCRange[1] - BCRange[0], BCRange[0] - 0.5, BCRange[1] - 0.5));
+  histos.emplace_back(new TH1F(Form("ChargeTF%d%s", iTF, extension), Form("Charge - TF %d - %s;ADC", iTF, extension),
                                BCRange[1] - BCRange[0], BCRange[0] - 0.5, BCRange[1] - 0.5));
   histos.emplace_back(new TH1F(Form("nDigitsIntTF%d%s", iTF, extension), Form("nDigits integral - TF %d - %s;nDigits", iTF, extension),
                                BCRange[1] - BCRange[0], BCRange[0] - 0.5, BCRange[1] - 0.5));
+  histos.emplace_back(new TH1F(Form("ChargeIntTF%d%s", iTF, extension), Form("Charge integral - TF %d - %s;ADC", iTF, extension),
+                               BCRange[1] - BCRange[0], BCRange[0] - 0.5, BCRange[1] - 0.5));
   histos.emplace_back(new TH1F(Form("nTrackDigitsTF%d%s", iTF, extension), Form("nTrackDigits - TF %d - %s;nTrackDigits", iTF, extension),
                                BCRange[1] - BCRange[0], BCRange[0] - 0.5, BCRange[1] - 0.5));
+  histos.emplace_back(new TH1F(Form("TrackChargeTF%d%s", iTF, extension), Form("TrackCharge - TF %d - %s;ADC", iTF, extension),
+                               BCRange[1] - BCRange[0], BCRange[0] - 0.5, BCRange[1] - 0.5));
   histos.emplace_back(new TH1F(Form("nTrackDigitsIntTF%d%s", iTF, extension), Form("nTrackDigits integral - TF %d - %s;nTrackDigits", iTF, extension),
+                               BCRange[1] - BCRange[0], BCRange[0] - 0.5, BCRange[1] - 0.5));
+  histos.emplace_back(new TH1F(Form("TrackChargeIntTF%d%s", iTF, extension), Form("TrackCharge integral - TF %d - %s;ADC", iTF, extension),
                                BCRange[1] - BCRange[0], BCRange[0] - 0.5, BCRange[1] - 0.5));
   histos.emplace_back(new TH1F(Form("nMIDObjTF%d%s", iTF, extension), Form("nMIDObj - TF %d - %s;nMIDObj", iTF, extension),
                                BCRange[1] - BCRange[0], BCRange[0] - 0.5, BCRange[1] - 0.5));
@@ -287,8 +325,10 @@ void FillTimeHistos(const std::vector<mch::Digit>& digits, bool selectSignal, bo
       }
     }
     histos[0]->Fill(digit.getTime());
-    for (int bc = -integrationRange; bc <= integrationRange; ++bc) {
-      histos[1]->Fill(digit.getTime() + bc);
+    histos[1]->Fill(digit.getTime(), digit.getADC());
+    for (int bc = -bcIntegrationRange; bc <= bcIntegrationRange; ++bc) {
+      histos[2]->Fill(digit.getTime() + bc);
+      histos[3]->Fill(digit.getTime() + bc, digit.getADC());
     }
   }
 }
@@ -310,14 +350,16 @@ void FillTimeHistos(const std::vector<mid::ROFRecord>& midROFs, TH1* histo)
 //_________________________________________________________________________________________________
 void DrawTimeHistos(TH1* hBC, std::vector<TH1*>& histos, std::vector<TH1*>* histosSt)
 {
-  /// draw digit charge histograms
+  /// draw digit time histograms
 
-  int nHistosPerTF = 5;
   int nTF = histos.size() / nHistosPerTF;
   for (int iTF = 0; iTF < nTF; ++iTF) {
-    TCanvas* cHist[2] = {new TCanvas(Form("cTime%d", iTF), Form("cTime%d", iTF), 10, 10, 1200, 1200),
-                         new TCanvas(Form("cTimeIntegral%d", iTF), Form("cTimeIntegral%d", iTF), 10, 10, 1200, 1200)};
-    for (int i = 0; i < 2; ++i) {
+    static const int nHist = 4;
+    TCanvas* cHist[nHist] = {new TCanvas(Form("cTime%d", iTF), Form("cTime%d", iTF), 10, 10, 1200, 1200),
+                             new TCanvas(Form("cCharge%d", iTF), Form("cCharge%d", iTF), 10, 10, 1200, 1200),
+                             new TCanvas(Form("cTimeIntegral%d", iTF), Form("cTimeIntegral%d", iTF), 10, 10, 1200, 1200),
+                             new TCanvas(Form("cChargeIntegral%d", iTF), Form("cChargeIntegral%d", iTF), 10, 10, 1200, 1200)};
+    for (int i = 0; i < nHist; ++i) {
       cHist[i]->Divide(1, 4);
       cHist[i]->cd(1);
       histos[nHistosPerTF * iTF + i]->SetStats(false);
@@ -326,11 +368,11 @@ void DrawTimeHistos(TH1* hBC, std::vector<TH1*>& histos, std::vector<TH1*>* hist
       hBC->SetLineColor(5);
       hBC->SetLineStyle(2);
       hBC->Draw("histsame");
-      histos[nHistosPerTF * iTF + 4]->SetLineColor(3);
-      histos[nHistosPerTF * iTF + 4]->SetLineStyle(2);
-      histos[nHistosPerTF * iTF + 4]->Draw("histsame");
-      histos[nHistosPerTF * iTF + i + 2]->SetLineColor(2);
-      histos[nHistosPerTF * iTF + i + 2]->Draw("histsame");
+      histos[nHistosPerTF * (iTF + 1) - 1]->SetLineColor(3);
+      histos[nHistosPerTF * (iTF + 1) - 1]->SetLineStyle(2);
+      histos[nHistosPerTF * (iTF + 1) - 1]->Draw("histsame");
+      histos[nHistosPerTF * iTF + i + nHist]->SetLineColor(2);
+      histos[nHistosPerTF * iTF + i + nHist]->Draw("histsame");
       for (int iSt = 0; iSt < 3; ++iSt) {
         cHist[i]->cd(iSt + 2);
         histosSt[iSt][nHistosPerTF * iTF + i]->SetStats(false);
@@ -339,13 +381,101 @@ void DrawTimeHistos(TH1* hBC, std::vector<TH1*>& histos, std::vector<TH1*>* hist
         hBC->SetLineColor(5);
         hBC->SetLineStyle(2);
         hBC->Draw("histsame");
-        histosSt[iSt][nHistosPerTF * iTF + 4]->SetLineColor(3);
-        histosSt[iSt][nHistosPerTF * iTF + 4]->SetLineStyle(2);
-        histosSt[iSt][nHistosPerTF * iTF + 4]->Draw("histsame");
-        histosSt[iSt][nHistosPerTF * iTF + i + 2]->SetLineColor(2);
-        histosSt[iSt][nHistosPerTF * iTF + i + 2]->Draw("histsame");
+        histosSt[iSt][nHistosPerTF * (iTF + 1) - 1]->SetLineColor(3);
+        histosSt[iSt][nHistosPerTF * (iTF + 1) - 1]->SetLineStyle(2);
+        histosSt[iSt][nHistosPerTF * (iTF + 1) - 1]->Draw("histsame");
+        histosSt[iSt][nHistosPerTF * iTF + i + nHist]->SetLineColor(2);
+        histosSt[iSt][nHistosPerTF * iTF + i + nHist]->Draw("histsame");
       }
     }
+  }
+}
+
+//_________________________________________________________________________________________________
+void CreateCorrelationHistos(std::vector<TH1*>& histos, const char* extension)
+{
+  /// create correlation histograms between number of digits and total charge in BC time window
+
+  histos.emplace_back(new TH2F(Form("ChargevsNDigits%s", extension), Form("Charge vs N digits per BC (%s);N digits;ADC", extension),
+                               1000, 0, 1000, 10000, 0, 100000));
+  histos.emplace_back(new TH2F(Form("ChargevsNDigitsInt%s", extension), Form("Charge vs N digits in BC window (%s);N digits;ADC", extension),
+                               1000, 0, 1000, 10000, 0, 100000));
+  histos.emplace_back(new TH2F(Form("TrackChargevsNDigits%s", extension), Form("Track charge vs N digits per BC (%s);N digits;ADC", extension),
+                               1000, 0, 1000, 10000, 0, 100000));
+  histos.emplace_back(new TH2F(Form("TrackChargevsNDigitsInt%s", extension), Form("Integrated track charge vs N digits (%s);N digits;ADC", extension),
+                               1000, 0, 1000, 10000, 0, 100000));
+
+  for (auto h : histos) {
+    h->SetDirectory(0);
+  }
+}
+
+//_________________________________________________________________________________________________
+void FillCorrelationHistos(const std::vector<mch::Digit>& digits, bool selectSignal, bool rejectBackground,
+                           TH1* hist, int deMin, int deMax)
+{
+  /// fill correlation histograms between number of digits and total charge associated with tracks
+
+  uint32_t charge(0);
+  int nDigits(0);
+
+  for (const auto& digit : digits) {
+    if (digit.getDetID() < deMin || digit.getDetID() > deMax) {
+      continue;
+    }
+    if (selectSignal) {
+      double nSample = digit.getNofSamples();
+      if (digit.getNofSamples() < minNSamplesSignal || digit.getADC() < signalCut(&nSample, signalParam)) {
+        continue;
+      }
+    }
+    if (rejectBackground) {
+      double nSample = digit.getNofSamples();
+      if (digit.getNofSamples() < minNSamplesBackground || digit.getADC() < backgroundCut(&nSample, backgroundParam)) {
+        continue;
+      }
+    }
+    charge += digit.getADC();
+    ++nDigits;
+  }
+
+  hist->Fill(nDigits, charge);
+}
+
+//_________________________________________________________________________________________________
+void FillCorrelationHistos(std::vector<TH1*>& timeHistos, gsl::span<TH1*> corrHistos)
+{
+  /// fill correlation histograms between number of digits and total charge in BC time window
+
+  if (timeHistos.empty()) {
+    return;
+  }
+
+  int nBC = timeHistos[0]->GetNbinsX();
+  int nTF = timeHistos.size() / nHistosPerTF;
+  for (int iTF = 0; iTF < nTF; ++iTF) {
+    for (int iBC = 1; iBC <= nBC; ++iBC) {
+      for (int i = 0; i < 3; ++i) {
+        if (timeHistos[nHistosPerTF * iTF + 2 * i]->GetBinContent(iBC) > 0) {
+          corrHistos[i]->Fill(timeHistos[nHistosPerTF * iTF + 2 * i]->GetBinContent(iBC),
+                              timeHistos[nHistosPerTF * iTF + 2 * i + 1]->GetBinContent(iBC));
+        }
+      }
+    }
+  }
+}
+
+//_________________________________________________________________________________________________
+void DrawCorrelationHistos(gsl::span<TH1*> histos, const char* extension)
+{
+  /// draw correlation histograms between number of digits and total charge in BC time window
+
+  TCanvas* cCorr = new TCanvas(Form("cCorr%s", extension), Form("cCorr%s", extension), 10, 10, 800, 800);
+  cCorr->Divide(2, 2);
+  for (int i = 0; i < 4; ++i) {
+    cCorr->cd(i + 1);
+    gPad->SetLogz();
+    histos[i]->Draw("boxcolz");
   }
 }
 
