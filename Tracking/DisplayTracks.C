@@ -95,17 +95,21 @@ o2::mch::geo::TransformationCreator transformation;
 static const double muMass = TDatabasePDG::Instance()->GetParticle("mu-")->Mass();
 uint16_t minNSamplesSignal = 17;
 double signalParam[4] = {80., 16., 12., 1.2};
+uint16_t minNSamplesBackground = 14;
 double backgroundParam[4] = {18., 24., -20., 7.};
-bool selectSignal = true; // apply signal cut to display total charge vs nDigits correlations
 int bcIntegrationRange = 6; // time window ([-range, range]) to integrate digits
+int minNDigitsSignal = 10; // minimum number of digits passing the signal cuts to select signal events
 
 constexpr double pi() { return 3.14159265358979323846; }
 std::tuple<TFile*, TTreeReader*> LoadData(const char* fileName, const char* treeName);
-void LoadDigits(TrackInfo& trackInfo, const std::vector<mch::Cluster>& clusters, const std::vector<mch::Digit>& digits);
+void LoadDigits(TrackInfo& trackInfo, const std::vector<mch::Cluster>& clusters, const std::vector<mch::Digit>& digits,
+                bool selectSignal, bool rejectBackground);
 void computeMCHTime(const std::vector<const mch::Digit*>& digits, double& mean, double& rms, int deMin = 100, int deMax = 1025);
 const dataformats::TrackMCHMID* FindMuon(uint32_t iMCHTrack, const std::vector<dataformats::TrackMCHMID>& muonTracks);
 bool ExtrapToVertex(TrackInfo& trackInfo);
 bool IsSelected(TrackInfo& trackInfo);
+bool IsSignal(TrackInfo& trackInfo);
+bool IsReconstructible(TrackInfo& trackInfo);
 void CreateHistosAtVertex(std::vector<TH1*>& histos, const char* extension);
 void FillHistosAtVertex(const TrackInfo& trackInfo, std::vector<TH1*>& histos);
 void DrawHistosAtVertex(std::vector<TH1*> histos[2]);
@@ -124,8 +128,8 @@ double backgroundCut(double* x, double* p);
 void WriteHistos(TFile* f, const char* dirName, const std::vector<TH1*>& histos);
 
 //_________________________________________________________________________________________________
-void DisplayTracks(int runNumber, std::string mchFileName, std::string muonFileName,
-                   bool applyTrackSelection = false, std::string outFileName = "")
+void DisplayTracks(int runNumber, std::string mchFileName, std::string muonFileName, bool applyTrackSelection = false,
+                   bool selectSignal = false, bool rejectBackground = false, std::string outFileName = "")
 {
   /// show the characteristics of the reconstructed tracks
   /// store the ouput histograms in outFileName if any
@@ -242,18 +246,24 @@ void DisplayTracks(int runNumber, std::string mchFileName, std::string muonFileN
           }
           uint32_t orbitInTF = (muon->getIR().orbit - firstTForbit0) % nOrbitsPerTF;
           trackInfo.midTime = orbitInTF * constants::lhc::LHCMaxBunches + muon->getIR().bc;
-          muVector.emplace_back(trackInfo.paramAtVertex.px(), trackInfo.paramAtVertex.py(), trackInfo.paramAtVertex.pz(), muMass);
-          muSign.emplace_back((trackInfo.paramAtVertex.getCharge() > 0) ? 1 : -1);
         }
 
         // fill digit info
-        LoadDigits(trackInfo, *mchClusters, *mchDigits);
+        LoadDigits(trackInfo, *mchClusters, *mchDigits, selectSignal, rejectBackground);
         computeMCHTime(trackInfo.digits, trackInfo.mchTime, trackInfo.mchTimeRMS);
         computeMCHTime(trackInfo.digitsAtClusterPos, trackInfo.mchTimeAtClusterPos, trackInfo.mchTimeRMSAtClusterPos);
         computeMCHTime(trackInfo.digits, trackInfo.mchTimeSt12, trackInfo.mchTimeRMSSt12, 100, 403);
         computeMCHTime(trackInfo.digitsAtClusterPos, trackInfo.mchTimeAtClusterPosSt12, trackInfo.mchTimeRMSAtClusterPosSt12, 100, 403);
         computeMCHTime(trackInfo.digits, trackInfo.mchTimeSt345, trackInfo.mchTimeRMSSt345, 500, 1025);
         computeMCHTime(trackInfo.digitsAtClusterPos, trackInfo.mchTimeAtClusterPosSt345, trackInfo.mchTimeRMSAtClusterPosSt345, 500, 1025);
+
+        // apply digit selection if requested
+        if (selectSignal && !IsSignal(trackInfo)) {
+          continue;
+        }
+        if (rejectBackground && !IsReconstructible(trackInfo)) {
+          continue;
+        }
 
         // fill histograms
         FillHistosAtVertex(trackInfo, histosAtVertex[0]);
@@ -280,6 +290,8 @@ void DisplayTracks(int runNumber, std::string mchFileName, std::string muonFileN
           FillCorrelationHistos(trackInfo.digits, corrHistos[1], trackInfo.mchTime, 100, 203);
           FillCorrelationHistos(trackInfo.digits, corrHistos[2], trackInfo.mchTime, 300, 403);
           FillCorrelationHistos(trackInfo.digits, corrHistos[3], trackInfo.mchTime, 500, 1025);
+          muVector.emplace_back(trackInfo.paramAtVertex.px(), trackInfo.paramAtVertex.py(), trackInfo.paramAtVertex.pz(), muMass);
+          muSign.emplace_back((trackInfo.paramAtVertex.getCharge() > 0) ? 1 : -1);
         }
         FillTimeHistos(trackInfo.digits, trackInfo.mchTime, trackInfo.mchTimeRMS,
                        trackInfo.midTime, {&timeHistos[0], 6});
@@ -376,13 +388,14 @@ std::tuple<TFile*, TTreeReader*> LoadData(const char* fileName, const char* tree
 }
 
 //_________________________________________________________________________________________________
-void LoadDigits(TrackInfo& trackInfo, const std::vector<mch::Cluster>& clusters, const std::vector<mch::Digit>& digits)
+void LoadDigits(TrackInfo& trackInfo, const std::vector<mch::Cluster>& clusters, const std::vector<mch::Digit>& digits,
+                bool selectSignal, bool rejectBackground)
 {
   /// fill the lists of digits associated to the track
 
   int nClusterOnTopOfNoDigit(0);
 
-  for (int iCl = trackInfo.mchTrack.getFirstClusterIdx(); iCl < trackInfo.mchTrack.getLastClusterIdx(); ++iCl) {
+  for (int iCl = trackInfo.mchTrack.getFirstClusterIdx(); iCl <= trackInfo.mchTrack.getLastClusterIdx(); ++iCl) {
 
     const auto& cluster = clusters[iCl];
 
@@ -402,6 +415,18 @@ void LoadDigits(TrackInfo& trackInfo, const std::vector<mch::Cluster>& clusters,
     bool digitFound(false);
     for (uint32_t iDig = 0; iDig < cluster.nDigits; ++iDig) {
       const auto& digit = digits[cluster.firstDigit + iDig];
+      if (selectSignal) {
+        double nSample = digit.getNofSamples();
+        if (digit.getNofSamples() < minNSamplesSignal || digit.getADC() < signalCut(&nSample, signalParam)) {
+          continue;
+        }
+      }
+      if (rejectBackground) {
+        double nSample = digit.getNofSamples();
+        if (digit.getNofSamples() < minNSamplesBackground || digit.getADC() < backgroundCut(&nSample, backgroundParam)) {
+          continue;
+        }
+      }
       trackInfo.digits.push_back(&digit);
       if ((padFoundNB && digit.getPadID() == padIDNB) || (padFoundB && digit.getPadID() == padIDB)) {
         trackInfo.digitsAtClusterPos.push_back(&digit);
@@ -439,6 +464,13 @@ void computeMCHTime(const std::vector<const mch::Digit*>& digits, double& mean, 
       n += 1.;
     }
   }
+
+  if (n == 0.) {
+    LOG(error) << "cannot compute mch time";
+    mean = -1.;
+    return;
+  }
+
   mean /= n;
   t2 /= n;
   rms = sqrt(t2 - mean * mean);
@@ -523,6 +555,42 @@ bool IsSelected(TrackInfo& trackInfo)
   }
 
   return true;
+}
+
+//_________________________________________________________________________________________________
+bool IsSignal(TrackInfo& trackInfo)
+{
+  /// check if the track has still enough digits in time to pass the signal selection
+
+  int nDigits(0);
+
+  for (const auto digit : trackInfo.digits) {
+    if (digit->getTime() >= trackInfo.mchTime - bcIntegrationRange && digit->getTime() <= trackInfo.mchTime + bcIntegrationRange) {
+      ++nDigits;
+    }
+  }
+
+  return nDigits > minNDigitsSignal;
+}
+
+//_________________________________________________________________________________________________
+bool IsReconstructible(TrackInfo& trackInfo)
+{
+  /// check if the track has still enough digits to be reconstructible
+
+  bool hasDigits[10] = {false, false, false, false, false, false, false, false, false, false};
+  for (const auto digit : trackInfo.digits) {
+    hasDigits[digit->getDetID() / 100 - 1] = true;
+  }
+
+  int nFiredChambersSt45 = 0;
+  for (int i = 6; i < 10; ++i) {
+    if (hasDigits[i]) {
+      ++nFiredChambersSt45;
+    }
+  }
+
+  return (hasDigits[0] || hasDigits[1]) && (hasDigits[2] || hasDigits[3]) && (hasDigits[4] || hasDigits[5]) && nFiredChambersSt45 >= 3;
 }
 
 //_________________________________________________________________________________________________
@@ -805,12 +873,6 @@ void FillCorrelationHistos(const std::vector<const mch::Digit*>& digits, TH1* hi
     }
     if (digit->getTime() < timeRef - bcIntegrationRange || digit->getTime() > timeRef + bcIntegrationRange) {
       continue;
-    }
-    if (selectSignal) {
-      double nSample = digit->getNofSamples();
-      if (digit->getNofSamples() < minNSamplesSignal || digit->getADC() < signalCut(&nSample, signalParam)) {
-        continue;
-      }
     }
     charge += digit->getADC();
     ++nDigits;
