@@ -213,7 +213,7 @@ void PrepareTrackExtrapolation(float l3Current, float dipoleCurrent)
   TGeoGlobalMagField::Instance()->Lock();
   mch::TrackExtrap::setField();
   mch::TrackExtrap::useExtrapV2();
-  
+
   base::GeometryManager::loadGeometry("O2geometry.root");
   if (!gGeoManager) {
     exit(-1);
@@ -226,7 +226,7 @@ std::tuple<TFile*, TTreeReader*> LoadData(const char* fileName, const char* tree
   /// open the input file and get the intput tree
 
   TFile* f = TFile::Open(fileName, "READ");
-  if (f->IsZombie()) {
+  if (!f || f->IsZombie()) {
     LOG(ERROR) << "opening file " << fileName << " failed";
     exit(-1);
   }
@@ -318,7 +318,13 @@ bool IsSelected(const mch::TrackMCH& track, const TrackAtVtxStruct& trackAtVtx)
   if (pDCA > nSigmaPDCA * sigmaPDCAWithRes) {
     return false;
   }
-
+/*
+  double pT = sqrt(trackAtVtx.paramAtVertex.px() * trackAtVtx.paramAtVertex.px() +
+                   trackAtVtx.paramAtVertex.py() * trackAtVtx.paramAtVertex.py());
+  if (pT < 1.5) {
+    return false;
+  }
+*/
   return true;
 }
 
