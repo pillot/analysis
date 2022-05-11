@@ -14,12 +14,12 @@ if [ ! -f "o2sim_geometry.root" ]; then
   echo "Cannot find o2sim_geometry.root"
   exit 1
 fi
-if [ ! -f "o2sim_grp.root" ]; then
-  echo "Cannot find o2sim_grp.root"
+if [ ! -f "o2sim_geometry-aligned.root" ]; then
+  echo "Cannot find o2sim_geometry-aligned.root"
   exit 1
 fi
-if [ ! -f "ctf_dictionary.root" ]; then
-  echo "Cannot find ctf_dictionary.root"
+if [ ! -f "o2sim_grp.root" ]; then
+  echo "Cannot find o2sim_grp.root"
   exit 1
 fi
 echo "Checking current directory content:"
@@ -58,6 +58,12 @@ if [[ $MODE == "remote" ]]; then
     export INPUT_FILE_COPY_CMD="\"alien_cp ?src file://?dst\""
   fi
 fi
+if [[ -f "ctf_dictionary.root" ]]; then
+  echo "Use CTF dictionary from ctf_dictionary.root"
+  export ARGS_EXTRA_PROCESS_o2_ctf_reader_workflow="$ARGS_EXTRA_PROCESS_o2_ctf_reader_workflow --ctf-dict ctf_dictionary.root"
+else
+  echo "Use CTF dictionary from CCDB"
+fi
 
 # extra workflow settings
 export BEAMTYPE="pp"
@@ -67,9 +73,13 @@ export DISABLE_ROOT_OUTPUT=""
 export TFDELAY=1
 export NTIMEFRAMES=-1
 export SHMSIZE=16000000000
+#export GLOBALDPLOPT="--no-batch"
 export WORKFLOW_DETECTORS=MCH,MID
+#export ARGS_EXTRA_PROCESS_o2_mid_reco_workflow="--mid-tracker-keep-best"
 export ARGS_EXTRA_PROCESS_o2_mch_reco_workflow="--digits --triggered"
 export CONFIG_EXTRA_PROCESS_o2_mch_reco_workflow="MCHTriggering.triggerRange[0]=-100;MCHTriggering.triggerRange[1]=100;MCHClustering.defaultClusterResolution=0.4;MCHTracking.chamberResolutionX=0.4;MCHTracking.chamberResolutionY=0.4;MCHTracking.sigmaCutForTracking=7.;MCHTracking.sigmaCutForImprovement=6."
+#export ARGS_EXTRA_PROCESS_o2_mch_reco_workflow="--digits"
+#export CONFIG_EXTRA_PROCESS_o2_mch_reco_workflow="MCHClustering.defaultClusterResolution=0.4;MCHTracking.chamberResolutionX=0.1;MCHTracking.chamberResolutionY=0.1;MCHTracking.sigmaCutForTracking=3.;MCHTracking.sigmaCutForImprovement=3."
 
 # prepare to run workflow
 if [[ -f run-workflow-on-inputlist.sh ]]; then
@@ -86,6 +96,8 @@ else
   echo "Use dpl-workflow.sh macro from O2"
   export SETENV_NO_ULIMIT=1
   ln -sf $O2DPG_ROOT/DATA/common/setenv.sh
+  ln -sf $O2DPG_ROOT/DATA/common/getCommonArgs.sh
+  ln -sf $O2_ROOT/prodtests/full-system-test/workflow-setup.sh
   cp $O2_ROOT/prodtests/full-system-test/dpl-workflow.sh .
 fi
 
