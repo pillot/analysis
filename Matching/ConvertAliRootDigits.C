@@ -11,13 +11,13 @@
 #include "AliMUONVDigitStore.h"
 
 #include "Framework/Logger.h"
-#include "MIDSimulation/ColumnDataMC.h"
+#include "DataFormatsMID/ColumnData.h"
 #include "DataFormatsMID/ROFRecord.h"
 
 using namespace o2;
 
 
-void digitsToColumnData(const AliMUONVDigitStore& digitStore, std::vector<mid::ColumnDataMC>& midDigits);
+void digitsToColumnData(const AliMUONVDigitStore& digitStore, std::vector<mid::ColumnData>& midDigits);
 int convertFromLegacyDeId(int detElemId);
 std::pair<int, int> boardToPattern(int boardId, int cathode);
 
@@ -29,12 +29,12 @@ void ConvertAliRootDigits(const char* inFileName, const char* outFileName = "mid
   // read AliRoot digits
   TFile* inFile = TFile::Open(inFileName);
   if (!inFile || inFile->IsZombie()) {
-    LOG(ERROR) << "opening file " << inFileName << " failed";
+    LOG(error) << "opening file " << inFileName << " failed";
     exit(-1);
   }
   TTree* inTree = static_cast<TTree*>(inFile->Get("TreeD"));
   if (!inTree) {
-    LOG(ERROR) << "tree TreeD not found";
+    LOG(error) << "tree TreeD not found";
     exit(-1);
   }
   AliMUONVDigitStore* digitStore = AliMUONVDigitStore::Create(*inTree);
@@ -45,7 +45,7 @@ void ConvertAliRootDigits(const char* inFileName, const char* outFileName = "mid
   // prepare O2 output
   TFile* outFile = TFile::Open(outFileName, "RECREATE");
   TTree* outTree = new TTree("o2sim", "o2sim");
-  std::vector<mid::ColumnDataMC> midDigits{};
+  std::vector<mid::ColumnData> midDigits{};
   outTree->Branch("MIDDigit", &midDigits);
   std::vector<mid::ROFRecord> midROFs{};
   outTree->Branch("MIDROFRecords", &midROFs);
@@ -85,7 +85,7 @@ void ConvertAliRootDigits(const char* inFileName, const char* outFileName = "mid
 }
 
 //_________________________________________________________________________________________________
-void digitsToColumnData(const AliMUONVDigitStore& digitStore, std::vector<mid::ColumnDataMC>& midDigits)
+void digitsToColumnData(const AliMUONVDigitStore& digitStore, std::vector<mid::ColumnData>& midDigits)
 {
   /// converts digits in the old Run2 format to ColumnData
 
@@ -104,11 +104,11 @@ void digitsToColumnData(const AliMUONVDigitStore& digitStore, std::vector<mid::C
 
     // get the column data if already there, or create it
     auto itFirst = std::next(midDigits.begin(), offset);
-    auto itDigit = std::find_if(itFirst, midDigits.end(), [deId, cId = icolumn](const mid::ColumnDataMC& d) {
+    auto itDigit = std::find_if(itFirst, midDigits.end(), [deId, cId = icolumn](const mid::ColumnData& d) {
       return d.deId == deId && d.columnId == cId;
     });
     if (itDigit == midDigits.end()) {
-      itDigit = midDigits.emplace(midDigits.end(), mid::ColumnDataMC{(uint8_t) deId, (uint8_t)icolumn});
+      itDigit = midDigits.emplace(midDigits.end(), mid::ColumnData{(uint8_t) deId, (uint8_t)icolumn});
     }
 
     // update the pattern
