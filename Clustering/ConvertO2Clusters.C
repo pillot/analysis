@@ -21,6 +21,8 @@
 #include "DataFormatsMCH/Cluster.h"
 #include "DataFormatsMCH/Digit.h"
 
+#include "/Users/PILLOT/Work/Alice/Macros/PreClustering/ConvertDigitId.C"
+
 using namespace o2::mch;
 using namespace std;
 
@@ -28,7 +30,7 @@ AliMUONGeometryTransformer alirootTransformer;
 geo::TransformationCreator o2Transformer;
 
 void StoreClusters(std::vector<Cluster>& clusters, std::vector<Digit>& digits, AliMUONClusterStoreV2* clusterStore, bool impl4);
-uint32_t PadId2DigitId(int deId, int padId, bool impl4);
+//uint32_t PadId2DigitId(int deId, int padId, bool impl4);
 
 //------------------------------------------------------------------
 void ConvertO2Clusters(TString inFileName, TString outFileName = "clusters.root", bool impl4 = true,
@@ -47,8 +49,15 @@ void ConvertO2Clusters(TString inFileName, TString outFileName = "clusters.root"
   /// all Digits
 
   // load the digitId converter linked with the requested mapping implementation
-  gSystem->Load(impl4 ? "libO2MCHMappingImpl4" : "libO2MCHMappingImpl3");
-  gROOT->LoadMacro("/Users/PILLOT/Work/Alice/Macros/PreClustering/ConvertDigitId.C++");
+  //gSystem->Load(impl4 ? "libO2MCHMappingImpl4" : "libO2MCHMappingImpl3");
+  //gROOT->LoadMacro("/Users/PILLOT/Work/Alice/Macros/PreClustering/ConvertDigitId.C++");
+
+  // check that the correct mapping library corresponding to the requested implementation has been loaded
+  TString libs = gSystem->GetLibraries();
+  if ((impl4 && libs.Contains("libO2MCHMappingImpl3")) || (!impl4 && libs.Contains("libO2MCHMappingImpl4"))) {
+    printf("FATAL: you must load the requested mapping library before running the macro\n");
+    exit(1);
+  }
 
   // load geometry to change cluster position from local to global coordinates, if needed
   if (localtoGobal) {

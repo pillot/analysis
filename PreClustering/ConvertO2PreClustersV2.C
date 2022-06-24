@@ -15,11 +15,13 @@
 #include "MCHBase/PreCluster.h"
 #include "DataFormatsMCH/Digit.h"
 
+#include "/Users/PILLOT/Work/Alice/Macros/PreClustering/ConvertDigitId.C"
+
 using namespace o2::mch;
 
 void StorePreclusters(std::vector<PreCluster>& preClusters, std::vector<Digit>& digits,
                       AliMUONClusterStoreV2* clusterStore, AliMUONDigitStoreV2R* digitStore, bool impl4);
-uint32_t PadId2DigitId(int deId, int padId, bool impl4);
+//uint32_t PadId2DigitId(int deId, int padId, bool impl4);
 
 //------------------------------------------------------------------
 void ConvertO2PreClustersV2(TString inFileName, TString outFileName = "preclusters.v2.root",
@@ -34,11 +36,18 @@ void ConvertO2PreClustersV2(TString inFileName, TString outFileName = "precluste
   /// All Digits
 
   // load the digitId converter linked with the requested mapping implementation
-  gSystem->Load(impl4 ? "libO2MCHMappingImpl4" : "libO2MCHMappingImpl3");
-  gROOT->LoadMacro("/Users/PILLOT/Work/Alice/Macros/PreClustering/ConvertDigitId.C++");
+  //gSystem->Load(impl4 ? "libO2MCHMappingImpl4" : "libO2MCHMappingImpl3");
+  //gROOT->LoadMacro("/Users/PILLOT/Work/Alice/Macros/PreClustering/ConvertDigitId.C++");
+
+  // check that the correct mapping library corresponding to the requested implementation has been loaded
+  TString libs = gSystem->GetLibraries();
+  if ((impl4 && libs.Contains("libO2MCHMappingImpl3")) || (!impl4 && libs.Contains("libO2MCHMappingImpl4"))) {
+    printf("FATAL: you must load the requested mapping library before running the macro\n");
+    exit(1);
+  }
 
   // open input file
-  ifstream inFile(inFileName,ios::binary);
+  ifstream inFile(inFileName, ios::binary);
   if (!inFile.is_open()) return;
 
   // prepare storage of clusters in an AliMUONVCluster format
