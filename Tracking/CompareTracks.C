@@ -35,6 +35,7 @@
 #include "MCHTracking/TrackExtrap.h"
 
 #include "/Users/PILLOT/Work/Alice/Macros/Tracking/TrackMCHv1.h"
+#include "/Users/PILLOT/Work/Alice/Macros/Tracking/TrackMCHv2.h"
 
 using namespace std;
 using namespace o2::mch;
@@ -433,6 +434,7 @@ void CompareTracks(int runNumber, string inFileName1, int versionFile1, string i
   /// file version 4: param at vertex + dca + rAbs + chi2 + param at 1st cluster + clusters (v2)
   /// file version 5: nTracksAtVtx + nMCHTracks + nClusters + list of Tracks at vertex (param at vertex + dca + rAbs + mchTrackIdx) + list of MCH tracks (v1) + list of clusters (v2)
   /// file version 6: nTracksAtVtx + nMCHTracks + nClusters + list of Tracks at vertex (param at vertex + dca + rAbs + mchTrackIdx) + list of MCH tracks (v2) + list of clusters (v2)
+  /// file version 7: nTracksAtVtx + nMCHTracks + nClusters + list of Tracks at vertex (param at vertex + dca + rAbs + mchTrackIdx) + list of MCH tracks (v3) + list of clusters (v2)
 
   run = runNumber;
 
@@ -484,6 +486,8 @@ void CompareTracks(int runNumber, string inFileName1, int versionFile1, string i
         event1 = ReadNextEvent(inFile1, versionFile1, tracks1);
       } else if (versionFile1 == 5) {
         ReadNextEventV5<TrackMCHv1>(inFile1, event1, tracks1);
+      } else if (versionFile1 == 6) {
+        ReadNextEventV5<TrackMCHv2>(inFile1, event1, tracks1);
       } else {
         ReadNextEventV5<TrackMCH>(inFile1, event1, tracks1);
       }
@@ -505,6 +509,8 @@ void CompareTracks(int runNumber, string inFileName1, int versionFile1, string i
         event2 = ReadNextEvent(inFile2, versionFile2, tracks2);
       } else if (versionFile2 == 5) {
         ReadNextEventV5<TrackMCHv1>(inFile2, event2, tracks2);
+      } else if (versionFile2 == 6) {
+        ReadNextEventV5<TrackMCHv2>(inFile2, event2, tracks2);
       } else {
         ReadNextEventV5<TrackMCH>(inFile2, event2, tracks2);
       }
