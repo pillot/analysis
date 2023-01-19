@@ -131,8 +131,8 @@ void CompareHistosAtVertex(std::vector<TH1*> histos1, int nTF1, std::vector<TH1*
   TLegend* lHist = new TLegend(0.5, 0.65, 0.9, 0.8);
   lHist->SetFillStyle(0);
   lHist->SetBorderSize(0);
-  lHist->AddEntry(histos1[0], Form("file 1: %d TF", nTF1), "l");
-  lHist->AddEntry(histos2[0], Form("file 2: %d TF", nTF2), "l");
+  lHist->AddEntry(histos1[0], Form("file 1: %g tracks", histos1[0]->GetEntries()), "l");
+  lHist->AddEntry(histos2[0], Form("file 2: %g tracks", histos2[0]->GetEntries()), "l");
   cHist->cd(1);
   lHist->Draw("same");
 
@@ -210,23 +210,31 @@ void CompareChargeHistos(gsl::span<TH1*> histos1, int nTF1, gsl::span<TH1*> hist
 
   double nTFref = (nTF1 > nTF2) ? nTF1 : nTF2;
 
-  TCanvas* cHist = new TCanvas(Form("cCharge%s", extension), Form("cCharge%s", extension), 10, 10, 800, 800);
-  cHist->Divide(2, 2);
+  TCanvas* cHist = new TCanvas(Form("cCharge%s", extension), Form("cCharge%s", extension), 10, 10, 1200, 800);
+  cHist->Divide(3, 2);
   for (int i = 0; i < 2; ++i) {
-    cHist->cd(i+1);
+    cHist->cd(3 * i + 1);
     gPad->SetLogy();
     histos1[i]->SetStats(false);
     histos1[i]->Scale(nTFref / nTF1);
+//    histos1[i]->Scale(1. / histos1[i]->GetEntries());
     histos1[i]->SetLineColor(4);
     histos1[i]->Draw("hist");
     histos2[i]->Scale(nTFref / nTF2);
+//    histos2[i]->Scale(1. / histos2[i]->GetEntries());
     histos2[i]->SetLineColor(2);
     histos2[i]->Draw("histsame");
-    cHist->cd(i+3);
-    TH1F* hDiff = static_cast<TH1F*>(histos1[i]->Clone());
-    gPad->SetLogy();
-    hDiff->SetTitle("h1 - h2");
-    hDiff->Add(histos2[i], -1.);
+    cHist->cd(3 * i + 2);
+    TH1F* hRat = static_cast<TH1F*>(histos2[i]->Clone());
+    hRat->SetTitle("h2 / h1");
+    hRat->Divide(histos1[i]);
+    hRat->SetStats(false);
+    hRat->SetLineColor(2);
+    hRat->Draw("hist");
+    cHist->cd(3 * i + 3);
+    TH1F* hDiff = static_cast<TH1F*>(histos2[i]->Clone());
+    hDiff->SetTitle("h2 - h1");
+    hDiff->Add(histos1[i], -1.);
     hDiff->SetStats(false);
     hDiff->SetLineColor(2);
     hDiff->Draw("hist");
