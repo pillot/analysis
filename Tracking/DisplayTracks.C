@@ -17,12 +17,15 @@
 #include <TLegend.h>
 #include <TParameter.h>
 #include <TDatabasePDG.h>
+#include <TGeoManager.h>
 #include <Math/Vector4D.h>
 
+#include "CCDB/BasicCCDBManager.h"
 #include "Framework/Logger.h"
 #include "DetectorsBase/Propagator.h"
 #include "DetectorsBase/GeometryManager.h"
 #include "DataFormatsParameters/GRPObject.h"
+#include "DataFormatsParameters/GRPMagField.h"
 #include "CommonUtils/NameConf.h"
 #include "CommonConstants/LHCConstants.h"
 #include "MCHGeometryTransformer/Transformations.h"
@@ -65,7 +68,11 @@ const std::unordered_map<uint32_t, uint32_t> firstTForbit0perRun{
   {505669, 328291},
   {505673, 30988},
   {505713, 620506},
-  {505720, 5359903}};
+  {505720, 5359903},
+  {514053, 10919},
+  {521520, 84669824},
+  {521684, 49607462},
+  {529270, 68051456}};
 
 struct TrackInfo {
   TrackInfo(const mch::TrackMCH& mch) : mchTrack(mch) {}
@@ -129,7 +136,8 @@ void WriteHistos(TFile* f, const char* dirName, const std::vector<TH1*>& histos)
 
 //_________________________________________________________________________________________________
 void DisplayTracks(int runNumber, std::string mchFileName, std::string muonFileName, bool applyTrackSelection = false,
-                   bool selectSignal = false, bool rejectBackground = false, std::string outFileName = "")
+                   bool selectSignal = false, bool rejectBackground = false, std::string outFileName = "",
+                   bool isMC = false)
 {
   /// show the characteristics of the reconstructed tracks
   /// store the ouput histograms in outFileName if any
@@ -143,12 +151,20 @@ void DisplayTracks(int runNumber, std::string mchFileName, std::string muonFileN
   }
 
   // load magnetic field (from o2sim_grp.root) and geometry (from o2sim_geometry.root)
-  // and prepare track extrapolation to vertex (0,0,0)
   const auto grp = parameters::GRPObject::loadFrom(base::NameConf::getGRPFileName());
+  base::GeometryManager::loadGeometry();
+
+  // load magnetic field and geometry from CCDB
+  // auto ccdb = ccdb::BasicCCDBManager::instance();
+  // auto [tStart, tEnd] = ccdb.getRunDuration(runNumber);
+  // ccdb.setTimestamp(tEnd);
+  // auto grp = ccdb.get<parameters::GRPMagField>("GLO/Config/GRPMagField");
+  // auto geom = ccdb.get<TGeoManager>("GLO/Config/GeometryAligned");
+
+  // and prepare track extrapolation to vertex (0,0,0)
   base::Propagator::initFieldFromGRP(grp);
   mch::TrackExtrap::setField();
   mch::TrackExtrap::useExtrapV2();
-  base::GeometryManager::loadGeometry();
   transformation = o2::mch::geo::transformationFromTGeoManager(*gGeoManager);
 
   // find the first orbit of the first TF of this run
@@ -220,11 +236,18 @@ void DisplayTracks(int runNumber, std::string mchFileName, std::string muonFileN
       //   continue;
       // }
 
+      // if (mchROF.getBCData() != InteractionRecord(3293, 51384998)) {
+      //   continue;
+      // }
+
       std::vector<ROOT::Math::PxPyPzMVector> muVector{};
       std::vector<int> muSign{};
       for (int iMCHTrack = mchROF.getFirstIdx(); iMCHTrack <= mchROF.getLastIdx(); ++iMCHTrack) {
 
         TrackInfo trackInfo((*mchTracks)[iMCHTrack]);
+        // if (trackInfo.mchTrack.getNClusters() != 10) {
+        //   continue;
+        // }
 
         // compute the track parameters at vertex
         if (!ExtrapToVertex(trackInfo)) {
@@ -244,7 +267,10 @@ void DisplayTracks(int runNumber, std::string mchFileName, std::string muonFileN
             LOG(error) << "MID IR orbit < first orbit of first TF !?";
             exit(-1);
           }
-          uint32_t orbitInTF = (muon->getIR().orbit - firstTForbit0) % nOrbitsPerTF;
+          uint32_t orbitInTF = muon->getIR().orbit - firstTForbit0;
+          if (!isMC) {
+            orbitInTF = orbitInTF % nOrbitsPerTF;
+          }
           trackInfo.midTime = orbitInTF * constants::lhc::LHCMaxBunches + muon->getIR().bc;
         }
 
@@ -553,6 +579,12 @@ bool IsSelected(TrackInfo& trackInfo)
   if (pDCA > nSigmaPDCA * sigmaPDCAWithRes) {
     return false;
   }
+
+  // double pT = sqrt(trackInfo.paramAtVertex.px() * trackInfo.paramAtVertex.px() +
+  //                  trackInfo.paramAtVertex.py() * trackInfo.paramAtVertex.py());
+  // if (pT < 1.) {
+  //   return false;
+  // }
 
   return true;
 }
