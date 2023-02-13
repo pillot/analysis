@@ -149,6 +149,18 @@ void CompareHistosAtVertex(std::vector<TH1*> histos1, int nTF1, std::vector<TH1*
     hRat->Draw();
   }
 
+  // draw differences
+  TCanvas* cDiff = new TCanvas(Form("differences_%s", extension), Form("histos2 - histos1 - %s", extension),
+                               10, 10, TMath::Max(nPadsx * 300, 1200), TMath::Max(nPadsy * 300, 900));
+  cDiff->Divide(nPadsx, nPadsy);
+  for (int i = 0; i < (int)histos1.size(); ++i) {
+    cDiff->cd((i / nPadsx) * nPadsx + i % nPadsx + 1);
+    TH1F* hDiff = static_cast<TH1F*>(histos2[i]->Clone());
+    hDiff->Add(histos1[i], -1.);
+    hDiff->SetStats(false);
+    hDiff->SetLineColor(2);
+    hDiff->Draw("hist");
+  }
 }
 
 //_________________________________________________________________________________________________
@@ -158,8 +170,8 @@ void CompareMatchChi2(TH1* h1, int nTF1, TH1* h2, int nTF2)
 
   double nTFref = (nTF1 > nTF2) ? nTF1 : nTF2;
 
-  TCanvas* cHist = new TCanvas("cMatch", "cMatch", 10, 10, 400, 600);
-  cHist->Divide(1, 2);
+  TCanvas* cHist = new TCanvas("cMatch", "cMatch", 10, 10, 900, 300);
+  cHist->Divide(3, 1);
   cHist->cd(1);
   gPad->SetLogy();
   h1->SetStats(false);
@@ -171,11 +183,18 @@ void CompareMatchChi2(TH1* h1, int nTF1, TH1* h2, int nTF2)
   h2->Draw("histsame");
   cHist->cd(2);
   TH1F* hRat = static_cast<TH1F*>(h2->Clone());
-  hRat->SetTitle("h2 / h1 ratio");
+  hRat->SetTitle("h2 / h1");
   hRat->Divide(h1);
   hRat->SetStats(false);
   hRat->SetLineColor(2);
   hRat->Draw();
+  cHist->cd(3);
+  TH1F* hDiff = static_cast<TH1F*>(h2->Clone());
+  hDiff->SetTitle("h2 - h1");
+  hDiff->Add(h1, -1.);
+  hDiff->SetStats(false);
+  hDiff->SetLineColor(2);
+  hDiff->Draw("hist");
 
   TLegend* lHist = new TLegend(0.5, 0.65, 0.9, 0.8);
   lHist->SetFillStyle(0);
