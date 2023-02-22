@@ -72,7 +72,8 @@ const std::unordered_map<uint32_t, uint32_t> firstTForbit0perRun{
   {514053, 10919},
   {521520, 84669824},
   {521684, 49607462},
-  {529270, 68051456}};
+  {529270, 68051456},
+  {529691, 74406400}};
 
 struct TrackInfo {
   TrackInfo(const mch::TrackMCH& mch) : mchTrack(mch) {}
@@ -111,6 +112,7 @@ constexpr double pi() { return 3.14159265358979323846; }
 std::tuple<TFile*, TTreeReader*> LoadData(const char* fileName, const char* treeName);
 void LoadDigits(TrackInfo& trackInfo, const std::vector<mch::Cluster>& clusters, const std::vector<mch::Digit>& digits,
                 bool selectSignal, bool rejectBackground);
+uint32_t IRtoBCinTF(InteractionRecord ir, uint32_t firstTForbit0, bool isMC);
 void computeMCHTime(const std::vector<const mch::Digit*>& digits, double& mean, double& rms, int deMin = 100, int deMax = 1025);
 const dataformats::TrackMCHMID* FindMuon(uint32_t iMCHTrack, const std::vector<dataformats::TrackMCHMID>& muonTracks);
 bool ExtrapToVertex(TrackInfo& trackInfo);
@@ -124,6 +126,9 @@ void CreateTimeHistos(std::vector<TH1*>& histos, const char* extension);
 void FillTimeHistos(const std::vector<const mch::Digit*>& digits, double mchTime, double mchTimeRMS, int midTime,
                     gsl::span<TH1*> histos, int deMin = 100, int deMax = 1025);
 void DrawTimeHistos(gsl::span<TH1*> histos, const char* extension);
+void CreateROFTimeHistos(std::vector<TH1*>& histos);
+void FillROFTimeHistos(int rofTime[2], double mchTime, int midTime, gsl::span<TH1*> histos);
+void DrawROFTimeHistos(gsl::span<TH1*> histos);
 void CreateChargeHistos(std::vector<TH1*>& histos, const char* extension);
 void FillChargeHistos(const std::vector<const mch::Digit*>& digits, gsl::span<TH1*> histos, int deMin = 100, int deMax = 1025);
 void DrawChargeHistos(gsl::span<TH1*> histos, const char* extension);
@@ -159,6 +164,7 @@ void DisplayTracks(int runNumber, std::string mchFileName, std::string muonFileN
   // auto [tStart, tEnd] = ccdb.getRunDuration(runNumber);
   // ccdb.setTimestamp(tEnd);
   // auto grp = ccdb.get<parameters::GRPMagField>("GLO/Config/GRPMagField");
+  // ccdb.setURL("http://localhost:6060");
   // auto geom = ccdb.get<TGeoManager>("GLO/Config/GeometryAligned");
 
   // and prepare track extrapolation to vertex (0,0,0)
@@ -211,6 +217,8 @@ void DisplayTracks(int runNumber, std::string mchFileName, std::string muonFileN
   std::vector<TH1*> timeHistosSt345{};
   CreateTimeHistos(timeHistosSt345, "St345AllDig");
   CreateTimeHistos(timeHistosSt345, "St345");
+  std::vector<TH1*> rofTimeHistos{};
+  CreateROFTimeHistos(rofTimeHistos);
   std::vector<TH1*> chargeHistos{};
   CreateChargeHistos(chargeHistos, "AllDig");
   CreateChargeHistos(chargeHistos, "");
@@ -231,6 +239,10 @@ void DisplayTracks(int runNumber, std::string mchFileName, std::string muonFileN
   while (mchReader->Next() && muonReader->Next()) {
 
     for (const auto& mchROF : *mchROFs) {
+
+      int rofTime[2] = {0, 0};
+      rofTime[0] = IRtoBCinTF(mchROF.getBCData(), firstTForbit0, isMC);
+      rofTime[1] = rofTime[0] + mchROF.getBCWidth() - 1;
 
       // if (mchROF.getBCWidth() != 1) {
       //   continue;
@@ -263,20 +275,20 @@ void DisplayTracks(int runNumber, std::string mchFileName, std::string muonFileN
         // find the corresponding MCH-MID matched track
         auto muon = FindMuon(iMCHTrack, *muonTracks);
         if (muon) {
-          if (muon->getIR().orbit < firstTForbit0) {
-            LOG(error) << "MID IR orbit < first orbit of first TF !?";
-            exit(-1);
+          trackInfo.midTime = IRtoBCinTF(muon->getIR(), firstTForbit0, isMC);
+          // check that MID time is within MCH ROF boundaries
+          if (trackInfo.midTime < rofTime[0] || trackInfo.midTime > rofTime[1]) {
+            LOGP(error, "MID time {} outside ROF boundaries [{},{}]", trackInfo.midTime, rofTime[0], rofTime[1]);
           }
-          uint32_t orbitInTF = muon->getIR().orbit - firstTForbit0;
-          if (!isMC) {
-            orbitInTF = orbitInTF % nOrbitsPerTF;
-          }
-          trackInfo.midTime = orbitInTF * constants::lhc::LHCMaxBunches + muon->getIR().bc;
         }
 
         // fill digit info
         LoadDigits(trackInfo, *mchClusters, *mchDigits, selectSignal, rejectBackground);
         computeMCHTime(trackInfo.digits, trackInfo.mchTime, trackInfo.mchTimeRMS);
+        // float dt = (*mchTracks)[iMCHTrack].getTimeMUS().getTimeStamp() - static_cast<float>(o2::constants::lhc::LHCBunchSpacingMUS * trackInfo.mchTime);
+        // if (dt != 0.f) {
+        //   LOGP(info, "dt = {}", dt);
+        // }
         computeMCHTime(trackInfo.digitsAtClusterPos, trackInfo.mchTimeAtClusterPos, trackInfo.mchTimeRMSAtClusterPos);
         computeMCHTime(trackInfo.digits, trackInfo.mchTimeSt12, trackInfo.mchTimeRMSSt12, 100, 403);
         computeMCHTime(trackInfo.digitsAtClusterPos, trackInfo.mchTimeAtClusterPosSt12, trackInfo.mchTimeRMSAtClusterPosSt12, 100, 403);
@@ -289,6 +301,13 @@ void DisplayTracks(int runNumber, std::string mchFileName, std::string muonFileN
         }
         if (rejectBackground && !IsReconstructible(trackInfo)) {
           continue;
+        }
+
+        // check that digits' time is within ROF boundaries (not valid in trigger mode)
+        for (const auto digit : trackInfo.digits) {
+          if (digit->getTime() < rofTime[0] || digit->getTime() > rofTime[1]) {
+            LOGP(error, "digit time {} outside ROF boundaries [{},{}]", digit->getTime(), rofTime[0], rofTime[1]);
+          }
         }
 
         // fill histograms
@@ -331,6 +350,7 @@ void DisplayTracks(int runNumber, std::string mchFileName, std::string muonFileN
                        trackInfo.midTime, {&timeHistosSt345[0], 6}, 500, 1025);
         FillTimeHistos(trackInfo.digitsAtClusterPos, trackInfo.mchTimeAtClusterPosSt345, trackInfo.mchTimeRMSAtClusterPosSt345,
                        trackInfo.midTime, {&timeHistosSt345[6], 6}, 500, 1025);
+        FillROFTimeHistos(rofTime, trackInfo.mchTime, trackInfo.midTime, rofTimeHistos);
       }
 
       if (muVector.size() > 1) {
@@ -360,6 +380,7 @@ void DisplayTracks(int runNumber, std::string mchFileName, std::string muonFileN
     WriteHistos(fOut, "time", timeHistos);
     WriteHistos(fOut, "time", timeHistosSt12);
     WriteHistos(fOut, "time", timeHistosSt345);
+    WriteHistos(fOut, "time", rofTimeHistos);
     WriteHistos(fOut, "charge", chargeHistos);
     WriteHistos(fOut, "charge", chargeHistosSt1);
     WriteHistos(fOut, "charge", chargeHistosSt2);
@@ -379,6 +400,7 @@ void DisplayTracks(int runNumber, std::string mchFileName, std::string muonFileN
   DrawTimeHistos({&timeHistosSt12[6], 6}, "St12_DigitsAtClusterPos");
   DrawTimeHistos({&timeHistosSt345[0], 6}, "St345_AllDigits");
   DrawTimeHistos({&timeHistosSt345[6], 6}, "St345_DigitsAtClusterPos");
+  DrawROFTimeHistos({&rofTimeHistos[0], 6});
   DrawChargeHistos({&chargeHistos[0], 6}, "AllDigits");
   DrawChargeHistos({&chargeHistos[6], 6}, "DigitsAtClusterPos");
   DrawChargeHistos({&chargeHistosSt1[0], 6}, "St1_AllDigits");
@@ -471,6 +493,20 @@ void LoadDigits(TrackInfo& trackInfo, const std::vector<mch::Cluster>& clusters,
 }
 
 //_________________________________________________________________________________________________
+uint32_t IRtoBCinTF(InteractionRecord ir, uint32_t firstTForbit0, bool isMC)
+{
+  /// convert IR to BC from TF start
+  if (ir.orbit < firstTForbit0) {
+    LOGP(error, "IR orbit {} < first orbit of first TF {} !?", ir.orbit, firstTForbit0);
+  }
+  uint32_t orbitInTF = ir.orbit - firstTForbit0;
+  if (!isMC) {
+    orbitInTF = orbitInTF % nOrbitsPerTF;
+  }
+  return orbitInTF * constants::lhc::LHCMaxBunches + ir.bc;
+}
+
+//_________________________________________________________________________________________________
 void computeMCHTime(const std::vector<const mch::Digit*>& digits, double& mean, double& rms, int deMin, int deMax)
 {
   /// compute the average time and time dispersion of MCH digits
@@ -500,6 +536,9 @@ void computeMCHTime(const std::vector<const mch::Digit*>& digits, double& mean, 
   mean /= n;
   t2 /= n;
   rms = sqrt(t2 - mean * mean);
+  // add 1.5 BC to account for the fact that the actual digit time in BC units
+  // can be between t and t+3, hence t+1.5 in average
+  mean += 1.5;
 }
 
 //_________________________________________________________________________________________________
@@ -597,7 +636,7 @@ bool IsSignal(TrackInfo& trackInfo)
   int nDigits(0);
 
   for (const auto digit : trackInfo.digits) {
-    if (digit->getTime() >= trackInfo.mchTime - bcIntegrationRange && digit->getTime() <= trackInfo.mchTime + bcIntegrationRange) {
+    if (digit->getTime() + 1.5 >= trackInfo.mchTime - bcIntegrationRange && digit->getTime() + 1.5 <= trackInfo.mchTime + bcIntegrationRange) {
       ++nDigits;
     }
   }
@@ -735,7 +774,7 @@ void FillTimeHistos(const std::vector<const mch::Digit*>& digits, double mchTime
 
   for (const auto digit : digits) {
     if (digit->getDetID() >= deMin && digit->getDetID() <= deMax) {
-      histos[0]->Fill(digit->getTime() - mchTime);
+      histos[0]->Fill(digit->getTime() + 1.5 - mchTime);
     }
   }
   histos[3]->Fill(mchTimeRMS);
@@ -743,8 +782,8 @@ void FillTimeHistos(const std::vector<const mch::Digit*>& digits, double mchTime
   if (midTime >= 0) {
     for (const auto digit : digits) {
       if (digit->getDetID() >= deMin && digit->getDetID() <= deMax) {
-        histos[1]->Fill(digit->getTime() - mchTime);
-        histos[2]->Fill(digit->getTime() - midTime);
+        histos[1]->Fill(digit->getTime() + 1.5 - mchTime);
+        histos[2]->Fill(digit->getTime() + 1.5 - midTime);
       }
     }
     histos[4]->Fill(mchTimeRMS);
@@ -791,6 +830,70 @@ void DrawTimeHistos(gsl::span<TH1*> histos, const char* extension)
   lHist->AddEntry(histos[1], "matched tracks", "l");
   cHist->cd(1);
   lHist->Draw("same");
+}
+
+//_________________________________________________________________________________________________
+void CreateROFTimeHistos(std::vector<TH1*>& histos)
+{
+  /// create histograms to compare the track time with ROF time range
+
+  histos.emplace_back(new TH1F("rofMinVsMCHTime", "ROF boundaries vs <MCH time>;#Deltat (BC)", 8001, -2000.25, 2000.25));
+  histos.emplace_back(new TH1F("rofMaxVsMCHTime", "ROF boundaries vs <MCH time>;#Deltat (BC)", 8001, -2000.25, 2000.25));
+  histos.emplace_back(new TH1F("rofMinVsMIDTime", "ROF boundaries vs MID time;#Deltat (BC)", 4001, -2000.5, 2000.5));
+  histos.emplace_back(new TH1F("rofMaxVsMIDTime", "ROF boundaries vs MID time;#Deltat (BC)", 4001, -2000.5, 2000.5));
+  histos.emplace_back(new TH1F("rofCenterVsMCHTime", "ROF center vs <MCH time>;#Deltat (BC)", 8001, -2000.25, 2000.25));
+  histos.emplace_back(new TH1F("rofCenterVsMIDTime", "ROF center vs MID time;#Deltat (BC)", 8001, -2000.25, 2000.25));
+
+  for (auto h : histos) {
+    h->SetDirectory(0);
+  }
+}
+//_________________________________________________________________________________________________
+void FillROFTimeHistos(int rofTime[2], double mchTime, int midTime, gsl::span<TH1*> histos)
+{
+  /// fill histograms to compare the track time with ROF time range
+
+  double center = 0.5 * (rofTime[1] + rofTime[0]);
+
+  histos[0]->Fill(rofTime[0] - mchTime);
+  histos[1]->Fill(rofTime[1] - mchTime);
+  histos[4]->Fill(center - mchTime);
+
+  if (midTime >= 0) {
+    histos[2]->Fill(rofTime[0] - midTime);
+    histos[3]->Fill(rofTime[1] - midTime);
+    histos[5]->Fill(center - midTime);
+  }
+}
+
+//_________________________________________________________________________________________________
+void DrawROFTimeHistos(gsl::span<TH1*> histos)
+{
+  /// draw histograms to compare the track time with ROF time range
+  TCanvas* cHist = new TCanvas("cROFTime", "cROFTime", 10, 10, 800, 800);
+  cHist->Divide(2, 2);
+  cHist->cd(1);
+  gPad->SetLogy();
+  histos[0]->SetStats(false);
+  histos[0]->SetLineColor(3);
+  histos[0]->Draw();
+  histos[1]->SetLineColor(6);
+  histos[1]->Draw("same");
+  cHist->cd(2);
+  gPad->SetLogy();
+  histos[2]->SetStats(false);
+  histos[2]->SetLineColor(3);
+  histos[2]->Draw();
+  histos[3]->SetLineColor(6);
+  histos[3]->Draw("same");
+  cHist->cd(3);
+  gPad->SetLogy();
+  histos[4]->SetStats(false);
+  histos[4]->Draw();
+  cHist->cd(4);
+  gPad->SetLogy();
+  histos[5]->SetStats(false);
+  histos[5]->Draw();
 }
 
 //_________________________________________________________________________________________________
@@ -903,7 +1006,7 @@ void FillCorrelationHistos(const std::vector<const mch::Digit*>& digits, TH1* hi
     if (digit->getDetID() < deMin || digit->getDetID() > deMax) {
       continue;
     }
-    if (digit->getTime() < timeRef - bcIntegrationRange || digit->getTime() > timeRef + bcIntegrationRange) {
+    if (digit->getTime() + 1.5 < timeRef - bcIntegrationRange || digit->getTime() + 1.5 > timeRef + bcIntegrationRange) {
       continue;
     }
     charge += digit->getADC();
