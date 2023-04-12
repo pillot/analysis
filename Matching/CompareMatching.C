@@ -16,7 +16,11 @@
 #include <TLegend.h>
 
 #include "Framework/Logger.h"
+#include "CCDB/BasicCCDBManager.h"
+#include "DetectorsBase/Propagator.h"
 #include "DetectorsBase/GeometryManager.h"
+#include "DataFormatsParameters/GRPObject.h"
+#include "DataFormatsParameters/GRPMagField.h"
 #include "Field/MagneticField.h"
 #include "MCHTracking/TrackParam.h"
 #include "MCHTracking/TrackExtrap.h"
@@ -35,12 +39,15 @@ struct VertexStruct {
 
 struct TrackAtVtxStruct {
   mch::TrackParam paramAtVertex{};
+  double dcaX = 0.;
+  double dcaY = 0.;
   double dca = 0.;
   double rAbs = 0.;
 };
 
 constexpr double pi() { return 3.14159265358979323846; }
 void LoadVertices(std::string vtxFileName, std::vector<VertexStruct>& vertices);
+bool LoadCCDB(int run);
 void PrepareTrackExtrapolation(float l3Current, float dipoleCurrent);
 std::tuple<TFile*, TTreeReader*> LoadData(const char* fileName, const char* treeName);
 const dataformats::TrackMCHMID* FindMuon(uint32_t iMCHTrack, const std::vector<dataformats::TrackMCHMID>& muonTracks);
@@ -53,9 +60,12 @@ void DrawComparisonsAtVertex(std::vector<TH1*> histos[4]);
 void CreateHistosAtMID(std::vector<TH1*>& histos);
 void FillHistosAtMID(double chi21, double matchChi21, double chi22, double matchChi22, std::vector<TH1*>& histos);
 void DrawHistosAtMID(std::vector<TH1*>& histos);
+void CreateResiduals(std::vector<TH1*>& histos, const char* extension);
+void FillResiduals(double dcaX, double dcaY, double mchmidX, double mchmidY, std::vector<TH1*>& histos);
+void DrawResiduals(std::vector<TH1*> histos[2]);
 
 //_________________________________________________________________________________________________
-void CompareMatching(float l3Current, float dipoleCurrent, std::string vtxFileName, const char* mchFileName,
+void CompareMatching(int run, float l3Current, float dipoleCurrent, std::string vtxFileName, const char* mchFileName,
                      const char* midFileName1, const char* muonFileName1,
                      const char* midFileName2, const char* muonFileName2,
                      bool applyTrackSelection = false, bool printDifferences = true, double precision = 1.e-4)
@@ -65,7 +75,11 @@ void CompareMatching(float l3Current, float dipoleCurrent, std::string vtxFileNa
   // get vertices and prepare track extrapolation
   std::vector<VertexStruct> vertices{};
   LoadVertices(vtxFileName, vertices);
-  PrepareTrackExtrapolation(l3Current, dipoleCurrent);
+  if (run > 0) {
+    LoadCCDB(run);
+  } else {
+    PrepareTrackExtrapolation(l3Current, dipoleCurrent);
+  }
 
   // read the input data
   auto [fMCH, mchReader] = LoadData(mchFileName, "o2sim");
@@ -90,6 +104,9 @@ void CompareMatching(float l3Current, float dipoleCurrent, std::string vtxFileNa
   CreateHistosAtVertex(histosAtVertex[1], "2");
   std::vector<TH1*> histosAtMID{};
   CreateHistosAtMID(histosAtMID);
+  std::vector<TH1*> residuals[2] = {{}, {}};
+  CreateResiduals(residuals[0], "1");
+  CreateResiduals(residuals[1], "2");
 
   VertexStruct vertex{};
   TrackAtVtxStruct mchTrackAtVtx{};
@@ -104,7 +121,7 @@ void CompareMatching(float l3Current, float dipoleCurrent, std::string vtxFileNa
         if (event < vertices.size()) {
           vertex = vertices[event];
         } else {
-          LOG(ERROR) << "missing vertex for event" << event;
+          LOG(error) << "missing vertex for event" << event;
           exit(-1);
         }
       }
@@ -114,7 +131,7 @@ void CompareMatching(float l3Current, float dipoleCurrent, std::string vtxFileNa
         // compute the track parameters at vertex
         const auto& mchTrack = (*mchTracks)[iMCHTrack];
         if (!ExtrapToVertex(mchTrack, vertex, mchTrackAtVtx)) {
-          LOG(ERROR) << "track extrapolation to vertex failed";
+          LOG(error) << "track extrapolation to vertex failed";
           continue;
         }
 
@@ -127,20 +144,31 @@ void CompareMatching(float l3Current, float dipoleCurrent, std::string vtxFileNa
         auto muon1 = FindMuon(iMCHTrack, *muonTracks1);
         auto muon2 = FindMuon(iMCHTrack, *muonTracks2);
 
+        // if (mchTrack.getX() > 0.) {
+        //   muon1 = nullptr;
+        // } else {
+        //   muon2 = nullptr;
+        // }
+
         // fill histograms
         double chi21(-1.), matchChi21(-1.), chi22(-1.), matchChi22(-1.);
+        const double* mchParam = mchTrack.getParametersAtMID();
         FillHistosAtVertex(mchTrack, mchTrackAtVtx, comparisonsAtVertex[0]);
         if (muon1) {
           FillHistosAtVertex(mchTrack, mchTrackAtVtx, histosAtVertex[0]);
           const auto& midTrack1 = (*midTracks1)[muon1->getMIDRef().getIndex()];
           chi21 = (midTrack1.getNDF() > 0) ? midTrack1.getChi2OverNDF() : 0.;
           matchChi21 = muon1->getMatchChi2OverNDF();
+          FillResiduals(mchTrackAtVtx.dcaX, mchTrackAtVtx.dcaY,
+                        mchParam[0] - midTrack1.getPositionX(), mchParam[2] - midTrack1.getPositionY(), residuals[0]);
         }
         if (muon2) {
           FillHistosAtVertex(mchTrack, mchTrackAtVtx, histosAtVertex[1]);
           const auto& midTrack2 = (*midTracks2)[muon2->getMIDRef().getIndex()];
           chi22 = (midTrack2.getNDF() > 0) ? midTrack2.getChi2OverNDF() : 0.;
           matchChi22 = muon2->getMatchChi2OverNDF();
+          FillResiduals(mchTrackAtVtx.dcaX, mchTrackAtVtx.dcaY,
+                        mchParam[0] - midTrack2.getPositionX(), mchParam[2] - midTrack2.getPositionY(), residuals[1]);
         }
         if (muon1 && muon2) {
           FillHistosAtVertex(mchTrack, mchTrackAtVtx, comparisonsAtVertex[1]);
@@ -166,6 +194,7 @@ void CompareMatching(float l3Current, float dipoleCurrent, std::string vtxFileNa
   DrawHistosAtVertex(histosAtVertex);
   DrawComparisonsAtVertex(comparisonsAtVertex);
   DrawHistosAtMID(histosAtMID);
+  DrawResiduals(residuals);
 
   fMCH->Close();
   fMID1->Close();
@@ -185,7 +214,7 @@ void LoadVertices(std::string vtxFileName, std::vector<VertexStruct>& vertices)
 
   ifstream inFile(vtxFileName, ios::binary);
   if (!inFile.is_open()) {
-    LOG(ERROR) << "fail opening vertex file";
+    LOG(error) << "fail opening vertex file";
     exit(-1);
   }
 
@@ -193,13 +222,34 @@ void LoadVertices(std::string vtxFileName, std::vector<VertexStruct>& vertices)
   while (inFile.read(reinterpret_cast<char*>(&event), sizeof(int))) {
 
     if (event != ++expectedEvent) {
-      LOG(ERROR) << "event " << expectedEvent << " missing";
+      LOG(error) << "event " << expectedEvent << " missing";
       exit(-1);
     }
 
     vertices.emplace_back();
     inFile.read(reinterpret_cast<char*>(&vertices.back()), sizeof(VertexStruct));
   }
+}
+
+//_________________________________________________________________________________________________
+bool LoadCCDB(int run)
+{
+  /// access CCDB and prepare track extrapolation to vertex
+
+  // load magnetic field and geometry from CCDB
+  auto ccdb = o2::ccdb::BasicCCDBManager::instance();
+  auto [tStart, tEnd] = ccdb.getRunDuration(run);
+  ccdb.setTimestamp(tEnd);
+  auto grp = ccdb.get<o2::parameters::GRPMagField>("GLO/Config/GRPMagField");
+  // ccdb.setURL("http://localhost:6060");
+  auto geom = ccdb.get<TGeoManager>("GLO/Config/GeometryAligned");
+
+  // and prepare track extrapolation to vertex
+  o2::base::Propagator::initFieldFromGRP(grp);
+  mch::TrackExtrap::setField();
+  mch::TrackExtrap::useExtrapV2();
+
+  return true;
 }
 
 //_________________________________________________________________________________________________
@@ -227,13 +277,13 @@ std::tuple<TFile*, TTreeReader*> LoadData(const char* fileName, const char* tree
 
   TFile* f = TFile::Open(fileName, "READ");
   if (!f || f->IsZombie()) {
-    LOG(ERROR) << "opening file " << fileName << " failed";
+    LOG(error) << "opening file " << fileName << " failed";
     exit(-1);
   }
 
   TTreeReader* r = new TTreeReader(treeName, f);
   if (r->IsZombie()) {
-    LOG(ERROR) << "tree " << treeName << " not found";
+    LOG(error) << "tree " << treeName << " not found";
     exit(-1);
   }
 
@@ -271,9 +321,9 @@ bool ExtrapToVertex(const mch::TrackMCH& track, VertexStruct& vertex, TrackAtVtx
   if (!mch::TrackExtrap::extrapToVertexWithoutBranson(trackParamAtDCA, vertex.z)) {
     return false;
   }
-  double dcaX = trackParamAtDCA.getNonBendingCoor() - vertex.x;
-  double dcaY = trackParamAtDCA.getBendingCoor() - vertex.y;
-  trackAtVtx.dca = sqrt(dcaX * dcaX + dcaY * dcaY);
+  trackAtVtx.dcaX = trackParamAtDCA.getNonBendingCoor() - vertex.x;
+  trackAtVtx.dcaY = trackParamAtDCA.getBendingCoor() - vertex.y;
+  trackAtVtx.dca = sqrt(trackAtVtx.dcaX * trackAtVtx.dcaX + trackAtVtx.dcaY * trackAtVtx.dcaY);
 
   // extrapolate to the end of the absorber
   mch::TrackParam trackParamAtRAbs(track.getZ(), track.getParameters());
@@ -538,6 +588,7 @@ void DrawHistosAtMID(std::vector<TH1*>& histos)
   gPad->SetLogy();
   histos[0]->SetStats(false);
   histos[0]->SetLineColor(4);
+  histos[0]->GetXaxis()->SetRangeUser(0., 16.);
   histos[0]->Draw();
   histos[1]->SetLineColor(2);
   histos[1]->Draw("same");
@@ -548,11 +599,13 @@ void DrawHistosAtMID(std::vector<TH1*>& histos)
   hRat->Divide(histos[0]);
   hRat->SetStats(false);
   hRat->SetLineColor(2);
+  hRat->GetXaxis()->SetRangeUser(0., 16.);
   hRat->Draw();
   cHist->cd(2);
   gPad->SetLogy();
   histos[2]->SetStats(false);
   histos[2]->SetLineColor(4);
+  histos[2]->GetXaxis()->SetRangeUser(0., 16.);
   histos[2]->Draw();
   histos[3]->SetLineColor(877);
   histos[3]->Draw("same");
@@ -567,14 +620,19 @@ void DrawHistosAtMID(std::vector<TH1*>& histos)
   hRat->Divide(histos[2]);
   hRat->SetStats(false);
   hRat->SetLineColor(2);
+  hRat->GetXaxis()->SetRangeUser(0., 16.);
   hRat->Draw();
   cHist->cd(3);
   gPad->SetLogz();
   histos[6]->SetStats(false);
+  histos[6]->GetXaxis()->SetRangeUser(0., 16.);
+  histos[6]->GetYaxis()->SetRangeUser(0., 25.);
   histos[6]->Draw("colz");
   cHist->cd(6);
   gPad->SetLogz();
   histos[7]->SetStats(false);
+  histos[7]->GetXaxis()->SetRangeUser(0., 16.);
+  histos[7]->GetYaxis()->SetRangeUser(0., 25.);
   histos[7]->Draw("colz");
 
   TLegend* lHist1 = new TLegend(0.5, 0.75, 0.9, 0.85);
@@ -594,4 +652,58 @@ void DrawHistosAtMID(std::vector<TH1*>& histos)
   lHist2->AddEntry(histos[5], Form("%g tracks 2 match add", histos[5]->GetEntries()), "l");
   cHist->cd(2);
   lHist2->Draw("same");
+}
+
+//_________________________________________________________________________________________________
+void CreateResiduals(std::vector<TH1*>& histos, const char* extension)
+{
+  /// create residuals at vertex, i.e. DCA, and MCH-MID residuals
+
+  histos.emplace_back(new TH1F(Form("dcax%s", extension), "DCA_{x};DCA_{x} (cm)", 301, -150.5, 150.5));
+  histos.emplace_back(new TH1F(Form("dcay%s", extension), "DCA_{y};DCA_{y} (cm)", 301, -150.5, 150.5));
+  histos.emplace_back(new TH1F(Form("mchmidx%s", extension), "MCH-MID_{X};x_{MCH} - x_{MID} (cm)", 402, -100.5, 100.5));
+  histos.emplace_back(new TH1F(Form("mchmidy%s", extension), "MCH-MID_{Y};y_{MCH} - y_{MID} (cm)", 402, -100.5, 100.5));
+
+  for (auto h : histos) {
+    h->SetDirectory(0);
+  }
+}
+
+//_________________________________________________________________________________________________
+void FillResiduals(double dcaX, double dcaY, double mchmidX, double mchmidY, std::vector<TH1*>& histos)
+{
+  /// fill residuals at vertex, i.e. DCA, and MCH-MID residuals
+
+  histos[0]->Fill(dcaX);
+  histos[1]->Fill(dcaY);
+  histos[2]->Fill(mchmidX);
+  histos[3]->Fill(mchmidY);
+}
+
+//_________________________________________________________________________________________________
+void DrawResiduals(std::vector<TH1*> histos[2])
+{
+  /// draw residuals at vertex, i.e. DCA, and MCH-MID residuals
+
+  TCanvas* cHist = new TCanvas("residuals", "residuals", 10, 10, 600, 600);
+  cHist->Divide(2, 2);
+  
+  // draw histograms
+  for (int i = 0; i < 4; ++i) {
+    cHist->cd(i + 1);
+    gPad->SetLogy();
+    histos[0][i]->SetLineColor(4);
+    histos[0][i]->Draw();
+    histos[1][i]->SetLineColor(2);
+    histos[1][i]->Draw("sames");
+  }
+
+  // add a legend
+  TLegend* lHist = new TLegend(0.1, 0.8, 0.5, 0.9);
+  lHist->SetFillStyle(0);
+  lHist->SetBorderSize(0);
+  lHist->AddEntry(histos[0][0], Form("%g tracks in file 1", histos[0][0]->GetEntries()), "l");
+  lHist->AddEntry(histos[1][0], Form("%g tracks in file 2", histos[1][0]->GetEntries()), "l");
+  cHist->cd(1);
+  lHist->Draw("sames");
 }
