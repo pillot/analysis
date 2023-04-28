@@ -4,7 +4,14 @@
 #include <vector>
 #include <algorithm>
 #include <type_traits>
+#include <tuple>
+#include <string>
 
+#include <TString.h>
+#include <TFile.h>
+#include <TTree.h>
+#include <TTreeReader.h>
+#include <TTreeReaderValue.h>
 #include <TMath.h>
 #include <TStyle.h>
 #include <TCanvas.h>
@@ -23,9 +30,14 @@
 #include "AliGeomManager.h"
 #include "AliMUONCDB.h"
 
+#include "CCDB/BasicCCDBManager.h"
+#include "DetectorsBase/Propagator.h"
 #include "DetectorsBase/GeometryManager.h"
+#include "DataFormatsParameters/GRPObject.h"
+#include "DataFormatsParameters/GRPMagField.h"
 #include "Field/MagneticField.h"
 
+#include "DataFormatsMCH/ROFRecord.h"
 #include "DataFormatsMCH/TrackMCH.h"
 #include "DataFormatsMCH/Cluster.h"
 #include "MCHBase/TrackBlock.h"
@@ -33,14 +45,26 @@
 #include "MCHTracking/Track.h"
 #include "MCHTracking/TrackFitter.h"
 #include "MCHTracking/TrackExtrap.h"
+#include "ReconstructionDataFormats/TrackMCHMID.h"
 
 #include "/Users/PILLOT/Work/Alice/Macros/Tracking/TrackMCHv1.h"
 #include "/Users/PILLOT/Work/Alice/Macros/Tracking/TrackMCHv2.h"
 
 using namespace std;
-using namespace o2::mch;
 using namespace ROOT::Math;
+using o2::dataformats::TrackMCHMID;
+using o2::mch::Cluster;
+using o2::mch::ROFRecord;
+using o2::mch::Track;
+using o2::mch::TrackExtrap;
+using o2::mch::TrackFitter;
+using o2::mch::TrackMCH;
+using o2::mch::TrackMCHv1;
+using o2::mch::TrackMCHv2;
+using o2::mch::TrackParam;
+using o2::mch::TrackParamStruct;
 
+constexpr double pi() { return 3.14159265358979323846; }
 static const double muMass = TDatabasePDG::Instance()->GetParticle("mu-")->Mass();
 double chi2Max = 2. * 4. * 4.;
 TrackFitter trackFitter{};
@@ -79,6 +103,7 @@ struct TrackStruct {
   double dca = 0.;
   double rAbs = 0.;
   double chi2 = 0.;
+  double matchedChi2 = 0.;
   TrackParamStruct param{};
   TMatrixD cov{5, 5};
   TrackParamStruct paramAtMID{};
@@ -392,6 +417,7 @@ int ReadNextEvent(ifstream& inFile, int version, std::list<TrackStruct>& tracks)
 void ReadTrack(ifstream& inFile, TrackStruct& track, int version);
 template <class T>
 void ReadNextEventV5(ifstream& inFile, int& event, std::list<TrackStruct>& tracks);
+std::tuple<TFile*, TTreeReader*> LoadData(const char* fileName, const char* treeName);
 template <typename T>
 void FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const T* mchTrack, std::vector<Cluster>& clusters);
 void UpdateTrack(TrackStruct& track, const Track& tmpTrack);
@@ -399,6 +425,7 @@ void RefitTracks(std::list<TrackStruct>& tracks);
 void ImproveTracks(std::list<TrackStruct>& tracks);
 void RemoveInvalidTracks(std::list<TrackStruct>& tracks);
 void RemoveConnectedTracks(std::list<TrackStruct>& tracks, int stMin, int stMax, std::function<bool(const TrackStruct&, const TrackStruct&)> isBetter);
+bool LoadCCDB();
 bool LoadOCDB();
 bool SetMagField();
 void ExtrapToVertex(std::list<TrackStruct>& tracks, const std::vector<VertexStruct>& vertices, int event);
@@ -406,7 +433,8 @@ void ExtrapToVertex(TrackStruct& track, VertexStruct& vertex);
 void ExtrapToMID(TrackParam& param);
 void selectTracks(std::list<TrackStruct>& tracks);
 bool IsSelected(TrackStruct& track);
-int CompareEvents(std::list<TrackStruct>& tracks1, std::list<TrackStruct>& tracks2, double precision, bool printAll, std::vector<TH1*>& histos);
+const TrackMCHMID* FindMuon(uint32_t iMCHTrack, const std::vector<TrackMCHMID>& muonTracks);
+int CompareEvents(std::list<TrackStruct>& tracks1, std::list<TrackStruct>& tracks2, double precision, bool printDiff, bool printAll, std::vector<TH1*>& histos);
 bool AreTrackParamCompatible(const TrackParamStruct& param1, const TrackParamStruct& param2, double precision);
 bool AreTrackParamCovCompatible(const TMatrixD& cov1, const TMatrixD& cov2, double precision);
 int PrintEvent(const std::list<TrackStruct>& tracks);
@@ -422,10 +450,13 @@ void FillHistosDimuAtVertex(const TrackStruct& track1, const TrackStruct& track2
 void DrawHistosAtVertex(std::vector<TH1*> histos[2]);
 void FillComparisonsAtVertex(std::list<TrackStruct>& tracks1, std::list<TrackStruct>& tracks2, std::vector<TH1*> histos[5]);
 void DrawComparisonsAtVertex(std::vector<TH1*> histos[5]);
+void ComputeDiffAndErr(int n1, int n2, double& diff, double& err);
+void PrintStat(int nTracksAll[2], int nTracksMatch[2], std::vector<TH1*> histos[2]);
 
 //_________________________________________________________________________________________________
 void CompareTracks(int runNumber, string inFileName1, int versionFile1, string inFileName2, int versionFile2,
-                   string vtxFileName = "", double precision = 1.e-4, bool applyTrackSelection = false, bool printAll = false)
+                   string vtxFileName = "", double precision = 1.e-4, bool applyTrackSelection = false,
+                   bool printDiff = true, bool printAll = false)
 {
   /// Compare the tracks stored in the 2 binary files
   /// file version 1: param at 1st cluster + clusters
@@ -532,9 +563,11 @@ void CompareTracks(int runNumber, string inFileName1, int versionFile1, string i
 
     if (event1 == event2) {
       // reading the same event --> we can compare tracks
-      int nDiff = CompareEvents(tracks1, tracks2, precision, printAll, residualsAtFirstCluster);
+      int nDiff = CompareEvents(tracks1, tracks2, precision, printDiff, printAll, residualsAtFirstCluster);
       if (nDiff > 0) {
-        cout << "--> " << nDiff << " differences found in event " << event1 << endl;
+        if (printDiff) {
+          cout << "--> " << nDiff << " differences found in event " << event1 << endl;
+        }
         nDifferences += nDiff;
       }
       FillComparisonsAtVertex(tracks1, tracks2, comparisonsAtVertex);
@@ -543,7 +576,9 @@ void CompareTracks(int runNumber, string inFileName1, int versionFile1, string i
     } else if (event2 < 0 || (event1 >= 0 && event1 < event2)) {
       // event 2 > event 1 or reaching end of file 2
       if (tracks1.size() > 0) {
-        cout << "tracks in event " << event1 << " are missing in file 2" << endl;
+        if (printDiff) {
+          cout << "tracks in event " << event1 << " are missing in file 2" << endl;
+        }
         nDifferences += PrintEvent(tracks1);
         FillHistosAtVertex(tracks1, comparisonsAtVertex[4]);
       }
@@ -552,7 +587,9 @@ void CompareTracks(int runNumber, string inFileName1, int versionFile1, string i
     } else {
       // event 1 > event 2 or reaching end of file 1
       if (tracks2.size() > 0) {
-        cout << "tracks in event " << event2 << " are missing in file 1" << endl;
+        if (printDiff) {
+          cout << "tracks in event " << event2 << " are missing in file 1" << endl;
+        }
         nDifferences += PrintEvent(tracks2);
         FillHistosAtVertex(tracks2, comparisonsAtVertex[3]);
       }
@@ -570,6 +607,170 @@ void CompareTracks(int runNumber, string inFileName1, int versionFile1, string i
   inFile1.close();
   inFile2.close();
 
+}
+
+//_________________________________________________________________________________________________
+void CompareTracks(int runNumber, string mchFileName1, string muonFileName1, string mchFileName2, string muonFileName2,
+                   string vtxFileName = "", double precision = 1.e-4,
+                   bool applyTrackSelection = false, bool selectMatched = false,
+                   bool printStat = true, bool printDiff = true, bool printAll = false)
+{
+  /// Compare the tracks stored in the 2 sets of root files
+
+  run = runNumber;
+
+  // get vertices and prepare track extrapolation
+  std::vector<VertexStruct> vertices{};
+  if (!vtxFileName.empty()) {
+    ifstream inFile(vtxFileName, ios::binary);
+    if (!inFile.is_open()) {
+      cout << "fail opening vertex file" << endl;
+      return;
+    }
+    int event(-1), iEvent(-1);
+    while ((event = ReadNextEvent(inFile, vertices)) >= 0) {
+      if (event != ++iEvent) {
+        cout << "event " << iEvent << " missing" << endl;
+        return;
+      }
+    }
+  }
+
+  // load tracks
+  auto [fMCH1, mchReader1] = LoadData(mchFileName1.c_str(), "o2sim");
+  TTreeReaderValue<std::vector<ROFRecord>> mchROFs1 = {*mchReader1, "trackrofs"};
+  TTreeReaderValue<std::vector<TrackMCH>> mchTracks1 = {*mchReader1, "tracks"};
+  TTreeReaderValue<std::vector<Cluster>> mchClusters1 = {*mchReader1, "trackclusters"};
+  auto [fMUON1, muonReader1] = LoadData(muonFileName1.c_str(), "o2sim");
+  TTreeReaderValue<std::vector<TrackMCHMID>> muonTracks1 = {*muonReader1, "tracks"};
+  auto [fMCH2, mchReader2] = LoadData(mchFileName2.c_str(), "o2sim");
+  TTreeReaderValue<std::vector<ROFRecord>> mchROFs2 = {*mchReader2, "trackrofs"};
+  TTreeReaderValue<std::vector<TrackMCH>> mchTracks2 = {*mchReader2, "tracks"};
+  TTreeReaderValue<std::vector<Cluster>> mchClusters2 = {*mchReader2, "trackclusters"};
+  auto [fMUON2, muonReader2] = LoadData(muonFileName2.c_str(), "o2sim");
+  TTreeReaderValue<std::vector<TrackMCHMID>> muonTracks2 = {*muonReader2, "tracks"};
+  int nTF = mchReader1->GetEntries(false);
+  if (muonReader1->GetEntries(false) != nTF ||
+      mchReader2->GetEntries(false) != nTF ||
+      muonReader2->GetEntries(false) != nTF) {
+    LOG(error) << " not all files contain the same number of TF";
+    exit(-1);
+  }
+
+  int event1(-1), event2(-1), iTF(-1);
+  std::list<TrackStruct> tracks1{};
+  std::list<TrackStruct> tracks2{};
+  int nDifferences(0);
+  int nTracksAll[2] = {0, 0};
+  int nTracksMatch[2] = {0, 0};
+  std::vector<TH1*> residualsAtFirstCluster{};
+  std::vector<TH1*> comparisonsAtVertex[5] = {{}, {}, {}, {}, {}};
+  CreateHistosAtVertex(comparisonsAtVertex[0], "identical");
+  CreateHistosAtVertex(comparisonsAtVertex[1], "similar1");
+  CreateHistosAtVertex(comparisonsAtVertex[2], "similar2");
+  CreateHistosAtVertex(comparisonsAtVertex[3], "additional");
+  CreateHistosAtVertex(comparisonsAtVertex[4], "missing");
+  std::vector<TH1*> histosAtVertex[2] = {{}, {}};
+  CreateHistosAtVertex(histosAtVertex[0], "1");
+  CreateHistosAtVertex(histosAtVertex[1], "2");
+
+  while (mchReader1->Next() && muonReader1->Next() && mchReader2->Next() && muonReader2->Next()) {
+
+    ++iTF;
+    auto nROFs = TMath::Max(mchROFs1->size(), mchROFs2->size());
+    int iROF1(-1), iROF2(-1);
+    for (size_t iROF = 0; iROF < nROFs; ++iROF) {
+
+      if (iROF < mchROFs1->size()) {
+        ++iROF1;
+        const auto& mchROF1 = (*mchROFs1)[iROF];
+        tracks1.clear();
+        for (int iMCHTrack = mchROF1.getFirstIdx(); iMCHTrack <= mchROF1.getLastIdx(); ++iMCHTrack) {
+          ++nTracksAll[0];
+          auto muon = FindMuon(iMCHTrack, *muonTracks1);
+          if (muon) {
+            ++nTracksMatch[0];
+          } else if (selectMatched) {
+            continue;
+          }
+          tracks1.emplace_back();
+          FillTrack<TrackMCH>(tracks1.back(), nullptr, &(*mchTracks1)[iMCHTrack], *mchClusters1);
+          tracks1.back().matchedChi2 = muon ? muon->getMatchChi2OverNDF() : -1.;
+          tracks1.back().needExtrapToVtx = true;
+        }
+        ExtrapToVertex(tracks1, vertices, ++event1);
+        if (applyTrackSelection) {
+          selectTracks(tracks1);
+        }
+        FillHistosAtVertex(tracks1, histosAtVertex[0]);
+      }
+
+      if (iROF < mchROFs2->size()) {
+        ++iROF2;
+        const auto& mchROF2 = (*mchROFs2)[iROF];
+        tracks2.clear();
+        for (int iMCHTrack = mchROF2.getFirstIdx(); iMCHTrack <= mchROF2.getLastIdx(); ++iMCHTrack) {
+          ++nTracksAll[1];
+          auto muon = FindMuon(iMCHTrack, *muonTracks2);
+          if (muon) {
+            ++nTracksMatch[1];
+          } else if (selectMatched) {
+            continue;
+          }
+          tracks2.emplace_back();
+          FillTrack<TrackMCH>(tracks2.back(), nullptr, &(*mchTracks2)[iMCHTrack], *mchClusters2);
+          tracks2.back().matchedChi2 = muon ? muon->getMatchChi2OverNDF() : -1.;
+          tracks2.back().needExtrapToVtx = true;
+        }
+        ExtrapToVertex(tracks2, vertices, ++event2);
+        if (applyTrackSelection) {
+          selectTracks(tracks2);
+        }
+        FillHistosAtVertex(tracks2, histosAtVertex[1]);
+      }
+
+      if (iROF1 == iROF2) {
+        // reading the same ROF --> we can compare tracks
+        int nDiff = CompareEvents(tracks1, tracks2, precision, printDiff, printAll, residualsAtFirstCluster);
+        if (nDiff > 0) {
+          if (printDiff) {
+            cout << "--> " << nDiff << " differences found in TF/ROF " << iTF << "/" << iROF1 << endl;
+          }
+          nDifferences += nDiff;
+        }
+        FillComparisonsAtVertex(tracks1, tracks2, comparisonsAtVertex);
+      } else if (iROF1 > iROF2) {
+        // ROF 1 missing in file 2
+        if (printDiff) {
+          cout << "tracks in TF/ROF " << iTF << "/" << iROF1 << " are missing in file 2" << endl;
+        }
+        nDifferences += PrintEvent(tracks1);
+        FillHistosAtVertex(tracks1, comparisonsAtVertex[4]);
+      } else {
+        // ROF 2 missing in file 1
+        if (printDiff) {
+          cout << "tracks in TF/ROF " << iTF << "/" << iROF2 << " are missing in file 1" << endl;
+        }
+        nDifferences += PrintEvent(tracks2);
+        FillHistosAtVertex(tracks2, comparisonsAtVertex[3]);
+      }
+    }
+  }
+
+  cout << "number of different tracks = " << nDifferences << endl;
+  gStyle->SetOptStat(111111);
+  DrawResiduals(residualsAtFirstCluster);
+  DrawHistosAtVertex(histosAtVertex);
+  DrawComparisonsAtVertex(comparisonsAtVertex);
+
+  if (printStat) {
+    PrintStat(nTracksAll, nTracksMatch, histosAtVertex);
+  }
+
+  fMCH1->Close();
+  fMUON1->Close();
+  fMCH2->Close();
+  fMUON2->Close();
 }
 
 //_________________________________________________________________________________________________
@@ -708,6 +909,26 @@ void ReadNextEventV5(ifstream& inFile, int& event, std::list<TrackStruct>& track
       tracks.back().needExtrapToVtx = true;
     }
   }
+}
+
+//_________________________________________________________________________________________________
+std::tuple<TFile*, TTreeReader*> LoadData(const char* fileName, const char* treeName)
+{
+  /// open the input file and get the intput tree
+
+  TFile* f = TFile::Open(fileName, "READ");
+  if (!f || f->IsZombie()) {
+    LOG(error) << "opening file " << fileName << " failed";
+    exit(-1);
+  }
+
+  TTreeReader* r = new TTreeReader(treeName, f);
+  if (r->IsZombie()) {
+    LOG(error) << "tree " << treeName << " not found";
+    exit(-1);
+  }
+
+  return std::make_tuple(f, r);
 }
 
 //_________________________________________________________________________________________________
@@ -1040,9 +1261,33 @@ void RemoveConnectedTracks(std::list<TrackStruct>& tracks, int stMin, int stMax,
 }
 
 //_________________________________________________________________________________________________
+bool LoadCCDB()
+{
+  /// access CCDB and prepare track extrapolation to vertex and track fitting
+
+  // load magnetic field and geometry from CCDB
+  auto ccdb = o2::ccdb::BasicCCDBManager::instance();
+  auto [tStart, tEnd] = ccdb.getRunDuration(run);
+  ccdb.setTimestamp(tEnd);
+  auto grp = ccdb.get<o2::parameters::GRPMagField>("GLO/Config/GRPMagField");
+  // ccdb.setURL("http://localhost:6060");
+  auto geom = ccdb.get<TGeoManager>("GLO/Config/GeometryAligned");
+
+  // and prepare track extrapolation to vertex and track fitting
+  o2::base::Propagator::initFieldFromGRP(grp);
+  TrackExtrap::setField();
+  trackFitter.smoothTracks(true);
+  trackFitter.setChamberResolution(0.2, 0.2);
+
+  return true;
+}
+
+//_________________________________________________________________________________________________
 bool LoadOCDB()
 {
   /// access OCDB and prepare track extrapolation to vertex and track fitting
+
+  // return LoadCCDB();
 
   AliCDBManager* man = AliCDBManager::Instance();
   if (gSystem->AccessPathName("OCDB.root", kFileExists)==0) {
@@ -1054,7 +1299,7 @@ bool LoadOCDB()
   man->SetRun(run);
 
   if (!SetMagField()) {
-//  if (!AliMUONCDB::LoadField()) {
+    //  if (!AliMUONCDB::LoadField()) {
     return false;
   }
   TrackExtrap::setField();
@@ -1067,10 +1312,10 @@ bool LoadOCDB()
   if (!gGeoManager) {
     return false;
   }
-//  AliGeomManager::LoadGeometry();
-//  if (!AliGeomManager::GetGeometry() || !AliGeomManager::ApplyAlignObjsFromCDB("MUON")) {
-//    return false;
-//  }
+  //  AliGeomManager::LoadGeometry();
+  //  if (!AliGeomManager::GetGeometry() || !AliGeomManager::ApplyAlignObjsFromCDB("MUON")) {
+  //    return false;
+  //  }
 
   return true;
 }
@@ -1281,11 +1526,28 @@ bool IsSelected(TrackStruct& track)
     return false;
   }
 
+  // if (track.pxpypzm.Pt() < 1.) {
+  //   return false;
+  // }
+
   return true;
 }
 
 //_________________________________________________________________________________________________
-int CompareEvents(std::list<TrackStruct>& tracks1, std::list<TrackStruct>& tracks2, double precision, bool printAll, std::vector<TH1*>& histos)
+const TrackMCHMID* FindMuon(uint32_t iMCHTrack, const std::vector<TrackMCHMID>& muonTracks)
+{
+  /// find the MCH-MID matched track corresponding to this MCH track
+  for (const auto& muon : muonTracks) {
+    if (muon.getMCHRef().getIndex() == iMCHTrack) {
+      return &muon;
+    }
+  }
+  return nullptr;
+}
+
+//_________________________________________________________________________________________________
+int CompareEvents(std::list<TrackStruct>& tracks1, std::list<TrackStruct>& tracks2, double precision,
+                  bool printDiff, bool printAll, std::vector<TH1*>& histos)
 {
   /// compare the tracks between the 2 events
 
@@ -1309,15 +1571,15 @@ int CompareEvents(std::list<TrackStruct>& tracks1, std::list<TrackStruct>& track
       if (!areCompatible || !areCovCompatible) {
         ++nDifferences;
       }
-      if (printAll || !areCompatible) {
+      if (printAll || (printDiff && !areCompatible)) {
         PrintResiduals(track1.param, itTrack2->param);
       }
-      if (printAll || !areCovCompatible) {
+      if (printAll || (printDiff && !areCovCompatible)) {
         PrintCovResiduals(track1.cov, itTrack2->cov);
       }
       FillResiduals(track1.param, itTrack2->param, histos);
       // compare the track parameters at MID (if any)
-      if (track1.paramAtMID.z < 0. && itTrack2->paramAtMID.z < 0.) {
+      if (printDiff && track1.paramAtMID.z < 0. && itTrack2->paramAtMID.z < 0.) {
         if (!AreTrackParamCompatible(track1.paramAtMID, itTrack2->paramAtMID, precision)) {
           PrintResiduals(track1.paramAtMID, itTrack2->paramAtMID);
         }
@@ -1351,15 +1613,15 @@ int CompareEvents(std::list<TrackStruct>& tracks1, std::list<TrackStruct>& track
         if (!areCompatible || !areCovCompatible) {
           ++nDifferences;
         }
-        if (printAll || !areCompatible) {
+        if (printAll || (printDiff && !areCompatible)) {
           PrintResiduals(track1.param, track2.param);
         }
-        if (printAll || !areCovCompatible) {
+        if (printAll || (printDiff && !areCovCompatible)) {
           PrintCovResiduals(track1.cov, track2.cov);
         }
         FillResiduals(track1.param, track2.param, histos);
         // compare the track parameters at MID (if any)
-        if (track1.paramAtMID.z < 0. && track2.paramAtMID.z < 0.) {
+        if (printDiff && track1.paramAtMID.z < 0. && track2.paramAtMID.z < 0.) {
           if (!AreTrackParamCompatible(track1.paramAtMID, track2.paramAtMID, precision)) {
             PrintResiduals(track1.paramAtMID, track2.paramAtMID);
           }
@@ -1375,8 +1637,10 @@ int CompareEvents(std::list<TrackStruct>& tracks1, std::list<TrackStruct>& track
   // then print the missing tracks
   for (const auto& track1 : tracks1) {
     if (!track1.matchFound) {
-      cout << "did not find a track in file 2 matching" << endl;
-      PrintTrack(track1);
+      if (printDiff) {
+        cout << "did not find a track in file 2 matching" << endl;
+        PrintTrack(track1);
+      }
       ++nDifferences;
     }
   }
@@ -1384,8 +1648,10 @@ int CompareEvents(std::list<TrackStruct>& tracks1, std::list<TrackStruct>& track
   // and finally print the additional tracks
   for (const auto& track2 : tracks2) {
     if (!track2.matchFound) {
-      cout << "did not find a track in file 1 matching" << endl;
-      PrintTrack(track2);
+      if (printDiff) {
+        cout << "did not find a track in file 1 matching" << endl;
+        PrintTrack(track2);
+      }
       ++nDifferences;
     }
   }
@@ -1480,6 +1746,9 @@ void FillResiduals(const TrackParamStruct& param1, const TrackParamStruct& param
     histos.emplace_back(new TH2F("dslopexvsp", "dslopexvsp;p (GeV/c);dslopex", 2000, 0., 200., 2001, -0.0010005, 0.0010005));
     histos.emplace_back(new TH2F("dslopeyvsp", "dslopeyvsp;p (GeV/c);dslopey", 2000, 0., 200., 2001, -0.0010005, 0.0010005));
     histos.emplace_back(new TH2F("dpvsp", "dpvsp;p (GeV/c);dp/p (\%)", 2000, 0., 200., 2001, -10.005, 10.005));
+    for (auto h : histos) {
+      h->SetDirectory(0);
+    }
   }
   double p1 = TMath::Sqrt(param1.px*param1.px + param1.py*param1.py + param1.pz*param1.pz);
   double p2 = TMath::Sqrt(param2.px*param2.px + param2.py*param2.py + param2.pz*param2.pz);
@@ -1523,15 +1792,21 @@ void CreateHistosAtVertex(std::vector<TH1*>& histos, const char* extension)
 {
   /// create single muon and dimuon histograms at vertex
   if (histos.size() == 0) {
-    histos.emplace_back(new TH1F(Form("pT%s",extension), "pT;p_{T} (GeV/c)", 300, 0., 30.));
-    histos.emplace_back(new TH1F(Form("rapidity%s",extension), "rapidity;rapidity", 200, -4.5, -2.));
-    histos.emplace_back(new TH1F(Form("rAbs%s",extension), "rAbs;R_{abs} (cm)", 1000, 0., 100.));
-    histos.emplace_back(new TH1F(Form("dca%s",extension), "DCA;DCA (cm)", 500, 0., 500.));
-    histos.emplace_back(new TH1F(Form("pDCA23%s",extension), "pDCA for #theta_{abs} < 3#circ;pDCA (GeV.cm/c)", 2500, 0., 5000.));
-    histos.emplace_back(new TH1F(Form("pDCA310%s",extension), "pDCA for #theta_{abs} > 3#circ;pDCA (GeV.cm/c)", 2500, 0., 5000.));
-    histos.emplace_back(new TH1F(Form("nClusters%s",extension), "number of clusters per track;n_{clusters}", 20, 0., 20.));
-    histos.emplace_back(new TH1F(Form("chi2%s",extension), "normalized #chi^{2};#chi^{2} / ndf", 500, 0., 50.));
-    histos.emplace_back(new TH1F(Form("mass%s",extension), "#mu^{+}#mu^{-} invariant mass;mass (GeV/c^{2})", 1600, 0., 20.));
+    histos.emplace_back(new TH1F(Form("pT%s", extension), "pT;p_{T} (GeV/c)", 300, 0., 30.));
+    histos.emplace_back(new TH1F(Form("eta%s", extension), "eta;eta", 200, -4.5, -2.));
+    histos.emplace_back(new TH1F(Form("phi%s", extension), "phi;phi", 360, 0., 360.));
+    histos.emplace_back(new TH1F(Form("rAbs%s", extension), "rAbs;R_{abs} (cm)", 1000, 0., 100.));
+    histos.emplace_back(new TH1F(Form("p%s", extension), "p;p (GeV/c)", 300, 0., 300.));
+    histos.emplace_back(new TH1F(Form("dca%s", extension), "DCA;DCA (cm)", 500, 0., 500.));
+    histos.emplace_back(new TH1F(Form("pDCA23%s", extension), "pDCA for #theta_{abs} < 3#circ;pDCA (GeV.cm/c)", 2500, 0., 5000.));
+    histos.emplace_back(new TH1F(Form("pDCA310%s", extension), "pDCA for #theta_{abs} > 3#circ;pDCA (GeV.cm/c)", 2500, 0., 5000.));
+    histos.emplace_back(new TH1F(Form("nClusters%s", extension), "number of clusters per track;n_{clusters}", 20, 0., 20.));
+    histos.emplace_back(new TH1F(Form("chi2%s", extension), "normalized #chi^{2};#chi^{2} / ndf", 500, 0., 50.));
+    histos.emplace_back(new TH1F(Form("matchChi2%s", extension), "normalized matched #chi^{2};#chi^{2} / ndf", 160, 0., 16.));
+    histos.emplace_back(new TH1F(Form("mass%s", extension), "#mu^{+}#mu^{-} invariant mass;mass (GeV/c^{2})", 1600, 0., 20.));
+  }
+  for (auto h : histos) {
+    h->SetDirectory(0);
   }
 }
 
@@ -1561,16 +1836,19 @@ void FillHistosMuAtVertex(const TrackStruct& track, std::vector<TH1*>& histos)
   double pDCA = pUncorr * track.dca;
   
   histos[0]->Fill(track.pxpypzm.Pt());
-  histos[1]->Fill(track.pxpypzm.Rapidity());
-  histos[2]->Fill(track.rAbs);
-  histos[3]->Fill(track.dca);
+  histos[1]->Fill(track.pxpypzm.Eta());
+  histos[2]->Fill(180. + atan2(-track.pxpypzm.Px(), -track.pxpypzm.Py()) / pi() * 180.);
+  histos[3]->Fill(track.rAbs);
+  histos[4]->Fill(track.pxpypzm.P());
+  histos[5]->Fill(track.dca);
   if (thetaAbs < 3) {
-    histos[4]->Fill(pDCA);
+    histos[6]->Fill(pDCA);
   } else {
-    histos[5]->Fill(pDCA);
+    histos[7]->Fill(pDCA);
   }
-  histos[6]->Fill(track.clusters.size());
-  histos[7]->Fill(track.getChi2N2());
+  histos[8]->Fill(track.clusters.size());
+  histos[9]->Fill(track.getChi2N2());
+  histos[10]->Fill(track.matchedChi2);
 }
 
 //_________________________________________________________________________________________________
@@ -1584,7 +1862,7 @@ void FillHistosDimuAtVertex(const TrackStruct& track1, const TrackStruct& track2
 */
   if (track1.sign * track2.sign < 0) {
     PxPyPzMVector dimu = track1.pxpypzm + track2.pxpypzm;
-    histos[8]->Fill(dimu.M());
+    histos[11]->Fill(dimu.M());
   }
 }
 
@@ -1734,6 +2012,7 @@ void DrawComparisonsAtVertex(std::vector<TH1*> histos[5])
     gPad->SetLogy();
     histos[0][i]->SetStats(false);
     histos[0][i]->SetLineColor(1);
+    histos[0][i]->SetMinimum(0.5);
     histos[0][i]->Draw();
     histos[1][i]->SetLineColor(4);
     histos[1][i]->Draw("same");
@@ -1756,4 +2035,65 @@ void DrawComparisonsAtVertex(std::vector<TH1*> histos[5])
   lHist->AddEntry(histos[4][0], Form("%g tracks missing", histos[4][0]->GetEntries()), "l");
   cHist->cd(1);
   lHist->Draw("same");
+}
+
+//_________________________________________________________________________________________________
+void ComputeDiffAndErr(int n1, int n2, double& diff, double& err)
+{
+  /// compute relative difference (in %) between n1 and n2 and associated binomial error
+  double eff = double(n2) / n1;
+  diff = 100. * (eff - 1.);
+  err = 100. * TMath::Max(1. / n1, TMath::Sqrt(eff * TMath::Abs(1. - eff) / n1));
+}
+
+//_________________________________________________________________________________________________
+void PrintStat(int nTracksAll[2], int nTracksMatch[2], std::vector<TH1*> histos[2])
+{
+  /// print some statistics
+
+  printf("\n");
+  printf("-------------------------------------------------------\n");
+  printf("selection      |  file 1  |  file 2  |       diff\n");
+  printf("-------------------------------------------------------\n");
+
+  double diff(0.), err(0.);
+  ComputeDiffAndErr(nTracksAll[0], nTracksAll[1], diff, err);
+  printf("all            | %8d | %8d | %7.2f ± %4.2f %%\n", nTracksAll[0], nTracksAll[1], diff, err);
+
+  ComputeDiffAndErr(nTracksMatch[0], nTracksMatch[1], diff, err);
+  printf("matched        | %8d | %8d | %7.2f ± %4.2f %%\n", nTracksMatch[0], nTracksMatch[1], diff, err);
+
+  int n1 = histos[0][0]->GetEntries();
+  int n2 = histos[1][0]->GetEntries();
+  ComputeDiffAndErr(n1, n2, diff, err);
+  printf("selected       | %8d | %8d | %7.2f ± %4.2f %%\n", n1, n2, diff, err);
+
+  double pTRange[6] = {0., 0.5, 1., 2., 4., 1000.};
+  for (int i = 0; i < 5; ++i) {
+    TString selection = (i == 0) ? TString::Format("pT < %.1f GeV/c", pTRange[1])
+                                 : ((i == 4) ? TString::Format("pT > %.1f      ", pTRange[4])
+                                             : TString::Format("%.1f < pT < %.1f", pTRange[i], pTRange[i + 1]));
+    int n1 = histos[0][0]->Integral(histos[0][0]->GetXaxis()->FindBin(pTRange[i] + 0.01),
+                                    histos[0][0]->GetXaxis()->FindBin(pTRange[i + 1] - 0.01));
+    int n2 = histos[1][0]->Integral(histos[1][0]->GetXaxis()->FindBin(pTRange[i] + 0.01),
+                                    histos[1][0]->GetXaxis()->FindBin(pTRange[i + 1] - 0.01));
+    ComputeDiffAndErr(n1, n2, diff, err);
+    printf("%s | %8d | %8d | %7.2f ± %4.2f %%\n", selection.Data(), n1, n2, diff, err);
+  }
+
+  double pRange[6] = {0., 5., 10., 20., 40., 10000.};
+  for (int i = 0; i < 5; ++i) {
+    TString selection = (i == 0) ? TString::Format("p < %02.0f GeV/c  ", pRange[1])
+                                 : ((i == 4) ? TString::Format("p > %02.0f        ", pRange[4])
+                                             : TString::Format("%02.0f < p < %02.0f   ", pRange[i], pRange[i + 1]));
+    int n1 = histos[0][4]->Integral(histos[0][4]->GetXaxis()->FindBin(pRange[i] + 0.01),
+                                    histos[0][4]->GetXaxis()->FindBin(pRange[i + 1] - 0.01));
+    int n2 = histos[1][4]->Integral(histos[1][4]->GetXaxis()->FindBin(pRange[i] + 0.01),
+                                    histos[1][4]->GetXaxis()->FindBin(pRange[i + 1] - 0.01));
+    ComputeDiffAndErr(n1, n2, diff, err);
+    printf("%s | %8d | %8d | %7.2f ± %4.2f %%\n", selection.Data(), n1, n2, diff, err);
+  }
+
+  printf("-------------------------------------------------------\n");
+  printf("\n");
 }
