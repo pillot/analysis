@@ -16,6 +16,9 @@
 #include <TDatabasePDG.h>
 #include <Math/Vector4D.h>
 
+#include "CCDB/BasicCCDBManager.h"
+#include "DetectorsBase/Propagator.h"
+#include "DataFormatsParameters/GRPMagField.h"
 #include "DataFormatsMCH/TrackMCH.h"
 #include "DataFormatsMCH/Cluster.h"
 #include "MCHBase/TrackBlock.h"
@@ -27,8 +30,15 @@
 #include "/Users/PILLOT/Work/Alice/Macros/Tracking/TrackMCHv1.h"
 
 using namespace std;
-using namespace o2::mch;
 using namespace ROOT::Math;
+using o2::mch::Cluster;
+using o2::mch::Track;
+using o2::mch::TrackExtrap;
+using o2::mch::TrackFitter;
+using o2::mch::TrackMCH;
+using o2::mch::TrackMCHv1;
+using o2::mch::TrackParam;
+using o2::mch::TrackParamStruct;
 
 static const double muMass = TDatabasePDG::Instance()->GetParticle("mu-")->Mass();
 double chi2Max = 2. * 4. * 4.;
@@ -128,7 +138,19 @@ pair<double, double> GetSigma(TH1* h, int color);
 double CrystalBallSymmetric(double* xx, double* par);
 
 //_________________________________________________________________________________________________
-void CompareTrackResolution(float l3Current, float dipoleCurrent,
+void initFieldFromCCDB(int run)
+{
+  /// load magnetic field from CCDB
+  auto ccdb = o2::ccdb::BasicCCDBManager::instance();
+  auto [tStart, tEnd] = ccdb.getRunDuration(run);
+  ccdb.setTimestamp(tEnd);
+  auto grp = ccdb.get<o2::parameters::GRPMagField>("GLO/Config/GRPMagField");
+  o2::base::Propagator::initFieldFromGRP(grp);
+  TrackExtrap::setField();
+}
+
+//_________________________________________________________________________________________________
+void CompareTrackResolution(int run, float l3Current, float dipoleCurrent,
                             string inFileName1, int versionFile1,
                             string inFileName2, int versionFile2,
                             bool selectTracks = false)
@@ -147,7 +169,11 @@ void CompareTrackResolution(float l3Current, float dipoleCurrent,
   }
 
   // prepare the track fitter
-  trackFitter.initField(l3Current, dipoleCurrent);
+  if (run > 0) {
+    initFieldFromCCDB(run);
+  } else {
+    trackFitter.initField(l3Current, dipoleCurrent);
+  }
   trackFitter.smoothTracks(true);
   TrackExtrap::useExtrapV2();
 
@@ -615,7 +641,11 @@ void DrawRatios(std::vector<TH1*>& histos1, std::vector<TH1*>& histos2, const ch
   for (const auto& h : histos2) {
     c->cd((i % 2) * nPadsx + i / 2 + 1);
     TH1* hRat = new TH1F(*static_cast<TH1F*>(h));
-    hRat->Divide(histos1[i]);
+    hRat->Rebin(2);
+    auto* h1 = static_cast<TH1F*>(histos1[i]->Clone());
+    h1->Rebin(2);
+    hRat->Divide(h1);
+    delete h1;
     hRat->SetStats(false);
     hRat->SetLineColor(2);
     hRat->Draw();
@@ -640,8 +670,8 @@ pair<double, double> GetSigma(TH1* h, int color)
   double sigmaTrkCut = 4.; // 4 sigma
 
   // first fit
-  double xMin = -sigmaTrkCut * sigmaTrk;
-  double xMax = sigmaTrkCut * sigmaTrk;
+  double xMin = -0.5 * sigmaTrkCut * sigmaTrk;
+  double xMax = 0.5 * sigmaTrkCut * sigmaTrk;
   fCrystalBall->SetRange(xMin, xMax);
   fCrystalBall->SetParameters(h->GetEntries(), 0., 0.1, 2., 1.5);
   fCrystalBall->SetParLimits(1, xMin, xMax);
@@ -650,10 +680,11 @@ pair<double, double> GetSigma(TH1* h, int color)
   h->Fit(fCrystalBall, "RNQ");
 
   // rebin histo
-  int rebin = static_cast<Int_t>(TMath::Min(0.1 * h->GetNbinsX(), TMath::Max(0.3 * fCrystalBall->GetParameter(2) / h->GetBinWidth(1), 1.)));
-  while (h->GetNbinsX() % rebin != 0) {
-    rebin--;
-  }
+  // int rebin = static_cast<Int_t>(TMath::Min(0.1 * h->GetNbinsX(), TMath::Max(0.3 * fCrystalBall->GetParameter(2) / h->GetBinWidth(1), 1.)));
+  // while (h->GetNbinsX() % rebin != 0) {
+  //   rebin--;
+  // }
+  int rebin = 2;
   h->Rebin(rebin);
 
   // second fit
