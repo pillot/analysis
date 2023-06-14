@@ -512,6 +512,7 @@ void DrawComparisonsAtVertex(std::vector<TH1*> histos[4])
     gPad->SetLogy();
     histos[0][i]->SetStats(false);
     histos[0][i]->SetLineColor(1);
+    histos[0][i]->SetMinimum(0.5);
     histos[0][i]->Draw();
     histos[1][i]->SetLineColor(4);
     histos[1][i]->Draw("same");
@@ -605,6 +606,7 @@ void DrawHistosAtMID(std::vector<TH1*>& histos)
   gPad->SetLogy();
   histos[2]->SetStats(false);
   histos[2]->SetLineColor(4);
+  histos[2]->SetMinimum(0.5);
   histos[2]->GetXaxis()->SetRangeUser(0., 16.);
   histos[2]->Draw();
   histos[3]->SetLineColor(877);
