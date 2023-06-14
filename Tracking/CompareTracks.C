@@ -578,8 +578,10 @@ void CompareTracks(int runNumber, string inFileName1, int versionFile1, string i
       if (tracks1.size() > 0) {
         if (printDiff) {
           cout << "tracks in event " << event1 << " are missing in file 2" << endl;
+          nDifferences += PrintEvent(tracks1);
+        } else {
+          nDifferences += tracks1.size();
         }
-        nDifferences += PrintEvent(tracks1);
         FillHistosAtVertex(tracks1, comparisonsAtVertex[4]);
       }
       readNextEvent1 = true;
@@ -589,8 +591,10 @@ void CompareTracks(int runNumber, string inFileName1, int versionFile1, string i
       if (tracks2.size() > 0) {
         if (printDiff) {
           cout << "tracks in event " << event2 << " are missing in file 1" << endl;
+          nDifferences += PrintEvent(tracks2);
+        } else {
+          nDifferences += tracks2.size();
         }
-        nDifferences += PrintEvent(tracks2);
         FillHistosAtVertex(tracks2, comparisonsAtVertex[3]);
       }
       readNextEvent1 = false;
@@ -743,15 +747,19 @@ void CompareTracks(int runNumber, string mchFileName1, string muonFileName1, str
         // ROF 1 missing in file 2
         if (printDiff) {
           cout << "tracks in TF/ROF " << iTF << "/" << iROF1 << " are missing in file 2" << endl;
+          nDifferences += PrintEvent(tracks1);
+        } else {
+          nDifferences += tracks1.size();
         }
-        nDifferences += PrintEvent(tracks1);
         FillHistosAtVertex(tracks1, comparisonsAtVertex[4]);
       } else {
         // ROF 2 missing in file 1
         if (printDiff) {
           cout << "tracks in TF/ROF " << iTF << "/" << iROF2 << " are missing in file 1" << endl;
+          nDifferences += PrintEvent(tracks2);
+        } else {
+          nDifferences += tracks2.size();
         }
-        nDifferences += PrintEvent(tracks2);
         FillHistosAtVertex(tracks2, comparisonsAtVertex[3]);
       }
     }
@@ -1885,7 +1893,7 @@ void DrawHistosAtVertex(std::vector<TH1*> histos[2])
   TCanvas* cHist = new TCanvas("histos", "histos", 10, 10, TMath::Max(nPadsx * 300, 1200), TMath::Max(nPadsy * 300, 900));
   cHist->Divide(nPadsx, nPadsy);
   for (int i = 0; i < (int)histos[0].size(); ++i) {
-    cHist->cd((i / nPadsx) * nPadsx + i % nPadsx + 1);
+    cHist->cd(i + 1);
     gPad->SetLogy();
     histos[0][i]->SetStats(false);
     histos[0][i]->SetLineColor(4);
@@ -1907,7 +1915,7 @@ void DrawHistosAtVertex(std::vector<TH1*> histos[2])
   TCanvas* cDiff = new TCanvas("differences", "histos2 - histos1", 10, 10, TMath::Max(nPadsx * 300, 1200), TMath::Max(nPadsy * 300, 900));
   cDiff->Divide(nPadsx, nPadsy);
   for (int i = 0; i < (int)histos[0].size(); ++i) {
-    cDiff->cd((i / nPadsx) * nPadsx + i % nPadsx + 1);
+    cDiff->cd(i + 1);
     TH1F* hDiff = static_cast<TH1F*>(histos[1][i]->Clone());
     hDiff->Add(histos[0][i], -1.);
     hDiff->SetStats(false);
@@ -1919,7 +1927,7 @@ void DrawHistosAtVertex(std::vector<TH1*> histos[2])
   TCanvas* cRat = new TCanvas("ratios", "histos2 / histos1", 10, 10, TMath::Max(nPadsx * 300, 1200), TMath::Max(nPadsy * 300, 900));
   cRat->Divide(nPadsx, nPadsy);
   for (int i = 0; i < (int)histos[0].size(); ++i) {
-    cRat->cd((i / nPadsx) * nPadsx + i % nPadsx + 1);
+    cRat->cd(i + 1);
     TH1F* hRat = static_cast<TH1F*>(histos[1][i]->Clone());
     hRat->Divide(histos[0][i]);
     hRat->SetStats(false);
@@ -2008,7 +2016,7 @@ void DrawComparisonsAtVertex(std::vector<TH1*> histos[5])
   TCanvas* cHist = new TCanvas("comparisons", "comparisons", 10, 10, TMath::Max(nPadsx * 300, 1200), TMath::Max(nPadsy * 300, 900));
   cHist->Divide(nPadsx, nPadsy);
   for (int i = 0; i < (int)histos[0].size(); ++i) {
-    cHist->cd((i / nPadsx) * nPadsx + i % nPadsx + 1);
+    cHist->cd(i + 1);
     gPad->SetLogy();
     histos[0][i]->SetStats(false);
     histos[0][i]->SetLineColor(1);
@@ -2038,12 +2046,18 @@ void DrawComparisonsAtVertex(std::vector<TH1*> histos[5])
 }
 
 //_________________________________________________________________________________________________
-void ComputeDiffAndErr(int n1, int n2, double& diff, double& err)
+void PrintStat(TString what, int n1, int n2)
 {
-  /// compute relative difference (in %) between n1 and n2 and associated binomial error
-  double eff = double(n2) / n1;
-  diff = 100. * (eff - 1.);
-  err = 100. * TMath::Max(1. / n1, TMath::Sqrt(eff * TMath::Abs(1. - eff) / n1));
+  /// print given statistics and the relative difference (in %)
+  /// the uncertainty on the difference is the normal approximation of the binomial error
+  if (n1 == 0) {
+    printf("%s | %8d | %8d | %7s ± %4s %%\n", what.Data(), n1, n2, "nan", "nan");
+  } else {
+    double eff = double(n2) / n1;
+    double diff = 100. * (eff - 1.);
+    double err = 100. * TMath::Max(1. / n1, TMath::Sqrt(eff * TMath::Abs(1. - eff) / n1));
+    printf("%s | %8d | %8d | %7.2f ± %4.2f %%\n", what.Data(), n1, n2, diff, err);
+  }
 }
 
 //_________________________________________________________________________________________________
@@ -2056,17 +2070,11 @@ void PrintStat(int nTracksAll[2], int nTracksMatch[2], std::vector<TH1*> histos[
   printf("selection      |  file 1  |  file 2  |       diff\n");
   printf("-------------------------------------------------------\n");
 
-  double diff(0.), err(0.);
-  ComputeDiffAndErr(nTracksAll[0], nTracksAll[1], diff, err);
-  printf("all            | %8d | %8d | %7.2f ± %4.2f %%\n", nTracksAll[0], nTracksAll[1], diff, err);
+  PrintStat("all           ", nTracksAll[0], nTracksAll[1]);
 
-  ComputeDiffAndErr(nTracksMatch[0], nTracksMatch[1], diff, err);
-  printf("matched        | %8d | %8d | %7.2f ± %4.2f %%\n", nTracksMatch[0], nTracksMatch[1], diff, err);
+  PrintStat("matched       ", nTracksMatch[0], nTracksMatch[1]);
 
-  int n1 = histos[0][0]->GetEntries();
-  int n2 = histos[1][0]->GetEntries();
-  ComputeDiffAndErr(n1, n2, diff, err);
-  printf("selected       | %8d | %8d | %7.2f ± %4.2f %%\n", n1, n2, diff, err);
+  PrintStat("selected      ", histos[0][0]->GetEntries(), histos[1][0]->GetEntries());
 
   double pTRange[6] = {0., 0.5, 1., 2., 4., 1000.};
   for (int i = 0; i < 5; ++i) {
@@ -2077,8 +2085,7 @@ void PrintStat(int nTracksAll[2], int nTracksMatch[2], std::vector<TH1*> histos[
                                     histos[0][0]->GetXaxis()->FindBin(pTRange[i + 1] - 0.01));
     int n2 = histos[1][0]->Integral(histos[1][0]->GetXaxis()->FindBin(pTRange[i] + 0.01),
                                     histos[1][0]->GetXaxis()->FindBin(pTRange[i + 1] - 0.01));
-    ComputeDiffAndErr(n1, n2, diff, err);
-    printf("%s | %8d | %8d | %7.2f ± %4.2f %%\n", selection.Data(), n1, n2, diff, err);
+    PrintStat(selection, n1, n2);
   }
 
   double pRange[6] = {0., 5., 10., 20., 40., 10000.};
@@ -2090,8 +2097,7 @@ void PrintStat(int nTracksAll[2], int nTracksMatch[2], std::vector<TH1*> histos[
                                     histos[0][4]->GetXaxis()->FindBin(pRange[i + 1] - 0.01));
     int n2 = histos[1][4]->Integral(histos[1][4]->GetXaxis()->FindBin(pRange[i] + 0.01),
                                     histos[1][4]->GetXaxis()->FindBin(pRange[i + 1] - 0.01));
-    ComputeDiffAndErr(n1, n2, diff, err);
-    printf("%s | %8d | %8d | %7.2f ± %4.2f %%\n", selection.Data(), n1, n2, diff, err);
+    PrintStat(selection, n1, n2);
   }
 
   printf("-------------------------------------------------------\n");
