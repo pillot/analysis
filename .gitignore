@@ -46,3 +46,5 @@ G__*.h
 *.par
 *.txt
 *.tgz
+*.pcm
+*.vscode
