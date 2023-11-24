@@ -73,6 +73,7 @@ const std::unordered_map<uint32_t, uint32_t> firstTForbit0perRun{
   {521520, 84669824},
   {521684, 49607462},
   {529270, 68051456},
+  {529414, 860032},
   {529691, 74406400}};
 
 struct TrackInfo {
@@ -156,16 +157,16 @@ void DisplayTracks(int runNumber, std::string mchFileName, std::string muonFileN
   }
 
   // load magnetic field (from o2sim_grp.root) and geometry (from o2sim_geometry.root)
-  const auto grp = parameters::GRPObject::loadFrom(base::NameConf::getGRPFileName());
-  base::GeometryManager::loadGeometry();
+  // const auto grp = parameters::GRPObject::loadFrom(base::NameConf::getGRPFileName());
+  // base::GeometryManager::loadGeometry();
 
   // load magnetic field and geometry from CCDB
-  // auto ccdb = ccdb::BasicCCDBManager::instance();
-  // auto [tStart, tEnd] = ccdb.getRunDuration(runNumber);
-  // ccdb.setTimestamp(tEnd);
-  // auto grp = ccdb.get<parameters::GRPMagField>("GLO/Config/GRPMagField");
+  auto ccdb = ccdb::BasicCCDBManager::instance();
+  auto [tStart, tEnd] = ccdb.getRunDuration(runNumber);
+  ccdb.setTimestamp(tEnd);
+  auto grp = ccdb.get<parameters::GRPMagField>("GLO/Config/GRPMagField");
   // ccdb.setURL("http://localhost:6060");
-  // auto geom = ccdb.get<TGeoManager>("GLO/Config/GeometryAligned");
+  auto geom = ccdb.get<TGeoManager>("GLO/Config/GeometryAligned");
 
   // and prepare track extrapolation to vertex (0,0,0)
   base::Propagator::initFieldFromGRP(grp);
