@@ -55,7 +55,8 @@ bool IsSelected(const TrackAtVtx& trackAtVtx, double pUncorr);
 std::tuple<size_t, size_t> FindCompatibleMuonTracks(const TrackMCHMID& mu1, const std::vector<TrackMCHMID>& muons);
 bool AreIdentical(const gsl::span<const Cluster> clusters1, const gsl::span<const Cluster> clusters2);
 bool AreSimilar(const gsl::span<const Cluster> clusters1, const gsl::span<const Cluster> clusters2);
-const ROFRecord* FindCompatibleROF(const InteractionRecord& ir, std::vector<ROFRecord>& rofs);
+const ROFRecord* FindCompatibleROF(const InteractionRecord& ir, const std::vector<ROFRecord>& rofs);
+std::tuple<size_t, size_t> FindCompatibleROFs(const ROFRecord& rof1, const std::vector<ROFRecord>& rofs);
 void CreateResidualsAt1stCl(std::vector<TH1*>& histos);
 void FillResidualsAt1stCl(const TrackMCH& track1, const TrackMCH& track2, std::vector<TH1*>& histos);
 void DrawResidualsAt1stCl(std::vector<TH1*>& histos);
@@ -261,12 +262,143 @@ void CompareMuons(int runNumber,
 }
 
 //_________________________________________________________________________________________________
+void CompareMuons(int runNumber, string mchFileName1, string mchFileName2, bool applyTrackSelection = false)
+{
+  /// Compare the tracks (not only muons) stored in the 2 sets of root files and display the differences
+  /// Tracks are paired first by searching for overlapping ROFs then by comparing their clusters' position
+
+  /// access CCDB and prepare track extrapolation to vertex
+  LoadCCDB(runNumber);
+
+  // load tracks
+  auto [fMCH1, mchReader1] = LoadData(mchFileName1.c_str(), "o2sim");
+  TTreeReaderValue<std::vector<ROFRecord>> mchROFs1 = {*mchReader1, "trackrofs"};
+  TTreeReaderValue<std::vector<TrackMCH>> mchTracks1 = {*mchReader1, "tracks"};
+  TTreeReaderValue<std::vector<Cluster>> mchClusters1 = {*mchReader1, "trackclusters"};
+  auto [fMCH2, mchReader2] = LoadData(mchFileName2.c_str(), "o2sim");
+  TTreeReaderValue<std::vector<ROFRecord>> mchROFs2 = {*mchReader2, "trackrofs"};
+  TTreeReaderValue<std::vector<TrackMCH>> mchTracks2 = {*mchReader2, "tracks"};
+  TTreeReaderValue<std::vector<Cluster>> mchClusters2 = {*mchReader2, "trackclusters"};
+  int nTF = mchReader1->GetEntries(false);
+  if (mchReader2->GetEntries(false) != nTF) {
+    LOG(error) << " not all files contain the same number of TF";
+    exit(-1);
+  }
+
+  std::vector<TH1*> residualsAt1stCl{};
+  CreateResidualsAt1stCl(residualsAt1stCl);
+  std::vector<TH1*> histosAtVertex[2] = {{}, {}};
+  CreateHistosAtVertex(histosAtVertex[0], "1");
+  CreateHistosAtVertex(histosAtVertex[1], "2");
+  std::vector<TH1*> comparisonsAtVertex[5] = {{}, {}, {}, {}, {}};
+  CreateHistosAtVertex(comparisonsAtVertex[0], "identical");
+  CreateHistosAtVertex(comparisonsAtVertex[1], "similar1");
+  CreateHistosAtVertex(comparisonsAtVertex[2], "similar2");
+  CreateHistosAtVertex(comparisonsAtVertex[3], "additional");
+  CreateHistosAtVertex(comparisonsAtVertex[4], "missing");
+
+  int iTF = -1;
+  while (mchReader1->Next() && mchReader2->Next()) {
+    ++iTF;
+
+    std::vector<TrackAtVtx> track2AtVtx(mchTracks2->size());
+    std::vector<bool> isTrack2Selected(mchTracks2->size(), true);
+    std::vector<bool> track2MatchFound(mchTracks2->size(), false);
+
+    // loop over tracks in file2 to extrapolate them to the vertex and select them only once
+    for (size_t iTrack2 = 0; iTrack2 < mchTracks2->size(); ++iTrack2) {
+      const auto& track2 = (*mchTracks2)[iTrack2];
+      if (!ExtrapToVertex(track2, track2AtVtx[iTrack2])) {
+        isTrack2Selected[iTrack2] = false;
+        continue;
+      }
+      if (applyTrackSelection && !IsSelected(track2AtVtx[iTrack2], track2.getP())) {
+        isTrack2Selected[iTrack2] = false;
+        continue;
+      }
+      FillHistosAtVertex(track2, track2AtVtx[iTrack2], 0., histosAtVertex[1]);
+    }
+
+    // loop over tracks in file1 and try to associate them with tracks in file2
+    for (const auto& rof1 : *mchROFs1) {
+      for (int iTrack1 = rof1.getFirstIdx(); iTrack1 <= rof1.getLastIdx(); ++iTrack1) {
+        const auto& track1 = (*mchTracks1)[iTrack1];
+
+        // extrapolate to vertex and apply track selection
+        TrackAtVtx trackAtVtx1;
+        if (!ExtrapToVertex(track1, trackAtVtx1)) {
+          continue;
+        }
+        if (applyTrackSelection && !IsSelected(trackAtVtx1, track1.getP())) {
+          continue;
+        }
+
+        FillHistosAtVertex(track1, trackAtVtx1, 0., histosAtVertex[0]);
+
+        // find overlapping ROFs in file2
+        bool track1MatchFound = false;
+        auto [iROF2First, iROF2Last] = FindCompatibleROFs(rof1, *mchROFs2);
+
+        if (iROF2First <= iROF2Last) {
+          const gsl::span<const Cluster> clusters1(&(*mchClusters1)[track1.getFirstClusterIdx()], track1.getNClusters());
+          for (int iTrack2 = (*mchROFs2)[iROF2First].getFirstIdx(); iTrack2 <= (*mchROFs2)[iROF2Last].getLastIdx(); ++iTrack2) {
+
+            // skip not selected tracks and tracks already matched with another muon in file1
+            if (!isTrack2Selected[iTrack2] || track2MatchFound[iTrack2]) {
+              continue;
+            }
+
+            const auto& track2 = (*mchTracks2)[iTrack2];
+            const gsl::span<const Cluster> clusters2(&(*mchClusters2)[track2.getFirstClusterIdx()], track2.getNClusters());
+
+            // check if the 2 tracks are identical or similar by comparing their clusters, and record them accordingly
+            if (AreIdentical(clusters1, clusters2)) {
+              track1MatchFound = true;
+              track2MatchFound[iTrack2] = true;
+              FillResidualsAt1stCl(track1, track2, residualsAt1stCl);
+              FillHistosAtVertex(track1, trackAtVtx1, 0., comparisonsAtVertex[0]);
+              break;
+            } else if (AreSimilar(clusters1, clusters2)) {
+              track1MatchFound = true;
+              track2MatchFound[iTrack2] = true;
+              FillHistosAtVertex(track1, trackAtVtx1, 0., comparisonsAtVertex[1]);
+              FillHistosAtVertex(track2, track2AtVtx[iTrack2], 0., comparisonsAtVertex[2]);
+              break;
+            }
+          }
+        }
+
+        // if not match in found, record the track as missing in file2
+        if (!track1MatchFound) {
+          FillHistosAtVertex(track1, trackAtVtx1, 0., comparisonsAtVertex[4]);
+        }
+      }
+    }
+
+    // loop over selected tracks in file2 not found in file1 and record them as additional
+    for (size_t iTrack2 = 0; iTrack2 < mchTracks2->size(); ++iTrack2) {
+      if (isTrack2Selected[iTrack2] && !track2MatchFound[iTrack2]) {
+        FillHistosAtVertex((*mchTracks2)[iTrack2], track2AtVtx[iTrack2], 0., comparisonsAtVertex[3]);
+      }
+    }
+  }
+
+  gStyle->SetOptStat(111111);
+  DrawResidualsAt1stCl(residualsAt1stCl);
+  DrawHistosAtVertex(histosAtVertex);
+  DrawComparisonsAtVertex(comparisonsAtVertex);
+
+  fMCH1->Close();
+  fMCH2->Close();
+}
+
+//_________________________________________________________________________________________________
 bool LoadCCDB(int runNumber)
 {
   /// access CCDB and prepare track extrapolation to vertex
 
   // load magnetic field and geometry from CCDB
-  auto ccdb = o2::ccdb::BasicCCDBManager::instance();
+  auto& ccdb = o2::ccdb::BasicCCDBManager::instance();
   auto [tStart, tEnd] = ccdb.getRunDuration(runNumber);
   ccdb.setTimestamp(tEnd);
   auto grp = ccdb.get<o2::parameters::GRPMagField>("GLO/Config/GRPMagField");
@@ -446,7 +578,7 @@ bool AreSimilar(const gsl::span<const Cluster> clusters1, const gsl::span<const 
 }
 
 //_________________________________________________________________________________________________
-const ROFRecord* FindCompatibleROF(const InteractionRecord& ir, std::vector<ROFRecord>& rofs)
+const ROFRecord* FindCompatibleROF(const InteractionRecord& ir, const std::vector<ROFRecord>& rofs)
 {
   /// find the MCH ROF containing the IR, if any
   for (const auto& rof : rofs) {
@@ -460,6 +592,28 @@ const ROFRecord* FindCompatibleROF(const InteractionRecord& ir, std::vector<ROFR
     return &rof;
   }
   return nullptr;
+}
+
+//_________________________________________________________________________________________________
+std::tuple<size_t, size_t> FindCompatibleROFs(const ROFRecord& rof1, const std::vector<ROFRecord>& rofs)
+{
+  /// look for ROFs overlapping with rof1
+  size_t iFirst = 999999999;
+  size_t iLast = 0;
+  for (size_t iROF2 = 0; iROF2 < rofs.size(); ++iROF2) {
+    const auto& rof2 = rofs[iROF2];
+    if (rof2.getBCData() + rof2.getBCWidth() <= rof1.getBCData()) {
+      continue;
+    }
+    if (rof2.getBCData() >= rof1.getBCData() + rof1.getBCWidth()) {
+      break;
+    }
+    if (iFirst > iLast) {
+      iFirst = iROF2;
+    }
+    iLast = iROF2;
+  }
+  return std::make_tuple(iFirst, iLast);
 }
 
 //_________________________________________________________________________________________________
