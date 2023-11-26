@@ -179,7 +179,7 @@ void CompareMuons(int runNumber,
             track1MatchFound = true;
             track2MatchFound[iMu2] = true;
             FillResidualsAt1stCl(track1, track2, residualsAt1stCl);
-            FillHistosAtVertex(track1, trackAtVtx1, mu1.getMatchChi2OverNDF(), comparisonsAtVertex[0]);
+            FillHistosAtVertex(track2, track2AtVtx[iMu2], mu2.getMatchChi2OverNDF(), comparisonsAtVertex[0]);
             break;
           } else if (AreSimilar(clusters1, clusters2)) {
             track1MatchFound = true;
@@ -356,7 +356,7 @@ void CompareMuons(int runNumber, string mchFileName1, string mchFileName2, bool 
               track1MatchFound = true;
               track2MatchFound[iTrack2] = true;
               FillResidualsAt1stCl(track1, track2, residualsAt1stCl);
-              FillHistosAtVertex(track1, trackAtVtx1, 0., comparisonsAtVertex[0]);
+              FillHistosAtVertex(track2, track2AtVtx[iTrack2], 0., comparisonsAtVertex[0]);
               break;
             } else if (AreSimilar(clusters1, clusters2)) {
               track1MatchFound = true;
