@@ -5,6 +5,10 @@
 #include <utility>
 #include <math.h>
 
+#include <TFile.h>
+#include <TTree.h>
+#include <TTreeReader.h>
+#include <TTreeReaderValue.h>
 #include <TMath.h>
 #include <TStyle.h>
 #include <TCanvas.h>
@@ -17,8 +21,10 @@
 #include <Math/Vector4D.h>
 
 #include "CCDB/BasicCCDBManager.h"
+#include "DetectorsBase/GeometryManager.h"
 #include "DetectorsBase/Propagator.h"
 #include "DataFormatsParameters/GRPMagField.h"
+#include "DataFormatsMCH/ROFRecord.h"
 #include "DataFormatsMCH/TrackMCH.h"
 #include "DataFormatsMCH/Cluster.h"
 #include "MCHBase/TrackBlock.h"
@@ -26,12 +32,15 @@
 #include "MCHTracking/Track.h"
 #include "MCHTracking/TrackFitter.h"
 #include "MCHTracking/TrackExtrap.h"
+#include "ReconstructionDataFormats/TrackMCHMID.h"
 
 #include "/Users/PILLOT/Work/Alice/Macros/Tracking/TrackMCHv1.h"
 
 using namespace std;
 using namespace ROOT::Math;
+using o2::dataformats::TrackMCHMID;
 using o2::mch::Cluster;
+using o2::mch::ROFRecord;
 using o2::mch::Track;
 using o2::mch::TrackExtrap;
 using o2::mch::TrackFitter;
@@ -120,12 +129,16 @@ struct TrackStruct {
 };
 
 //_________________________________________________________________________________________________
+void LoadCCDB(int run);
 int ReadNextEvent(ifstream& inFile, bool selectTracks, std::vector<TrackStruct>& tracks);
 bool ReadTrack(ifstream& inFile, TrackStruct& track);
 template <class T>
 void ReadNextEventV5(ifstream& inFile, int& event, bool selectTracks, std::vector<TrackStruct>& tracks);
+std::tuple<TFile*, TTreeReader*> LoadData(const char* fileName, const char* treeName);
 template <typename T>
 bool FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const T& mchTrack, std::vector<Cluster>& clusters);
+const TrackMCHMID* FindMuon(uint32_t iMCHTrack, const std::vector<TrackMCHMID>& muonTracks);
+bool ExtrapToVertex(TrackStruct& track);
 bool IsSelected(TrackStruct& track);
 void CompareTracks(std::vector<TrackStruct>& tracks1, std::vector<TrackStruct>& tracks2, std::vector<TH1*>& histos);
 void CreateResiduals(std::vector<TH1*>& histos, const char* extension, double range);
@@ -136,18 +149,6 @@ void DrawResiduals(std::vector<TH1*>& histos1, std::vector<TH1*>& histos2, const
 void DrawRatios(std::vector<TH1*>& histos1, std::vector<TH1*>& histos2, const char* extension);
 pair<double, double> GetSigma(TH1* h, int color);
 double CrystalBallSymmetric(double* xx, double* par);
-
-//_________________________________________________________________________________________________
-void initFieldFromCCDB(int run)
-{
-  /// load magnetic field from CCDB
-  auto ccdb = o2::ccdb::BasicCCDBManager::instance();
-  auto [tStart, tEnd] = ccdb.getRunDuration(run);
-  ccdb.setTimestamp(tEnd);
-  auto grp = ccdb.get<o2::parameters::GRPMagField>("GLO/Config/GRPMagField");
-  o2::base::Propagator::initFieldFromGRP(grp);
-  TrackExtrap::setField();
-}
 
 //_________________________________________________________________________________________________
 void CompareTrackResolution(int run, float l3Current, float dipoleCurrent,
@@ -170,12 +171,11 @@ void CompareTrackResolution(int run, float l3Current, float dipoleCurrent,
 
   // prepare the track fitter
   if (run > 0) {
-    initFieldFromCCDB(run);
+    LoadCCDB(run);
   } else {
     trackFitter.initField(l3Current, dipoleCurrent);
   }
   trackFitter.smoothTracks(true);
-  TrackExtrap::useExtrapV2();
 
   int event1(-1), event2(-1);
   std::vector<TrackStruct> tracks1{};
@@ -251,6 +251,135 @@ void CompareTrackResolution(int run, float l3Current, float dipoleCurrent,
 }
 
 //_________________________________________________________________________________________________
+void CompareTrackResolution(int run,
+                            string mchFileName1, string muonFileName1,
+                            string mchFileName2, string muonFileName2,
+                            bool selectTracks = false, bool selectMatched = false)
+{
+  /// Compare the cluster-track residuals between the tracks stored in the 2 sets of root files
+
+  /// access CCDB and prepare track extrapolation
+  LoadCCDB(run);
+  trackFitter.smoothTracks(true);
+
+  // load tracks
+  auto [fMCH1, mchReader1] = LoadData(mchFileName1.c_str(), "o2sim");
+  TTreeReaderValue<std::vector<ROFRecord>> mchROFs1 = {*mchReader1, "trackrofs"};
+  TTreeReaderValue<std::vector<TrackMCH>> mchTracks1 = {*mchReader1, "tracks"};
+  TTreeReaderValue<std::vector<Cluster>> mchClusters1 = {*mchReader1, "trackclusters"};
+  auto [fMUON1, muonReader1] = LoadData(muonFileName1.c_str(), "o2sim");
+  TTreeReaderValue<std::vector<TrackMCHMID>> muonTracks1 = {*muonReader1, "tracks"};
+  auto [fMCH2, mchReader2] = LoadData(mchFileName2.c_str(), "o2sim");
+  TTreeReaderValue<std::vector<ROFRecord>> mchROFs2 = {*mchReader2, "trackrofs"};
+  TTreeReaderValue<std::vector<TrackMCH>> mchTracks2 = {*mchReader2, "tracks"};
+  TTreeReaderValue<std::vector<Cluster>> mchClusters2 = {*mchReader2, "trackclusters"};
+  auto [fMUON2, muonReader2] = LoadData(muonFileName2.c_str(), "o2sim");
+  TTreeReaderValue<std::vector<TrackMCHMID>> muonTracks2 = {*muonReader2, "tracks"};
+  int nTF = mchReader1->GetEntries(false);
+  if (muonReader1->GetEntries(false) != nTF ||
+      mchReader2->GetEntries(false) != nTF ||
+      muonReader2->GetEntries(false) != nTF) {
+    LOG(error) << " not all files contain the same number of TF";
+    exit(-1);
+  }
+
+  std::vector<TrackStruct> tracks1{};
+  std::vector<TrackStruct> tracks2{};
+  std::vector<TH1*> residuals[5] = {{}, {}, {}, {}, {}};
+  CreateResiduals(residuals[0], "All1", 2.);
+  CreateResiduals(residuals[1], "All2", 2.);
+  CreateResiduals(residuals[2], "Matched1", 2.);
+  CreateResiduals(residuals[3], "Matched2", 2.);
+  CreateResiduals(residuals[4], "ClCl", 0.2);
+
+  int iTF = -1;
+  while (mchReader1->Next() && muonReader1->Next() && mchReader2->Next() && muonReader2->Next()) {
+    cout << "\rprocessing TF " << ++iTF << "..." << flush;
+
+    auto nROFs = TMath::Max(mchROFs1->size(), mchROFs2->size());
+    int iROF1(-1), iROF2(-1);
+    for (size_t iROF = 0; iROF < nROFs; ++iROF) {
+
+      if (iROF < mchROFs1->size()) {
+        ++iROF1;
+        const auto& mchROF1 = (*mchROFs1)[iROF];
+        tracks1.clear();
+        tracks1.reserve(mchROF1.getNEntries());
+        for (int iMCHTrack = mchROF1.getFirstIdx(); iMCHTrack <= mchROF1.getLastIdx(); ++iMCHTrack) {
+          if (selectMatched && !FindMuon(iMCHTrack, *muonTracks1)) {
+            continue;
+          }
+          tracks1.emplace_back();
+          if (!FillTrack(tracks1.back(), nullptr, (*mchTracks1)[iMCHTrack], *mchClusters1)) {
+            tracks1.pop_back();
+          } else if (selectTracks && !(ExtrapToVertex(tracks1.back()) && IsSelected(tracks1.back()))) {
+            tracks1.pop_back();
+          }
+        }
+        FillResiduals(tracks1, residuals[0]);
+      }
+
+      if (iROF < mchROFs2->size()) {
+        ++iROF2;
+        const auto& mchROF2 = (*mchROFs2)[iROF];
+        tracks2.clear();
+        tracks2.reserve(mchROF2.getNEntries());
+        for (int iMCHTrack = mchROF2.getFirstIdx(); iMCHTrack <= mchROF2.getLastIdx(); ++iMCHTrack) {
+          if (selectMatched && !FindMuon(iMCHTrack, *muonTracks2)) {
+            continue;
+          }
+          tracks2.emplace_back();
+          if (!FillTrack(tracks2.back(), nullptr, (*mchTracks2)[iMCHTrack], *mchClusters2)) {
+            tracks2.pop_back();
+          } else if (selectTracks && !(ExtrapToVertex(tracks2.back()) && IsSelected(tracks2.back()))) {
+            tracks2.pop_back();
+          }
+        }
+        FillResiduals(tracks2, residuals[1]);
+      }
+
+      if (iROF1 == iROF2) {
+        // reading the same event --> we can compare tracks
+        CompareTracks(tracks1, tracks2, residuals[4]);
+        FillResiduals(tracks1, residuals[2], true);
+        FillResiduals(tracks2, residuals[3], true);
+      }
+    }
+  }
+
+  cout << "\r\033[Kprocessing completed" << endl;
+
+  gStyle->SetOptStat(1);
+  DrawResiduals(residuals[4], "ClCl");
+  DrawResiduals(residuals[0], residuals[1], "All");
+  DrawResiduals(residuals[2], residuals[3], "Matched");
+  DrawRatios(residuals[0], residuals[1], "All");
+  DrawRatios(residuals[2], residuals[3], "Matched");
+
+  fMCH1->Close();
+  fMUON1->Close();
+  fMCH2->Close();
+  fMUON2->Close();
+}
+
+//_________________________________________________________________________________________________
+void LoadCCDB(int run)
+{
+  /// access CCDB and prepare track extrapolation
+
+  // load magnetic field and geometry from CCDB
+  auto& ccdb = o2::ccdb::BasicCCDBManager::instance();
+  auto [tStart, tEnd] = ccdb.getRunDuration(run);
+  ccdb.setTimestamp(tEnd);
+  auto grp = ccdb.get<o2::parameters::GRPMagField>("GLO/Config/GRPMagField");
+  auto geom = ccdb.get<TGeoManager>("GLO/Config/GeometryAligned");
+
+  // prepare track extrapolation
+  o2::base::Propagator::initFieldFromGRP(grp);
+  TrackExtrap::setField();
+}
+
+//_________________________________________________________________________________________________
 int ReadNextEvent(ifstream& inFile, bool selectTracks, std::vector<TrackStruct>& tracks)
 {
   /// read the next event in the input file
@@ -316,6 +445,7 @@ bool ReadTrack(ifstream& inFile, TrackStruct& track)
   }
 
   try {
+    TrackExtrap::useExtrapV2();
     trackFitter.fit(track.track);
     return true;
   } catch (exception const& e) {
@@ -378,11 +508,31 @@ void ReadNextEventV5(ifstream& inFile, int& event, bool selectTracks, std::vecto
       if (!FillTrack(tracks.back(), nullptr, mchTrack, clusters)) {
         tracks.pop_back();
       }
-      if (selectTracks && !IsSelected(tracks.back())) {
+      if (selectTracks && !(ExtrapToVertex(tracks.back()) && IsSelected(tracks.back()))) {
         tracks.pop_back();
       }
     }
   }
+}
+
+//_________________________________________________________________________________________________
+std::tuple<TFile*, TTreeReader*> LoadData(const char* fileName, const char* treeName)
+{
+  /// open the input file and get the intput tree
+
+  TFile* f = TFile::Open(fileName, "READ");
+  if (!f || f->IsZombie()) {
+    LOG(error) << "opening file " << fileName << " failed";
+    exit(-1);
+  }
+
+  TTreeReader* r = new TTreeReader(treeName, f);
+  if (r->IsZombie()) {
+    LOG(error) << "tree " << treeName << " not found";
+    exit(-1);
+  }
+
+  return std::make_tuple(f, r);
 }
 
 //_________________________________________________________________________________________________
@@ -418,11 +568,77 @@ bool FillTrack(TrackStruct& track, const TrackAtVtxStruct* trackAtVtx, const T& 
   }
 
   try {
+    TrackExtrap::useExtrapV2();
     trackFitter.fit(track.track);
     return true;
   } catch (exception const& e) {
     return false;
   }
+}
+
+//_________________________________________________________________________________________________
+const TrackMCHMID* FindMuon(uint32_t iMCHTrack, const std::vector<TrackMCHMID>& muonTracks)
+{
+  /// find the MCH-MID matched track corresponding to this MCH track
+  for (const auto& muon : muonTracks) {
+    if (muon.getMCHRef().getIndex() == iMCHTrack) {
+      return &muon;
+    }
+  }
+  return nullptr;
+}
+
+//_________________________________________________________________________________________________
+bool ExtrapToVertex(TrackStruct& track)
+{
+  /// compute the track parameters at vertex, at DCA and at the end of the absorber
+
+  if (!gGeoManager) {
+    cout << "Cannot extrapolate to vertex without the geometry" << endl;
+    exit(-1);
+  }
+
+  // same extrapolation method as in the AOD producer
+  TrackExtrap::useExtrapV2(false);
+
+  // convert parameters at first cluster in TrackParam format
+  TrackParam trackParam;
+  trackParam.setNonBendingCoor(track.param.x);
+  trackParam.setBendingCoor(track.param.y);
+  trackParam.setZ(track.param.z);
+  trackParam.setNonBendingSlope(track.param.px / track.param.pz);
+  trackParam.setBendingSlope(track.param.py / track.param.pz);
+  trackParam.setInverseBendingMomentum(track.param.sign / TMath::Sqrt(track.param.py * track.param.py + track.param.pz * track.param.pz));
+
+  // extrapolate to vertex
+  TrackParam trackParamAtVertex(trackParam);
+  if (!TrackExtrap::extrapToVertex(trackParamAtVertex, 0., 0., 0., 0., 0.)) {
+    return false;
+  }
+  track.pxpypzm.SetPx(trackParamAtVertex.px());
+  track.pxpypzm.SetPy(trackParamAtVertex.py());
+  track.pxpypzm.SetPz(trackParamAtVertex.pz());
+  track.pxpypzm.SetM(muMass);
+  track.sign = trackParamAtVertex.getCharge();
+
+  // extrapolate to DCA
+  TrackParam trackParamAtDCA(trackParam);
+  if (!TrackExtrap::extrapToVertexWithoutBranson(trackParamAtDCA, 0.)) {
+    return false;
+  }
+  double dcaX = trackParamAtDCA.getNonBendingCoor();
+  double dcaY = trackParamAtDCA.getBendingCoor();
+  track.dca = TMath::Sqrt(dcaX * dcaX + dcaY * dcaY);
+
+  // extrapolate to the end of the absorber
+  if (!TrackExtrap::extrapToZ(trackParam, -505.)) {
+    return false;
+  }
+  double xAbs = trackParam.getNonBendingCoor();
+  double yAbs = trackParam.getBendingCoor();
+  track.rAbs = TMath::Sqrt(xAbs * xAbs + yAbs * yAbs);
+
+  return true;
 }
 
 //_________________________________________________________________________________________________
@@ -517,6 +733,9 @@ void CreateResiduals(std::vector<TH1*>& histos, const char* extension, double ra
     }
     histos.emplace_back(new TH1F(Form("resX%s", extension), "#DeltaX;#DeltaX (cm)", 2000, -range, range));
     histos.emplace_back(new TH1F(Form("resY%s", extension), "#DeltaY;#DeltaY (cm)", 2000, -range, range));
+  }
+  for (auto h : histos) {
+    h->SetDirectory(0);
   }
 }
 
@@ -641,6 +860,7 @@ void DrawRatios(std::vector<TH1*>& histos1, std::vector<TH1*>& histos2, const ch
   for (const auto& h : histos2) {
     c->cd((i % 2) * nPadsx + i / 2 + 1);
     TH1* hRat = new TH1F(*static_cast<TH1F*>(h));
+    hRat->SetDirectory(0);
     hRat->Rebin(2);
     auto* h1 = static_cast<TH1F*>(histos1[i]->Clone());
     h1->Rebin(2);
