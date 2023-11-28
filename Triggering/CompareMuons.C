@@ -4,6 +4,7 @@
 
 #include <gsl/span>
 
+#include <TString.h>
 #include <TFile.h>
 #include <TTree.h>
 #include <TTreeReader.h>
@@ -67,6 +68,8 @@ void DrawComparisonsAtVertex(std::vector<TH1*> histos[5]);
 void CreateROFTimeHistos(std::vector<TH1*>& histos, const char* extension);
 void FillROFTimeHistos(const ROFRecord& mchROF, const InteractionRecord& midTime, std::vector<TH1*>& histos);
 void DrawROFTimeHistos(std::vector<TH1*> histos[2]);
+void PrintStat(TString what, int n1, int n2);
+void PrintStat(int nTracksAll[2], int nTracksMatch[2], std::vector<TH1*> histos[2]);
 
 //_________________________________________________________________________________________________
 void CompareMuons(int runNumber,
@@ -119,8 +122,15 @@ void CompareMuons(int runNumber,
   int iTF = -1;
   int nMissingMu1OutOfROF2 = 0;
   int nMissingMu2OutOfROF1 = 0;
+  int nTracksAll[2] = {0, 0};
+  int nTracksMatch[2] = {0, 0};
   while (mchReader1->Next() && muonReader1->Next() && mchReader2->Next() && muonReader2->Next()) {
     ++iTF;
+
+    nTracksAll[0] += mchTracks1->size();
+    nTracksAll[1] += mchTracks2->size();
+    nTracksMatch[0] += muonTracks1->size();
+    nTracksMatch[1] += muonTracks2->size();
 
     std::vector<TrackAtVtx> track2AtVtx(muonTracks2->size());
     std::vector<bool> isTrack2Selected(muonTracks2->size(), true);
@@ -252,6 +262,7 @@ void CompareMuons(int runNumber,
   DrawComparisonsAtVertex(comparisonsAtVertex);
   DrawROFTimeHistos(rofTimeHistos);
 
+  PrintStat(nTracksAll, nTracksMatch, histosAtVertex);
   printf("- number of missing muons outside of any ROF in file1 = %d\n", nMissingMu2OutOfROF1);
   printf("- number of missing muons outside of any ROF in file2 = %d\n", nMissingMu1OutOfROF2);
 
@@ -298,8 +309,12 @@ void CompareMuons(int runNumber, string mchFileName1, string mchFileName2, bool 
   CreateHistosAtVertex(comparisonsAtVertex[4], "missing");
 
   int iTF = -1;
+  int nTracksAll[2] = {0, 0};
   while (mchReader1->Next() && mchReader2->Next()) {
     ++iTF;
+
+    nTracksAll[0] += mchTracks1->size();
+    nTracksAll[1] += mchTracks2->size();
 
     std::vector<TrackAtVtx> track2AtVtx(mchTracks2->size());
     std::vector<bool> isTrack2Selected(mchTracks2->size(), true);
@@ -387,6 +402,9 @@ void CompareMuons(int runNumber, string mchFileName1, string mchFileName2, bool 
   DrawResidualsAt1stCl(residualsAt1stCl);
   DrawHistosAtVertex(histosAtVertex);
   DrawComparisonsAtVertex(comparisonsAtVertex);
+
+  int nTracksMatch[2] = {0, 0};
+  PrintStat(nTracksAll, nTracksMatch, histosAtVertex);
 
   fMCH1->Close();
   fMCH2->Close();
@@ -919,4 +937,63 @@ void DrawROFTimeHistos(std::vector<TH1*> histos[2])
   lHist->AddEntry(histos[0][1], "upper bound", "l");
   cHist->cd(1);
   lHist->Draw("same");
+}
+
+//_________________________________________________________________________________________________
+void PrintStat(TString what, int n1, int n2)
+{
+  /// print given statistics and the relative difference (in %)
+  /// the uncertainty on the difference is the normal approximation of the binomial error
+  if (n1 == 0) {
+    printf("%s | %8d | %8d | %7s ± %4s %%\n", what.Data(), n1, n2, "nan", "nan");
+  } else {
+    double eff = double(n2) / n1;
+    double diff = 100. * (eff - 1.);
+    double err = 100. * TMath::Max(1. / n1, TMath::Sqrt(eff * TMath::Abs(1. - eff) / n1));
+    printf("%s | %8d | %8d | %7.2f ± %4.2f %%\n", what.Data(), n1, n2, diff, err);
+  }
+}
+
+//_________________________________________________________________________________________________
+void PrintStat(int nTracksAll[2], int nTracksMatch[2], std::vector<TH1*> histos[2])
+{
+  /// print some statistics
+
+  printf("\n");
+  printf("-------------------------------------------------------\n");
+  printf("selection      |  file 1  |  file 2  |       diff\n");
+  printf("-------------------------------------------------------\n");
+
+  PrintStat("all           ", nTracksAll[0], nTracksAll[1]);
+
+  PrintStat("matched       ", nTracksMatch[0], nTracksMatch[1]);
+
+  PrintStat("selected      ", histos[0][0]->GetEntries(), histos[1][0]->GetEntries());
+
+  double pTRange[6] = {0., 0.5, 1., 2., 4., 1000.};
+  for (int i = 0; i < 5; ++i) {
+    TString selection = (i == 0) ? TString::Format("pT < %.1f GeV/c", pTRange[1])
+                                 : ((i == 4) ? TString::Format("pT > %.1f      ", pTRange[4])
+                                             : TString::Format("%.1f < pT < %.1f", pTRange[i], pTRange[i + 1]));
+    int n1 = histos[0][0]->Integral(histos[0][0]->GetXaxis()->FindBin(pTRange[i] + 0.01),
+                                    histos[0][0]->GetXaxis()->FindBin(pTRange[i + 1] - 0.01));
+    int n2 = histos[1][0]->Integral(histos[1][0]->GetXaxis()->FindBin(pTRange[i] + 0.01),
+                                    histos[1][0]->GetXaxis()->FindBin(pTRange[i + 1] - 0.01));
+    PrintStat(selection, n1, n2);
+  }
+
+  double pRange[6] = {0., 5., 10., 20., 40., 10000.};
+  for (int i = 0; i < 5; ++i) {
+    TString selection = (i == 0) ? TString::Format("p < %02.0f GeV/c  ", pRange[1])
+                                 : ((i == 4) ? TString::Format("p > %02.0f        ", pRange[4])
+                                             : TString::Format("%02.0f < p < %02.0f   ", pRange[i], pRange[i + 1]));
+    int n1 = histos[0][4]->Integral(histos[0][4]->GetXaxis()->FindBin(pRange[i] + 0.01),
+                                    histos[0][4]->GetXaxis()->FindBin(pRange[i + 1] - 0.01));
+    int n2 = histos[1][4]->Integral(histos[1][4]->GetXaxis()->FindBin(pRange[i] + 0.01),
+                                    histos[1][4]->GetXaxis()->FindBin(pRange[i + 1] - 0.01));
+    PrintStat(selection, n1, n2);
+  }
+
+  printf("-------------------------------------------------------\n");
+  printf("\n");
 }
