@@ -40,7 +40,8 @@
 
 using namespace o2;
 
-const uint32_t nOrbitsPerTF = 128;
+// const uint32_t nOrbitsPerTF = 128;
+const uint32_t nOrbitsPerTF = 32;
 
 // first orbit of the first TF of each run
 const std::unordered_map<uint32_t, uint32_t> firstTForbit0perRun{
@@ -74,7 +75,8 @@ const std::unordered_map<uint32_t, uint32_t> firstTForbit0perRun{
   {521684, 49607462},
   {529270, 68051456},
   {529414, 860032},
-  {529691, 74406400}};
+  {529691, 74406400},
+  {544490, 26693600}};
 
 struct TrackInfo {
   TrackInfo(const mch::TrackMCH& mch) : mchTrack(mch) {}
