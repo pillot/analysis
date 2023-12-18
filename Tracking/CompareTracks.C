@@ -450,7 +450,7 @@ void FillHistosDimuAtVertex(const TrackStruct& track1, const TrackStruct& track2
 void DrawHistosAtVertex(std::vector<TH1*> histos[2]);
 void FillComparisonsAtVertex(std::list<TrackStruct>& tracks1, std::list<TrackStruct>& tracks2, std::vector<TH1*> histos[5]);
 void DrawComparisonsAtVertex(std::vector<TH1*> histos[5]);
-void ComputeDiffAndErr(int n1, int n2, double& diff, double& err);
+void PrintStat(TString what, int n1, int n2);
 void PrintStat(int nTracksAll[2], int nTracksMatch[2], std::vector<TH1*> histos[2]);
 
 //_________________________________________________________________________________________________
@@ -1534,7 +1534,11 @@ bool IsSelected(TrackStruct& track)
     return false;
   }
 
-  // if (track.pxpypzm.Pt() < 1.) {
+  // if (track.pxpypzm.Pt() < 1.5) {
+  //   return false;
+  // }
+
+  // if (track.sign > 0) {
   //   return false;
   // }
 
