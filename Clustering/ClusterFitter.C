@@ -58,10 +58,14 @@ bool ClustersToTrack(const gsl::span<const Cluster> trackClusters, TrackStruct& 
 bool ExtrapToVertex(TrackStruct& track);
 bool IsSelected(const TrackStruct& track);
 bool IsMonoCathode(const gsl::span<const Digit> digits);
+std::pair<int, int> GetSize(const gsl::span<const Digit> digits);
 std::pair<double, double> GetCharge(const gsl::span<const Digit> digits);
 std::unique_ptr<Cluster> COG(const gsl::span<const Digit> digits);
 std::unique_ptr<Cluster> COG2(const gsl::span<const Digit> digits);
 std::unique_ptr<Cluster> MakeCluster(int de, float x, float y, float ex, float ey);
+void CreatePreClusterInfo(std::vector<TH1*>& histos);
+void FillPreClusterInfo(double charge, double asymm, int sizeX, int sizeY, std::vector<TH1*>& histos);
+void DrawPreClusterInfo(std::vector<TH1*>& histos);
 void CreateResiduals(std::vector<TH1*>& histos, const char* extension, double range);
 void FillResiduals(const TrackParam& param, const Cluster& cluster, std::vector<TH1*>& histos);
 void FillResiduals(const Cluster& cluster1, const Cluster& cluster2, std::vector<TH1*>& histos);
@@ -106,9 +110,8 @@ void ClusterFitter(int run, const char* clusterFile, const char* trackFile, cons
     exit(-1);
   }
 
-  TH2* hChargeAsymm = new TH2F("hChargeAsymm", "cluster charge asymmetry;charge (ADC); asymmetry",
-                               200, 0., 20000., 201, -1.005, 1.005);
-  hChargeAsymm->SetDirectory(0);
+  std::vector<TH1*> preClusterInfo{};
+  CreatePreClusterInfo(preClusterInfo);
   std::vector<TH1*> oldResiduals{};
   CreateResiduals(oldResiduals, "old", 2.);
   std::vector<TH1*> newResiduals{};
@@ -150,16 +153,20 @@ void ClusterFitter(int run, const char* clusterFile, const char* trackFile, cons
         //   continue;
         // }
 
-        // select clusters of interest (isolated, bi-cathode, #digits > xxx, ...)
-        if (cluster.nDigits < 4 || nClusters[cluster.firstDigit] != 1 || IsMonoCathode(digits)) {
+        // select clusters of interest (isolated, bi-cathode, ...)
+        if (nClusters[cluster.firstDigit] != 1 || IsMonoCathode(digits)) {
           continue;
         }
 
-        // check the charge asymmetry between the 2 cathodes
+        // check precluster characteristics (charge, size, ...)
+        const auto [sizeX, sizeY] = GetSize(digits);
         const auto [chargeNB, chargeB] = GetCharge(digits);
+        double charge = 0.5 * (chargeNB + chargeB);
         double chargeAsymm = (chargeNB - chargeB) / (chargeNB + chargeB);
-        hChargeAsymm->Fill(0.5 * (chargeNB + chargeB), chargeAsymm);
-        if (std::abs(chargeAsymm) > 0.5) {
+        FillPreClusterInfo(charge, chargeAsymm, sizeX, sizeY, preClusterInfo);
+
+        // apply further precluster selections (e.g. to have enough constraints for the fit)
+        if (cluster.nDigits < 4 || sizeY < 2 || std::abs(chargeAsymm) > 0.5) {
           continue;
         }
 
@@ -183,10 +190,7 @@ void ClusterFitter(int run, const char* clusterFile, const char* trackFile, cons
 
   gStyle->SetOptStat(1);
 
-  TCanvas* cChargeAsymm = new TCanvas("cChargeAsymm", "cluster charge asymmetry");
-  hChargeAsymm->Draw("colz");
-  gPad->SetLogz();
-
+  DrawPreClusterInfo(preClusterInfo);
   DrawResiduals(clclResiduals);
   DrawResiduals(oldResiduals, newResiduals);
   DrawRatios(oldResiduals, newResiduals);
@@ -357,6 +361,41 @@ bool IsMonoCathode(const gsl::span<const Digit> digits)
 }
 
 //_________________________________________________________________________________________________
+std::pair<int, int> GetSize(const gsl::span<const Digit> digits)
+{
+  /// return the size of the precluster in pad unit
+  /// the size in x (y) direction is given by the number of lines of pads
+  /// on the non-bending (bending) plane in that direction
+  /// note: the pad size is constant in the x (y) direction on the non-bending (bending) plane
+
+  const auto& segmentation = o2::mch::mapping::segmentation(digits[0].getDetID());
+
+  double dimX[2] = {1.e6, -1.e6};
+  double padSizeX = -1.;
+  double dimY[2] = {1.e6, -1.e6};
+  double padSizeY = -1.;
+
+  for (const auto& digit : digits) {
+    if (segmentation.isBendingPad(digit.getPadID())) {
+      double padY = segmentation.padPositionY(digit.getPadID());
+      dimY[0] = std::min(dimY[0], padY);
+      dimY[1] = std::max(dimY[1], padY);
+      padSizeY = segmentation.padSizeY(digit.getPadID());
+    } else {
+      double padX = segmentation.padPositionX(digit.getPadID());
+      dimX[0] = std::min(dimX[0], padX);
+      dimX[1] = std::max(dimX[1], padX);
+      padSizeX = segmentation.padSizeX(digit.getPadID());
+    }
+  }
+
+  int sizeX = (padSizeX > 0.) ? std::lround((dimX[1] - dimX[0]) / padSizeX) + 1 : 0;
+  int sizeY = (padSizeY > 0.) ? std::lround((dimY[1] - dimY[0]) / padSizeY) + 1 : 0;
+
+  return std::make_pair(sizeX, sizeY);
+}
+
+//_________________________________________________________________________________________________
 std::pair<double, double> GetCharge(const gsl::span<const Digit> digits)
 {
   /// return the total charge of the digits on both cathodes
@@ -382,7 +421,7 @@ std::unique_ptr<Cluster> COG(const gsl::span<const Digit> digits)
   /// return a cluster positioned at the center of gravity of the digits
   /// the weight of each digit is given by its ADC charge
   /// for bi-cathode clusters, x (y) position is given by digits in the non-bending (bending) plane
-  /// note: the pad size is constant in the (non-)bending direction on the (non-)bending plane
+  /// note: the pad size is constant in the x (y) direction on the non-bending (bending) plane
 
   const auto& segmentation = o2::mch::mapping::segmentation(digits[0].getDetID());
 
@@ -411,7 +450,7 @@ std::unique_ptr<Cluster> COG2(const gsl::span<const Digit> digits)
 {
   /// return a cluster positioned at the center of gravity of the digits
   /// the weight of each digit is given by its ADC charge / (its size / sqrt(12))^2
-  /// note: the pad size is constant in the (non-)bending direction on the (non-)bending plane
+  /// note: the pad size is constant in the x (y) direction on the non-bending (bending) plane
   /// the purpose of weighting by the pad size is to combine the digits from both planes
 
   const auto& segmentation = o2::mch::mapping::segmentation(digits[0].getDetID());
@@ -444,6 +483,59 @@ std::unique_ptr<Cluster> MakeCluster(int de, float x, float y, float ex, float e
   auto global = transformation(de)(local);
 
   return std::make_unique<Cluster>(Cluster{global.x(), global.y(), global.z(), ex, ey, 0, 0, 0});
+}
+
+//_________________________________________________________________________________________________
+void CreatePreClusterInfo(std::vector<TH1*>& histos)
+{
+  /// create histograms of precluster characteristics
+
+  histos.emplace_back(new TH1F("hCharge", "cluster charge;charge (ADC)", 5000, 0., 50000.));
+  histos.emplace_back(new TH1F("hChargeAsymm", "cluster charge asymmetry;asymmetry", 201, -1.005, 1.005));
+  histos.emplace_back(new TH2F("hChargeAsymm2D", "cluster charge asymmetry vs charge;charge (ADC);asymmetry",
+                               200, 0., 20000., 201, -1.005, 1.005));
+  histos.emplace_back(new TH1F("hDimX", "cluster size X;size X (#pads)", 20, 0., 20.));
+  histos.emplace_back(new TH1F("hDimY", "cluster size Y;size Y (#pads)", 30, 0., 30.));
+  histos.emplace_back(new TH2F("hDimXY", "cluster size Y vs X;size X (#pads);size Y (#pads)",
+                               20, 0., 20., 30, 0., 30.));
+
+  for (auto h : histos) {
+    h->SetDirectory(0);
+  }
+}
+
+//_________________________________________________________________________________________________
+void FillPreClusterInfo(double charge, double chargeAsymm, int sizeX, int sizeY, std::vector<TH1*>& histos)
+{
+  /// fill histograms of precluster characteristics
+
+  histos[0]->Fill(charge);
+  histos[1]->Fill(chargeAsymm);
+  histos[2]->Fill(charge, chargeAsymm);
+  histos[3]->Fill(sizeX);
+  histos[4]->Fill(sizeY);
+  histos[5]->Fill(sizeX, sizeY);
+}
+
+//_________________________________________________________________________________________________
+void DrawPreClusterInfo(std::vector<TH1*>& histos)
+{
+  /// draw histograms of precluster characteristics
+
+  static int logy[6] = {1, 1, 0, 1, 1, 0};
+  static int logz[6] = {0, 0, 1, 0, 0, 1};
+  static const char* opt[6] = {"", "", "colz", "", "", "colz"};
+
+  TCanvas* c = new TCanvas("preClusterInfo", "precluster characteristics", 10, 10, 900, 600);
+  c->Divide(3, 2);
+  int i(0);
+  for (const auto& h : histos) {
+    c->cd(i + 1);
+    gPad->SetLogy(logy[i]);
+    gPad->SetLogz(logz[i]);
+    h->Draw(opt[i]);
+    ++i;
+  }
 }
 
 //_________________________________________________________________________________________________
