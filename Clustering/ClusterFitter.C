@@ -1,4 +1,5 @@
 #include <cmath>
+#include <map>
 #include <memory>
 #include <tuple>
 #include <utility>
@@ -52,7 +53,7 @@ struct TrackStruct {
   double rAbs = 0.;
 };
 
-void InitFromCCDB(int run);
+void InitFromCCDB(int run, bool local);
 std::tuple<TFile*, TTreeReader*> LoadData(const char* fileName, const char* treeName);
 bool ClustersToTrack(const gsl::span<const Cluster> trackClusters, TrackStruct& track);
 bool ExtrapToVertex(TrackStruct& track);
@@ -85,7 +86,7 @@ void ClusterFitter(int run, const char* clusterFile, const char* trackFile, cons
   /// MCH mapping need to be loaded before: gSystem->Load("libO2MCHMappingImpl4")
 
   /// load CCDB objects and prepare track fitting, geometry transformation, ...
-  InitFromCCDB(run);
+  InitFromCCDB(run, true);
 
   // load clusters and tracks
   auto [fClusters, clusterReader] = LoadData(clusterFile, "o2sim");
@@ -201,14 +202,34 @@ void ClusterFitter(int run, const char* clusterFile, const char* trackFile, cons
 }
 
 //_________________________________________________________________________________________________
-void InitFromCCDB(int run)
+void InitFromCCDB(int run, bool local)
 {
   /// load necessary objects from CCDB and prepare track fitting, geometry transformation, ...
 
-  // load magnetic field and geometry from CCDB
   auto& ccdb = o2::ccdb::BasicCCDBManager::instance();
-  auto [tStart, tEnd] = ccdb.getRunDuration(run);
-  ccdb.setTimestamp(tEnd);
+
+  if (local) {
+
+    // setup CCDB from local snapshot
+    ccdb.setURL("file://ccdb");
+
+    // in this case we cannot retrieve the timestamp of the run so we must know it
+    static const std::map<int, long> timeStamps{{529691, 1669611720310}};
+    if (auto ts = timeStamps.find(run); ts != timeStamps.end()) {
+      ccdb.setTimestamp(ts->second);
+    } else {
+      LOG(error) << "unknown time stamp for run " << run;
+      exit(-1);
+    }
+
+  } else {
+
+    // retrieve the timestamp of the run from the ALICE CCDB server
+    auto [tStart, tEnd] = ccdb.getRunDuration(run);
+    ccdb.setTimestamp(tEnd);
+  }
+
+  // load magnetic field and geometry from CCDB
   auto grp = ccdb.get<o2::parameters::GRPMagField>("GLO/Config/GRPMagField");
   auto geom = ccdb.get<TGeoManager>("GLO/Config/GeometryAligned");
 
