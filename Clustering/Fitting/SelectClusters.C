@@ -1,0 +1,270 @@
+#include <cmath>
+#include <tuple>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
+#include <gsl/span>
+
+#include <TCanvas.h>
+#include <TFile.h>
+#include <TMath.h>
+#include <TStyle.h>
+#include <TTree.h>
+#include <TTreeReader.h>
+#include <TTreeReaderValue.h>
+
+#include "DataFormatsMCH/Cluster.h"
+#include "DataFormatsMCH/Digit.h"
+#include "DataFormatsMCH/TrackMCH.h"
+#include "Framework/Logger.h"
+#include "MCHBase/TrackBlock.h"
+#include "MCHTracking/Track.h"
+#include "MCHTracking/TrackExtrap.h"
+#include "MCHTracking/TrackFitter.h"
+#include "MCHTracking/TrackParam.h"
+#include "ReconstructionDataFormats/TrackMCHMID.h"
+
+#include "DataUtils.h"
+#include "CCDBUtils.h"
+#include "PreClusterUtils.h"
+
+using o2::dataformats::TrackMCHMID;
+using o2::mch::Cluster;
+using o2::mch::Digit;
+using o2::mch::Track;
+using o2::mch::TrackExtrap;
+using o2::mch::TrackFitter;
+using o2::mch::TrackMCH;
+using o2::mch::TrackParam;
+using o2::mch::TrackParamStruct;
+
+struct TrackStruct {
+  Track track{};
+  TrackParam paramAtVtx{};
+  double dca = 0.;
+  double rAbs = 0.;
+};
+
+bool ClustersToTrack(const gsl::span<const Cluster> trackClusters, TrackStruct& track);
+bool ExtrapToVertex(TrackStruct& track);
+bool IsSelected(const TrackStruct& track);
+
+//_________________________________________________________________________________________________
+void SelectClusters(int run, const char* clusterFile, const char* trackFile, const char* muonFile,
+                    bool applyTrackSelection = false, const char* outFile = "clusters.root")
+{
+  /// select the isolated clusters attached to a (selected) muon track
+  /// store them with the associated track params and digits in outFile
+  /// require the MCH mapping to be loaded: gSystem->Load("libO2MCHMappingImpl4")
+
+  /// load CCDB objects and prepare track fitting
+  InitFromCCDB(run, true, true, true);
+
+  // load clusters and tracks
+  auto [fClusters, clusterReader] = LoadData(clusterFile, "o2sim");
+  TTreeReaderValue<std::vector<Cluster>> allClusters(*clusterReader, "clusters");
+  TTreeReaderValue<std::vector<Digit>> allClusterDigits(*clusterReader, "clusterdigits");
+  auto [fTracks, trackReader] = LoadData(trackFile, "o2sim");
+  TTreeReaderValue<std::vector<TrackMCH>> allTracks(*trackReader, "tracks");
+  TTreeReaderValue<std::vector<Cluster>> allTrackClusters(*trackReader, "trackclusters");
+  auto [fMuons, muonReader] = LoadData(muonFile, "o2sim");
+  TTreeReaderValue<std::vector<TrackMCHMID>> allMuons(*muonReader, "tracks");
+
+  // make sure the track clusters point to digits in the cluster file
+  if (trackReader->GetTree()->FindBranch("trackdigits")) {
+    LOG(error) << " track clusters point to digits in the track file. Re-run the MCH reco without the option --digits";
+    exit(-1);
+  }
+
+  int nTF = clusterReader->GetEntries(false);
+  if (trackReader->GetEntries(false) != nTF ||
+      muonReader->GetEntries(false) != nTF) {
+    LOG(error) << " not all files contain the same number of TF";
+    exit(-1);
+  }
+
+  // setup the output
+  TFile dataFile(outFile, "recreate");
+  TTree dataTree("data", "tree with input data");
+  TrackParamStruct trackParamOut;
+  dataTree.Branch("trackParameters", &trackParamOut);
+  Cluster clusterOut;
+  dataTree.Branch("clusters", &clusterOut);
+  std::vector<Digit> digitsOut{};
+  dataTree.Branch("digits", &digitsOut);
+
+  std::vector<TH1*> preClusterInfo{};
+  CreatePreClusterInfo(preClusterInfo);
+  std::vector<TH1*> preClusterInfoSt[3] = {{}, {}, {}};
+  CreatePreClusterInfo(preClusterInfoSt[0], "St1");
+  CreatePreClusterInfo(preClusterInfoSt[1], "St2");
+  CreatePreClusterInfo(preClusterInfoSt[2], "St345");
+
+  int iTF(0);
+  while (clusterReader->Next() && trackReader->Next() && muonReader->Next()) {
+    std::cout << "\rprocessing TF " << ++iTF << " / " << nTF << "..." << std::flush;
+
+    // count the number of clusters associated to each precluster (identified by the first digit index)
+    std::unordered_map<uint32_t, int> nClusters{};
+    for (const auto& cluster : *allClusters) {
+      nClusters[cluster.firstDigit]++;
+    }
+
+    for (const auto& muon : *allMuons) {
+      const auto& mchTrack = (*allTracks)[muon.getMCHRef().getIndex()];
+      const gsl::span<const Cluster> trackClusters(&(*allTrackClusters)[mchTrack.getFirstClusterIdx()], mchTrack.getNClusters());
+
+      // create an internal track and compute its parameters at each attached cluster
+      TrackStruct track{};
+      if (!ClustersToTrack(trackClusters, track)) {
+        continue;
+      }
+
+      // propagate the track to the vertex (0,0,0) and apply selections if requested
+      if (applyTrackSelection && !(ExtrapToVertex(track) && IsSelected(track))) {
+        continue;
+      }
+
+      for (const auto& param : track.track) {
+        const auto& cluster = *(param.getClusterPtr());
+        const gsl::span<const Digit> digits(&(*allClusterDigits)[cluster.firstDigit], cluster.nDigits);
+
+        // select clusters of interest (isolated, bi-cathode, ...)
+        if (nClusters[cluster.firstDigit] != 1 || IsMonoCathode(digits)) {
+          continue;
+        }
+
+        // fill precluster characteristics (charge, size, ...)
+        const auto [sizeX, sizeY] = GetSize(digits);
+        const auto [chargeNB, chargeB] = GetCharge(digits);
+        double charge = 0.5 * (chargeNB + chargeB);
+        double chargeAsymm = (chargeNB - chargeB) / (chargeNB + chargeB);
+        FillPreClusterInfo(charge, chargeAsymm, sizeX, sizeY, preClusterInfo);
+        int iSt = (cluster.getChamberId() < 4) ? cluster.getChamberId() / 2 : 2;
+        FillPreClusterInfo(charge, chargeAsymm, sizeX, sizeY, preClusterInfoSt[iSt]);
+
+        // fill output tree
+        trackParamOut = param.getTrackParamStruct();
+        clusterOut = cluster;
+        digitsOut.clear();
+        digitsOut.insert(digitsOut.end(), digits.begin(), digits.end());
+        dataTree.Fill();
+      }
+    }
+  }
+  cout << "\r\033[Kprocessing completed" << endl;
+
+  gStyle->SetOptStat(1);
+
+  auto c = DrawPreClusterInfo(preClusterInfo);
+  auto cSt1 = DrawPreClusterInfo(preClusterInfoSt[0], "St1");
+  auto cSt2 = DrawPreClusterInfo(preClusterInfoSt[1], "St2");
+  auto cSt345 = DrawPreClusterInfo(preClusterInfoSt[2], "St345");
+
+  dataFile.Write();
+  c->Write();
+  cSt1->Write();
+  cSt2->Write();
+  cSt345->Write();
+  dataFile.Close();
+  fClusters->Close();
+  fTracks->Close();
+  fMuons->Close();
+}
+
+//_________________________________________________________________________________________________
+bool ClustersToTrack(const gsl::span<const Cluster> trackClusters, TrackStruct& track)
+{
+  /// fill the internal track with the associated clusters and fit it
+  /// return false if the fit fails
+
+  static TrackFitter trackFitter{};
+  trackFitter.smoothTracks(true);
+  TrackExtrap::useExtrapV2();
+
+  for (const auto& cluster : trackClusters) {
+    track.track.createParamAtCluster(cluster);
+  }
+
+  try {
+    trackFitter.fit(track.track);
+    return true;
+  } catch (exception const& e) {
+    return false;
+  }
+}
+
+//_________________________________________________________________________________________________
+bool ExtrapToVertex(TrackStruct& track)
+{
+  /// compute the track parameters at vertex, at DCA and at the end of the absorber
+
+  TrackExtrap::useExtrapV2(false);
+
+  // extrapolate to vertex
+  track.paramAtVtx = track.track.first();
+  if (!TrackExtrap::extrapToVertex(track.paramAtVtx, 0., 0., 0., 0., 0.)) {
+    return false;
+  }
+
+  // extrapolate to DCA
+  TrackParam paramAtDCA(track.track.first());
+  if (!TrackExtrap::extrapToVertexWithoutBranson(paramAtDCA, 0.)) {
+    return false;
+  }
+  double dcaX = paramAtDCA.getNonBendingCoor();
+  double dcaY = paramAtDCA.getBendingCoor();
+  track.dca = TMath::Sqrt(dcaX * dcaX + dcaY * dcaY);
+
+  // extrapolate to the end of the absorber
+  TrackParam paramAtAbs(track.track.first());
+  if (!TrackExtrap::extrapToZ(paramAtAbs, -505.)) {
+    return false;
+  }
+  double xAbs = paramAtAbs.getNonBendingCoor();
+  double yAbs = paramAtAbs.getBendingCoor();
+  track.rAbs = TMath::Sqrt(xAbs * xAbs + yAbs * yAbs);
+
+  return true;
+}
+
+//_________________________________________________________________________________________________
+bool IsSelected(const TrackStruct& track)
+{
+  /// apply standard track selections + pDCA + p > 10 GeV/c
+
+  static const double sigmaPDCA23 = 80.;
+  static const double sigmaPDCA310 = 54.;
+  static const double nSigmaPDCA = 6.;
+  static const double relPRes = 0.0004;
+  static const double slopeRes = 0.0005;
+
+  double thetaAbs = TMath::ATan(track.rAbs / 505.) * TMath::RadToDeg();
+  if (thetaAbs < 2. || thetaAbs > 10.) {
+    return false;
+  }
+
+  double p = track.paramAtVtx.p();
+  if (p < 10.) {
+    return false;
+  }
+
+  double pz = track.paramAtVtx.pz();
+  double eta = 0.5 * log((p + pz) / (p - pz));
+  if (eta < -4. || eta > -2.5) {
+    return false;
+  }
+
+  double pDCA = track.track.first().p() * track.dca;
+  double sigmaPDCA = (thetaAbs < 3) ? sigmaPDCA23 : sigmaPDCA310;
+  double nrp = nSigmaPDCA * relPRes * p;
+  double pResEffect = sigmaPDCA / (1. - nrp / (1. + nrp));
+  double slopeResEffect = 535. * slopeRes * p;
+  double sigmaPDCAWithRes = TMath::Sqrt(pResEffect * pResEffect + slopeResEffect * slopeResEffect);
+  if (pDCA > nSigmaPDCA * sigmaPDCAWithRes) {
+    return false;
+  }
+
+  return true;
+}
