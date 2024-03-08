@@ -54,6 +54,8 @@ void DrawPreClustersSize(const char* clusterFileName, const char* digitFileName)
   man->SetDefaultStorage("local:///dev/null");
   man->SetSnapshotMode("OCDB.root");
   man->SetRun(295584);
+  // man->SetDefaultStorage("local://$ALIROOT_OCDB_ROOT/OCDB");
+  // man->SetRun(0);
   if (!AliMUONCDB::LoadMapping()) {
     return;
   }
@@ -72,6 +74,7 @@ void DrawPreClustersSize(const char* clusterFileName, const char* digitFileName)
   TH2F* hChargesSt345 = new TH2F("hChargesSt345", "hChargesSt345;#digits;charge", 5000, 0, 5000, 700, 0, 700);
   TH2F* hMaxChargeSt12 = new TH2F("hMaxChargeSt12", "hMaxChargeSt12;#digits;max charge", 5000, 0, 5000, 700, 0, 700);
   TH2F* hMaxChargeSt345 = new TH2F("hMaxChargeSt345", "hMaxChargeSt345;#digits;max charge", 5000, 0, 5000, 700, 0, 700);
+  TH2F* hChargeAsymm2D = new TH2F("hChargeAsymm2D", "charge asymmetry vs charge;charge;asymmetry", 200, 0., 20000., 201, -1.005, 1.005);
 
   // read preclusters
   TFile* clusterFile = new TFile(clusterFileName);
@@ -108,6 +111,10 @@ void DrawPreClustersSize(const char* clusterFileName, const char* digitFileName)
   std::multiset<float, std::greater<float>> charges{}; // list of charge of digits in decreasing order
   Long64_t nEvents = treeR->GetEntries();
   for (Long64_t iEv = 0; iEv < nEvents; ++iEv) {
+
+    // if (iEv != 6755) {
+    //   continue;
+    // }
 
     printf("\rprocessing... %lld%%", 100 * (iEv + 1) / nEvents);
 
@@ -180,6 +187,7 @@ void DrawPreClustersSize(const char* clusterFileName, const char* digitFileName)
       }
 
       charges.clear();
+      double chargeTot[2] = {0., 0.};
       for (int iDigit = 0; iDigit < nDigits; ++iDigit) {
         AliMUONVDigit* digit = digitStore->FindObject(cluster->GetDigitId(iDigit));
         if (!digit) {
@@ -187,6 +195,8 @@ void DrawPreClustersSize(const char* clusterFileName, const char* digitFileName)
           return;
         }
         charges.insert(digit->Charge());
+        Int_t iPlane = (digit->ManuId() & AliMpConstants::ManuMask(AliMp::kNonBendingPlane)) ? 1 : 0;
+        chargeTot[iPlane] += digit->Charge();
       }
 
       TH2F* h = (chId < 4) ? hChargesSt12 : hChargesSt345;
@@ -195,6 +205,9 @@ void DrawPreClustersSize(const char* clusterFileName, const char* digitFileName)
       }
       h = (chId < 4) ? hMaxChargeSt12 : hMaxChargeSt345;
       h->Fill(nDigits, *charges.begin());
+      double chargeTotMean = 0.5 * (chargeTot[1] + chargeTot[0]);
+      double chargeTotAsymm = (chargeTot[1] - chargeTot[0]) / (chargeTot[1] + chargeTot[0]);
+      hChargeAsymm2D->Fill(chargeTotMean, chargeTotAsymm);
     }
   }
 
@@ -245,6 +258,10 @@ void DrawPreClustersSize(const char* clusterFileName, const char* digitFileName)
   cCharges->cd(4);
   gPad->SetLogz();
   hMaxChargeSt345->Draw("colz");
+
+  TCanvas* cChargeAsymm = new TCanvas("cChargeAsymm", "cChargeAsymm");
+  gPad->SetLogz();
+  hChargeAsymm2D->Draw("colz");
 
   AliCodeTimer::Instance()->Print();
 }
