@@ -24,6 +24,7 @@ void CreateResiduals(std::vector<TH1*>& histos, const char* extension, double ra
 void FillResiduals(const char* inFile, bool useNewClusters, std::vector<TH1*>& histos);
 void FillResiduals(const TrackParamStruct& param, const Cluster& cluster, std::vector<TH1*>& histos);
 void FillResiduals(const Cluster& cluster1, const Cluster& cluster2, std::vector<TH1*>& histos);
+void NormResiduals(std::vector<TH1*>& histos);
 void DrawResiduals(std::vector<TH1*>& histos);
 void DrawResiduals(std::vector<TH1*>& oldHistos, std::vector<TH1*>& newHistos);
 void DrawRatios(std::vector<TH1*>& oldHistos, std::vector<TH1*>& newHistos);
@@ -78,6 +79,9 @@ void CompareClusters(const char* inFile1, const char* inFile2, bool compareNewCl
   FillResiduals(inFile2, compareNewClusters, residuals2);
 
   gStyle->SetOptStat(1);
+
+  NormResiduals(residuals1);
+  NormResiduals(residuals2);
 
   DrawResiduals(residuals1, residuals2);
   DrawRatios(residuals1, residuals2);
@@ -155,6 +159,16 @@ void FillResiduals(const Cluster& cluster1, const Cluster& cluster2, std::vector
 }
 
 //_________________________________________________________________________________________________
+void NormResiduals(std::vector<TH1*>& histos)
+{
+  /// normalize histograms
+
+  for (auto& h : histos) {
+    h->Scale(1. / h->GetEntries());
+  }
+}
+
+//_________________________________________________________________________________________________
 void DrawResiduals(std::vector<TH1*>& histos)
 {
   /// draw cluster-cluster residuals
@@ -199,6 +213,7 @@ void DrawResiduals(std::vector<TH1*>& oldHistos, std::vector<TH1*>& newHistos)
     gPad->SetLogy();
     h->SetLineColor(color[0]);
     h->Draw();
+    // h->GetXaxis()->SetRangeUser(-1., 1.);
     auto res1 = GetSigma(h, color[0]);
     g[i % 2][0]->SetPoint(i / 2, i / 2 + 1., res1.first);
     g[i % 2][0]->SetPointError(i / 2, 0., res1.second);

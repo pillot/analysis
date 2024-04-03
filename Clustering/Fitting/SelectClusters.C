@@ -17,6 +17,7 @@
 #include "DataFormatsMCH/Cluster.h"
 #include "DataFormatsMCH/Digit.h"
 #include "DataFormatsMCH/TrackMCH.h"
+#include "DetectorsBase/GeometryManager.h"
 #include "Framework/Logger.h"
 #include "MCHBase/TrackBlock.h"
 #include "MCHTracking/Track.h"
@@ -28,6 +29,7 @@
 #include "DataUtils.h"
 #include "CCDBUtils.h"
 #include "PreClusterUtils.h"
+#include "TrackUtils.h"
 
 using o2::dataformats::TrackMCHMID;
 using o2::mch::Cluster;
@@ -174,6 +176,95 @@ void SelectClusters(int run, const char* clusterFile, const char* trackFile, con
 }
 
 //_________________________________________________________________________________________________
+void SelectClusters(int run, const char* trackFile, const char* muonFile, bool applyTrackSelection = false,
+                    const char* outClFile = "clusterslite.root", const char* outTrFile = "trackslite.root")
+{
+  /// select all clusters attached to a (selected) muon track
+  /// store the clusters with the associated track params in outClFile
+  /// store the track parameters at vertex and dca in outTrFile
+  /// require the MCH mapping to be loaded: gSystem->Load("libO2MCHMappingImpl4")
+
+  /// load CCDB objects and prepare track fitting
+  // o2::base::GeometryManager::loadGeometry("O2geometry.root");
+  // TrackFitter trackFitter{};
+  // trackFitter.initField(29999.998047, 5999.966797);
+  InitFromCCDB(run, false, true, true);
+
+  // load clusters and tracks
+  auto [fTracks, trackReader] = LoadData(trackFile, "o2sim");
+  TTreeReaderValue<std::vector<TrackMCH>> allTracks(*trackReader, "tracks");
+  TTreeReaderValue<std::vector<Cluster>> allTrackClusters(*trackReader, "trackclusters");
+  auto [fMuons, muonReader] = LoadData(muonFile, "o2sim");
+  TTreeReaderValue<std::vector<TrackMCHMID>> allMuons(*muonReader, "tracks");
+
+  int nTF = trackReader->GetEntries(false);
+  if (muonReader->GetEntries(false) != nTF) {
+    LOG(error) << " not all files contain the same number of TF";
+    exit(-1);
+  }
+
+  // setup the cluster output
+  TFile dataClFile(outClFile, "recreate");
+  TTree dataClTree("data", "tree with input data");
+  TrackParamStruct trackParamOut;
+  dataClTree.Branch("trackParameters", &trackParamOut);
+  Cluster clusterOut;
+  dataClTree.Branch("clusters", &clusterOut);
+
+  // setup the track output
+  TFile dataTrFile(outTrFile, "recreate");
+  TTree dataTrTree("data", "tree with input data");
+  TrackLite trackOut;
+  dataTrTree.Branch("track", &trackOut);
+
+  int iTF(0);
+  while (trackReader->Next() && muonReader->Next()) {
+    std::cout << "\rprocessing TF " << ++iTF << " / " << nTF << "..." << std::flush;
+
+    for (const auto& muon : *allMuons) {
+      const auto& mchTrack = (*allTracks)[muon.getMCHRef().getIndex()];
+      const gsl::span<const Cluster> trackClusters(&(*allTrackClusters)[mchTrack.getFirstClusterIdx()], mchTrack.getNClusters());
+
+      // create an internal track and compute its parameters at each attached cluster
+      TrackStruct track{};
+      if (!ClustersToTrack(trackClusters, track)) {
+        continue;
+      }
+
+      // propagate the track to the vertex (0,0,0) and apply selections if requested
+      if (applyTrackSelection && !(ExtrapToVertex(track) && IsSelected(track))) {
+        continue;
+      }
+
+      // fill output track tree
+      trackOut.param = track.paramAtVtx.getTrackParamStruct();
+      trackOut.rAbs = track.rAbs;
+      trackOut.dca = track.dca;
+      trackOut.pUncorr = mchTrack.getP();
+      trackOut.nClusters = mchTrack.getNClusters();
+      trackOut.chi2 = mchTrack.getChi2OverNDF();
+      trackOut.matchChi2 = muon.getMatchChi2OverNDF();
+      dataTrTree.Fill();
+
+      // fill output cluster tree
+      for (const auto& param : track.track) {
+        trackParamOut = param.getTrackParamStruct();
+        clusterOut = *(param.getClusterPtr());
+        dataClTree.Fill();
+      }
+    }
+  }
+  cout << "\r\033[Kprocessing completed" << endl;
+
+  dataTrFile.Write();
+  dataTrFile.Close();
+  dataClFile.Write();
+  dataClFile.Close();
+  fTracks->Close();
+  fMuons->Close();
+}
+
+//_________________________________________________________________________________________________
 bool ClustersToTrack(const gsl::span<const Cluster> trackClusters, TrackStruct& track)
 {
   /// fill the internal track with the associated clusters and fit it
@@ -249,6 +340,13 @@ bool IsSelected(const TrackStruct& track)
   if (p < 10.) {
     return false;
   }
+
+  // double px = track.paramAtVtx.px();
+  // double py = track.paramAtVtx.py();
+  // double pT = TMath::Sqrt(px * px + py * py);
+  // if (pT < 1.5) {
+  //   return false;
+  // }
 
   double pz = track.paramAtVtx.pz();
   double eta = 0.5 * log((p + pz) / (p - pz));
