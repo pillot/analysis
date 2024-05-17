@@ -36,10 +36,11 @@ using BADHVLIST = std::vector<std::tuple<uint64_t, uint64_t, double, double, std
 using BADHVMAP = std::map<std::string, BADHVLIST>;
 
 double yRange[2] = {-1., 1700.};
-double hvLimits[10] = {1550., 1550., 1590., 1590., 1590., 1590., 1590., 1590., 1590., 1590.};
+double hvLimits[10] = {1550., 1550., 1600., 1600., 1600., 1600., 1600., 1600., 1600., 1600.};
 
 std::set<int> GetRuns(std::string runList);
 RBMAP GetRunBoundaries(ccdb::CcdbApi const& api, std::string runList);
+void CheckRunBoundaries(const RBMAP& runBoundaries);
 void PrintRunBoundaries(const RBMAP& runBoundaries);
 void DrawRunBoudaries(const RBMAP& runBoundaries, TCanvas* c);
 HVBMAP GetHVBoundaries(ccdb::CcdbApi const& api, uint64_t tStart, uint64_t tStop);
@@ -60,11 +61,12 @@ std::string FindAffectedRuns(const RBMAP& runBoundaries, uint64_t tStart, uint64
 void PrintHVIssues(const BADHVMAP hvIssuesPerCh[10]);
 
 //----------------------------------------------------------------------------
-void ScanHV(std::string runList, std::string aliases = "", int printLevel = 1)
+void ScanHV(std::string runList, std::string aliases = "", uint64_t minDuration = 0, int printLevel = 1)
 {
   /// scan the HV of every sectors to check for issues
   /// runList can be an ASCII file with one run per line, or a comma separated run list, or a single run
   /// aliases is the list of DCS channels to be considered (empty = all)
+  /// minDuration is the minimum duration (ms) of HV issues to consider
   /// printLevel >= 1: print time stamps of runs and HV files
   /// printLevel >= 2: print the first and last data points of each selected channel
   /// printLevel >= 3: print all the data points of each selected channel
@@ -80,6 +82,7 @@ void ScanHV(std::string runList, std::string aliases = "", int printLevel = 1)
     printf("no run found from the list\n");
     return;
   }
+  CheckRunBoundaries(runBoundaries);
   if (printLevel > 0) {
     PrintRunBoundaries(runBoundaries);
   }
@@ -129,7 +132,7 @@ void ScanHV(std::string runList, std::string aliases = "", int printLevel = 1)
   }
 
   // select HV issues of a minimum duration (ms) occurring during runs
-  SelectHVIssues(hvIssuesPerCh, runBoundaries, 0);
+  SelectHVIssues(hvIssuesPerCh, runBoundaries, minDuration);
   PrintHVIssues(hvIssuesPerCh);
 
   // display
@@ -192,6 +195,37 @@ RBMAP GetRunBoundaries(ccdb::CcdbApi const& api, std::string runList)
   }
 
   return runBoundaries;
+}
+
+//----------------------------------------------------------------------------
+void CheckRunBoundaries(const RBMAP& runBoundaries)
+{
+  /// check the consistency of the run time boundaries
+
+  bool error = false;
+  int previousRun = 0;
+  uint64_t endOfPreviousRun = 0;
+
+  for (const auto& [run, boundaries] : runBoundaries) {
+    if (boundaries.second <= boundaries.first) {
+      printf("error: run %d EOR <= SOR: %lld - %lld (%s - %s)\n",
+             run, boundaries.first, boundaries.second,
+             GetTime(boundaries.first).c_str(), GetTime(boundaries.second).c_str());
+      error = true;
+    }
+    if (boundaries.first <= endOfPreviousRun) {
+      printf("error: SOR run %d <= EOR run %d: %lld (%s) <= %lld (%s)\n",
+             run, previousRun, boundaries.first, GetTime(boundaries.first).c_str(),
+             endOfPreviousRun, GetTime(endOfPreviousRun).c_str());
+      error = true;
+    }
+    previousRun = run;
+    endOfPreviousRun = boundaries.second;
+  }
+
+  if (error) {
+    exit(1);
+  }
 }
 
 //----------------------------------------------------------------------------
