@@ -24,6 +24,8 @@
 #include "DetectorsDCS/DataPointIdentifier.h"
 #include "DetectorsDCS/DataPointValue.h"
 #include "MCHConditions/DCSAliases.h"
+#include "MCHStatus/HVStatusCreator.h"
+#include "MCHStatus/StatusMapCreatorParam.h"
 
 using namespace o2;
 using DPID = dcs::DataPointIdentifier;
@@ -32,7 +34,8 @@ using DPMAP = std::unordered_map<DPID, std::vector<DPVAL>>;
 using DPMAP2 = std::map<std::string, std::map<uint64_t, double>>;
 using RBMAP = std::map<int, std::pair<uint64_t, uint64_t>>;
 using DPBMAP = std::map<uint64_t, uint64_t>;
-using ISSUELIST = std::vector<std::tuple<uint64_t, uint64_t, double, double, std::string>>;
+using ISSUE = std::tuple<uint64_t, uint64_t, double, double, std::string>;
+using ISSUELIST = std::vector<ISSUE>;
 using ISSUEMAP = std::map<std::string, ISSUELIST>;
 
 double hvRange[2] = {-10., 1700.};
@@ -66,9 +69,12 @@ void PrintDataPoints(const DPMAP2 dpsMapsPerCh[10], bool scanHV, bool all);
 TGraph* MapToGraph(std::string alias, const std::map<uint64_t, double>& dps);
 TCanvas* DrawDataPoints(TMultiGraph* mg, double min, double max);
 void FindIssues(const std::map<uint64_t, double>& dps, double limit, ISSUELIST& issues);
+void FillO2Issues(const std::vector<mch::HVStatusCreator::TimeRange>& o2issues, ISSUELIST& issues);
 void SelectIssues(ISSUEMAP issuesPerCh[10], const RBMAP& runBoundaries, uint64_t minDuration);
+void SelectO2Issues(ISSUEMAP issuesPerCh[10], const RBMAP& runBoundaries);
 std::string FindAffectedRuns(const RBMAP& runBoundaries, uint64_t tStart, uint64_t tStop);
-void PrintIssues(const ISSUEMAP issuesPerCh[10], bool scanHV);
+bool eraseIssue(const ISSUE& issue, ISSUELIST& issues);
+void PrintIssues(const ISSUEMAP issuesPerCh[10], const ISSUEMAP o2IssuesPerCh[10], bool scanHV);
 
 //----------------------------------------------------------------------------
 void ScanHVLV(std::string runList, std::string what = "HV", uint64_t minDuration = 0, int printLevel = 1)
@@ -87,6 +93,10 @@ void ScanHVLV(std::string runList, std::string what = "HV", uint64_t minDuration
   /// printLevel >= 3: print all the data points of each selected channel
 
   gStyle->SetPalette(kVisibleSpectrum);
+
+  // setup O2 algorithm for searching HV issues
+  conf::ConfigurableParam::setValue("MCHStatusMap.hvMinDuration", std::to_string(minDuration));
+  conf::ConfigurableParam::setValue("MCHStatusMap.timeMargin", "0");
 
   // determine what is scanned
   std::string path{};
@@ -114,11 +124,16 @@ void ScanHVLV(std::string runList, std::string what = "HV", uint64_t minDuration
   CheckDPBoundaries(dpBoundaries, scanHV, runBoundaries.begin()->second.first,
                     runBoundaries.rbegin()->second.second);
 
-  // loop over the HV/LV files and fill the lists of data points per chamber
+  // loop over the HV/LV files, fill the lists of data points per chamber and find issues using O2 algorithm
   DPMAP2 dpsMapsPerCh[10];
+  mch::HVStatusCreator hvStatusCreator{};
+  ISSUEMAP o2issuesPerCh[10];
   std::map<std::string, std::string> metadata;
   for (auto boundaries : dpBoundaries) {
+
     auto* dpMap = api.retrieveFromTFileAny<DPMAP>(path.c_str(), metadata, boundaries.first);
+
+    // fill the lists of data points per chamber for requested aliases
     for (const auto& [dpid, dps] : *dpMap) {
       std::string alias(dpid.get_alias());
       if ((scanAll || ContainsAKey(alias, aliases)) && (!scanHV || alias.find(".iMon") == alias.npos)) {
@@ -126,6 +141,17 @@ void ScanHVLV(std::string runList, std::string what = "HV", uint64_t minDuration
         auto& dps2 = dpsMapsPerCh[chamber][alias];
         for (const auto& dp : dps) {
           dps2.emplace(dp.get_epoch_time(), GetValue(dp));
+        }
+      }
+    }
+
+    // find issues for requested aliases using O2 algorithm (only for HV)
+    if (scanHV) {
+      hvStatusCreator.findBadHVs(*dpMap);
+      for (const auto& [alias, issues] : hvStatusCreator.getBadHVs()) {
+        if (scanAll || ContainsAKey(alias, aliases)) {
+          int chamber = mch::dcs::toInt(mch::dcs::aliasToChamber(alias));
+          FillO2Issues(issues, o2issuesPerCh[chamber][alias]);
         }
       }
     }
@@ -158,7 +184,8 @@ void ScanHVLV(std::string runList, std::string what = "HV", uint64_t minDuration
 
   // select HV/LV issues of a minimum duration (ms) occurring during runs
   SelectIssues(issuesPerCh, runBoundaries, minDuration);
-  PrintIssues(issuesPerCh, scanHV);
+  SelectO2Issues(o2issuesPerCh, runBoundaries);
+  PrintIssues(issuesPerCh, o2issuesPerCh, scanHV);
 
   // display
   for (int ch = 0; ch < 10; ++ch) {
@@ -736,6 +763,29 @@ void FindIssues(const std::map<uint64_t, double>& dps, double limit, ISSUELIST& 
 }
 
 //----------------------------------------------------------------------------
+void FillO2Issues(const std::vector<mch::HVStatusCreator::TimeRange>& o2issues, ISSUELIST& issues)
+{
+  /// fill the list of issues from O2 (extend the previous one and/or create new ones)
+
+  // the list must not be empty
+  if (o2issues.empty()) {
+    printf("error: O2 returns an empty list of issues\n");
+  }
+
+  // extend the last issue if needed
+  auto itIssue = o2issues.begin();
+  if (!issues.empty() && itIssue->begin <= std::get<1>(issues.back())) {
+    std::get<1>(issues.back()) = itIssue->end;
+    ++itIssue;
+  }
+
+  // add the other ones
+  for (; itIssue != o2issues.end(); ++itIssue) {
+    issues.emplace_back(itIssue->begin, itIssue->end, 0., 0., "");
+  }
+}
+
+//----------------------------------------------------------------------------
 void SelectIssues(ISSUEMAP issuesPerCh[10], const RBMAP& runBoundaries, uint64_t minDuration)
 {
   /// select HV/LV issues of a minimum duration (ms) occurring during runs
@@ -771,6 +821,37 @@ void SelectIssues(ISSUEMAP issuesPerCh[10], const RBMAP& runBoundaries, uint64_t
 }
 
 //----------------------------------------------------------------------------
+void SelectO2Issues(ISSUEMAP issuesPerCh[10], const RBMAP& runBoundaries)
+{
+  /// select HV issues from O2 algorithm occurring during runs
+  /// and restrict the range of issues to the run range
+
+  for (int ch = 0; ch < 10; ++ch) {
+    for (auto& issues : issuesPerCh[ch]) {
+      for (auto itIssue = issues.second.begin(); itIssue != issues.second.end();) {
+
+        auto& tStart = std::get<0>(*itIssue);
+        auto& tStop = std::get<1>(*itIssue);
+
+        auto runs = FindAffectedRuns(runBoundaries, tStart, tStop);
+
+        if (runs.empty()) {
+
+          itIssue = issues.second.erase(itIssue);
+
+        } else {
+
+          tStart = std::max(tStart, runBoundaries.begin()->second.first);
+          tStop = std::min(tStop, runBoundaries.rbegin()->second.second);
+          std::get<4>(*itIssue) = runs;
+          ++itIssue;
+        }
+      }
+    }
+  }
+}
+
+//----------------------------------------------------------------------------
 std::string FindAffectedRuns(const RBMAP& runBoundaries, uint64_t tStart, uint64_t tStop)
 {
   /// return the list of affected runs in this time range
@@ -796,32 +877,96 @@ std::string FindAffectedRuns(const RBMAP& runBoundaries, uint64_t tStart, uint64
 }
 
 //----------------------------------------------------------------------------
-void PrintIssues(const ISSUEMAP issuesPerCh[10], bool scanHV)
+bool eraseIssue(const ISSUE& issue, ISSUELIST& issues)
+{
+  /// find an issue with the same time range and associated run list and erase it
+  /// return true in case of success
+
+  auto itIssue = std::find_if(issues.begin(), issues.end(), [&issue](const auto& i) {
+    return (std::get<0>(i) == std::get<0>(issue) &&
+            std::get<1>(i) == std::get<1>(issue) &&
+            std::get<4>(i) == std::get<4>(issue));
+  });
+
+  if (itIssue != issues.end()) {
+    issues.erase(itIssue);
+    return true;
+  }
+
+  return false;
+}
+
+//----------------------------------------------------------------------------
+void PrintIssues(const ISSUEMAP issuesPerCh[10], const ISSUEMAP o2IssuesPerCh[10], bool scanHV)
 {
   /// print all HV/LV issues
 
-  const auto format = fmt::format("- %s (duration = %s, min = {} V, mean = {} V) --> run(s) %s\n",
+  // copy the issues so that we can modify them (i.e. add empty lists or delete issues after printing)
+  ISSUEMAP issuesPerChCopy[10];
+  ISSUEMAP o2IssuesPerChCopy[10];
+  for (int ch = 0; ch < 10; ++ch) {
+    issuesPerChCopy[ch] = issuesPerCh[ch];
+    o2IssuesPerChCopy[ch] = o2IssuesPerCh[ch];
+  }
+
+  // make sure that all alias keys in the map o2IssuesPerChCopy are also in issuesPerChCopy in order to
+  // simplify the loop over all issues from both algorithms and fix the order in which they are printed
+  for (int ch = 0; ch < 10; ++ch) {
+    for (const auto& [alias, o2Issues] : o2IssuesPerChCopy[ch]) {
+      if (!o2Issues.empty()) {
+        issuesPerChCopy[ch].try_emplace(alias, ISSUELIST{});
+      }
+    }
+  }
+
+  auto printHeader = [](std::string alias) {
+    auto de = GetDE(alias);
+    if (de.empty()) {
+      printf("Problem found for %s:\n", alias.c_str());
+    } else {
+      printf("Problem found for %s (%s):\n", alias.c_str(), de.c_str());
+    }
+  };
+
+  const auto format = fmt::format("%lld - %lld: %s (duration = %s, min = {} V, mean = {} V) --> run(s) %s\n",
                                   scanHV ? hvFormat : lvFormat, scanHV ? hvFormat : lvFormat);
 
-  printf("\n------ list of issues ------\n");
+  auto printIssue = [&format](ISSUE issue, std::string color) {
+    const auto& [tStart, tStop, min, mean, runs] = issue;
+    printf("%s", color.c_str());
+    printf(format.c_str(), tStart, tStop,
+           GetTime(tStart).c_str(), GetDuration(tStart, tStop).c_str(), min, mean, runs.c_str());
+    printf("\e[0m");
+  };
+
+  if (scanHV) {
+    printf("\n------ list of issues from \e[0;31mthis macro only\e[0m, \e[0;35mO2 only\e[0m, or \e[0;32mboth\e[0m ------\n");
+  } else {
+    printf("\n------ list of issues ------\n");
+  }
 
   bool foundIssues = false;
-  for (int ch = 0; ch < 10; ++ch) {
-    for (const auto& [alias, issues] : issuesPerCh[ch]) {
 
-      if (!issues.empty()) {
+  for (int ch = 0; ch < 10; ++ch) {
+    for (const auto& [alias, issues] : issuesPerChCopy[ch]) {
+
+      auto& o2Issues = o2IssuesPerChCopy[ch][alias];
+
+      if (!issues.empty() || !o2Issues.empty()) {
 
         foundIssues = true;
-        auto de = GetDE(alias);
-        if (de.empty()) {
-          printf("Problem found for %s:\n", alias.c_str());
-        } else {
-          printf("Problem found for %s (%s):\n", alias.c_str(), de.c_str());
+        printHeader(alias);
+
+        // print all issues found by this macro
+        for (const auto& issue : issues) {
+          // change color if the issue is not found by the O2 algorithm (only for HV)
+          std::string color = (scanHV && !eraseIssue(issue, o2Issues)) ? "\e[0;31m" : "\e[0;32m";
+          printIssue(issue, color);
         }
 
-        for (const auto& [tStart, tStop, min, mean, runs] : issues) {
-          printf(format.c_str(),
-                 GetTime(tStart).c_str(), GetDuration(tStart, tStop).c_str(), min, mean, runs.c_str());
+        // print other issues found by the O2 algorithm
+        for (const auto& issue : o2Issues) {
+          printIssue(issue, "\e[0;35m");
         }
 
         printf("----------------------------\n");
