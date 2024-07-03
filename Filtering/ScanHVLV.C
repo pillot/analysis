@@ -1,6 +1,8 @@
 #include <algorithm>
 #include <ctime>
 #include <fstream>
+#include <iterator>
+#include <limits>
 #include <map>
 #include <set>
 #include <sstream>
@@ -69,7 +71,7 @@ void PrintDataPoints(const DPMAP2 dpsMapsPerCh[10], bool scanHV, bool all);
 TGraph* MapToGraph(std::string alias, const std::map<uint64_t, double>& dps);
 TCanvas* DrawDataPoints(TMultiGraph* mg, double min, double max);
 void FindIssues(const std::map<uint64_t, double>& dps, double limit, ISSUELIST& issues);
-void FillO2Issues(const std::vector<mch::HVStatusCreator::TimeRange>& o2issues, ISSUELIST& issues);
+void FillO2Issues(const std::vector<mch::HVStatusCreator::TimeRange>& o2issues, ISSUELIST& issues, uint64_t tMin, uint64_t tMax);
 void SelectIssues(ISSUEMAP issuesPerCh[10], const RBMAP& runBoundaries, uint64_t minDuration);
 void SelectO2Issues(ISSUEMAP issuesPerCh[10], const RBMAP& runBoundaries);
 std::string FindAffectedRuns(const RBMAP& runBoundaries, uint64_t tStart, uint64_t tStop);
@@ -151,7 +153,9 @@ void ScanHVLV(std::string runList, std::string what = "HV", uint64_t minDuration
       for (const auto& [alias, issues] : hvStatusCreator.getBadHVs()) {
         if (scanAll || ContainsAKey(alias, aliases)) {
           int chamber = mch::dcs::toInt(mch::dcs::aliasToChamber(alias));
-          FillO2Issues(issues, o2issuesPerCh[chamber][alias]);
+          FillO2Issues(issues, o2issuesPerCh[chamber][alias],
+                       boundaries.first - mch::StatusMapCreatorParam::Instance().timeMargin,
+                       boundaries.second + mch::StatusMapCreatorParam::Instance().timeMargin);
         }
       }
     }
@@ -349,13 +353,13 @@ void CheckRunBoundaries(const RBMAP& runBoundaries)
 
   for (const auto& [run, boundaries] : runBoundaries) {
     if (boundaries.second <= boundaries.first) {
-      printf("error: run %d EOR <= SOR: %lld - %lld (%s - %s)\n",
+      printf("error: run %d EOR <= SOR: %llu - %llu (%s - %s)\n",
              run, boundaries.first, boundaries.second,
              GetTime(boundaries.first).c_str(), GetTime(boundaries.second).c_str());
       error = true;
     }
     if (boundaries.first <= endOfPreviousRun) {
-      printf("error: SOR run %d <= EOR run %d: %lld (%s) <= %lld (%s)\n",
+      printf("error: SOR run %d <= EOR run %d: %llu (%s) <= %llu (%s)\n",
              run, previousRun, boundaries.first, GetTime(boundaries.first).c_str(),
              endOfPreviousRun, GetTime(endOfPreviousRun).c_str());
       error = true;
@@ -378,7 +382,7 @@ void PrintRunBoundaries(const RBMAP& runBoundaries)
   printf("------------------------------------\n");
 
   for (const auto& [run, boundaries] : runBoundaries) {
-    printf("%d: %lld - %lld (%s - %s)\n", run, boundaries.first, boundaries.second,
+    printf("%d: %llu - %llu (%s - %s)\n", run, boundaries.first, boundaries.second,
            GetTime(boundaries.first).c_str(), GetTime(boundaries.second).c_str());
   }
 
@@ -436,7 +440,7 @@ void CheckDPBoundaries(const DPBMAP& dpBoundaries, bool scanHV, uint64_t tStart,
   /// check the consistency of HV/LV file time boundaries
 
   if (dpBoundaries.empty()) {
-    printf("error: no %s file found in the time range %lld - %lld (%s - %s)\n",
+    printf("error: no %s file found in the time range %llu - %llu (%s - %s)\n",
            scanHV ? "HV" : "LV", tStart, tStop, GetTime(tStart).c_str(), GetTime(tStop).c_str());
     exit(1);
   }
@@ -444,13 +448,13 @@ void CheckDPBoundaries(const DPBMAP& dpBoundaries, bool scanHV, uint64_t tStart,
   bool error = false;
 
   if (dpBoundaries.begin()->first > tStart) {
-    printf("error: the beginning of the time range is not covered: %lld > %lld (%s > %s)\n",
+    printf("error: the beginning of the time range is not covered: %llu > %llu (%s > %s)\n",
            dpBoundaries.begin()->first, tStart,
            GetTime(dpBoundaries.begin()->first).c_str(), GetTime(tStart).c_str());
     error = true;
   }
   if (dpBoundaries.rbegin()->second < tStop) {
-    printf("error: the end of the time range is not covered: %lld < %lld (%s < %s)\n",
+    printf("error: the end of the time range is not covered: %llu < %llu (%s < %s)\n",
            dpBoundaries.rbegin()->second, tStop,
            GetTime(dpBoundaries.rbegin()->second).c_str(), GetTime(tStop).c_str());
     error = true;
@@ -459,12 +463,12 @@ void CheckDPBoundaries(const DPBMAP& dpBoundaries, bool scanHV, uint64_t tStart,
   uint64_t previousTStop = dpBoundaries.begin()->first;
   for (auto [tStart, tStop] : dpBoundaries) {
     if (tStop <= tStart) {
-      printf("error: EOF <= SOF: %lld - %lld (%s - %s)\n",
+      printf("error: EOF <= SOF: %llu - %llu (%s - %s)\n",
              tStart, tStop, GetTime(tStart).c_str(), GetTime(tStop).c_str());
       error = true;
     }
     if (tStart != previousTStop) {
-      printf("error: end of %s file != start of next %s file: %lld (%s) != %lld (%s))\n",
+      printf("error: end of %s file != start of next %s file: %llu (%s) != %llu (%s))\n",
              scanHV ? "HV" : "LV", scanHV ? "HV" : "LV",
              previousTStop, GetTime(previousTStop).c_str(), tStart, GetTime(tStart).c_str());
       error = true;
@@ -486,7 +490,7 @@ void PrintDPBoundaries(const DPBMAP& dpBoundaries, bool scanHV)
   printf("------------------------------------\n");
 
   for (auto [tStart, tStop] : dpBoundaries) {
-    printf("%lld - %lld (%s - %s)\n", tStart, tStop, GetTime(tStart).c_str(), GetTime(tStop).c_str());
+    printf("%llu - %llu (%s - %s)\n", tStart, tStop, GetTime(tStart).c_str(), GetTime(tStop).c_str());
   }
 
   printf("------------------------------------\n");
@@ -630,8 +634,8 @@ void PrintDataPoints(const DPMAP2 dpsMapsPerCh[10], bool scanHV, bool all)
 {
   /// print all the registered data points
 
-  const auto format1 = fmt::format("  %lld (%s): {} V\n", scanHV ? hvFormat : lvFormat);
-  const auto format2 = fmt::format(": %lld (%s): {} V -- %lld (%s): {} V\n",
+  const auto format1 = fmt::format("  %llu (%s): {} V\n", scanHV ? hvFormat : lvFormat);
+  const auto format2 = fmt::format(": %llu (%s): {} V -- %llu (%s): {} V\n",
                                    scanHV ? hvFormat : lvFormat, scanHV ? hvFormat : lvFormat);
 
   for (int ch = 0; ch < 10; ++ch) {
@@ -763,18 +767,34 @@ void FindIssues(const std::map<uint64_t, double>& dps, double limit, ISSUELIST& 
 }
 
 //----------------------------------------------------------------------------
-void FillO2Issues(const std::vector<mch::HVStatusCreator::TimeRange>& o2issues, ISSUELIST& issues)
+void FillO2Issues(const std::vector<mch::HVStatusCreator::TimeRange>& o2issues, ISSUELIST& issues,
+                  uint64_t tMin, uint64_t tMax)
 {
   /// fill the list of issues from O2 (extend the previous one and/or create new ones)
 
   // the list must not be empty
   if (o2issues.empty()) {
     printf("error: O2 returns an empty list of issues\n");
+    exit(1);
+  }
+
+  // only the first and last issues can extend beyond the DP file boundaries, to 0 and infinity, respectively
+  for (auto itIssue = o2issues.begin(); itIssue != o2issues.end(); ++itIssue) {
+    if (itIssue->begin < tMin &&
+        (itIssue != o2issues.begin() || itIssue->begin != 0)) {
+      printf("error: O2 returns an issue with invalid time range (%llu < %llu)\n", itIssue->begin, tMin);
+      exit(1);
+    }
+    if (itIssue->end >= tMax &&
+        (itIssue != std::prev(o2issues.end()) || itIssue->end != std::numeric_limits<uint64_t>::max())) {
+      printf("error: O2 returns an issue with invalid time range (%llu >= %llu)\n", itIssue->end, tMax);
+      exit(1);
+    }
   }
 
   // extend the last issue if needed
   auto itIssue = o2issues.begin();
-  if (!issues.empty() && itIssue->begin <= std::get<1>(issues.back())) {
+  if (!issues.empty() && itIssue->begin == 0 && std::get<1>(issues.back()) == std::numeric_limits<uint64_t>::max()) {
     std::get<1>(issues.back()) = itIssue->end;
     ++itIssue;
   }
@@ -928,7 +948,7 @@ void PrintIssues(const ISSUEMAP issuesPerCh[10], const ISSUEMAP o2IssuesPerCh[10
     }
   };
 
-  const auto format = fmt::format("%lld - %lld: %s (duration = %s, min = {} V, mean = {} V) --> run(s) %s\n",
+  const auto format = fmt::format("%llu - %llu: %s (duration = %s, min = {} V, mean = {} V) --> run(s) %s\n",
                                   scanHV ? hvFormat : lvFormat, scanHV ? hvFormat : lvFormat);
 
   auto printIssue = [&format](ISSUE issue, std::string color) {
