@@ -66,6 +66,7 @@ std::string GetTime(uint64_t ts);
 std::string GetDuration(uint64_t tStart, uint64_t tStop);
 double GetValue(DPVAL dp);
 std::string GetDE(std::string alias);
+void FillDataPoints(const std::vector<DPVAL>& dps, std::map<uint64_t, double>& dps2, uint64_t tMin, uint64_t tMax);
 void SelectDataPoints(DPMAP2 dpsMapsPerCh[10], uint64_t tStart, uint64_t tStop);
 void PrintDataPoints(const DPMAP2 dpsMapsPerCh[10], bool scanHV, bool all);
 TGraph* MapToGraph(std::string alias, const std::map<uint64_t, double>& dps);
@@ -140,10 +141,7 @@ void ScanHVLV(std::string runList, std::string what = "HV", uint64_t minDuration
       std::string alias(dpid.get_alias());
       if ((scanAll || ContainsAKey(alias, aliases)) && (!scanHV || alias.find(".iMon") == alias.npos)) {
         int chamber = mch::dcs::toInt(mch::dcs::aliasToChamber(alias));
-        auto& dps2 = dpsMapsPerCh[chamber][alias];
-        for (const auto& dp : dps) {
-          dps2.emplace(dp.get_epoch_time(), GetValue(dp));
-        }
+        FillDataPoints(dps, dpsMapsPerCh[chamber][alias], boundaries.first, boundaries.second);
       }
     }
 
@@ -153,9 +151,7 @@ void ScanHVLV(std::string runList, std::string what = "HV", uint64_t minDuration
       for (const auto& [alias, issues] : hvStatusCreator.getBadHVs()) {
         if (scanAll || ContainsAKey(alias, aliases)) {
           int chamber = mch::dcs::toInt(mch::dcs::aliasToChamber(alias));
-          FillO2Issues(issues, o2issuesPerCh[chamber][alias],
-                       boundaries.first - mch::StatusMapCreatorParam::Instance().timeMargin,
-                       boundaries.second + mch::StatusMapCreatorParam::Instance().timeMargin);
+          FillO2Issues(issues, o2issuesPerCh[chamber][alias], boundaries.first, boundaries.second);
         }
       }
     }
@@ -591,6 +587,71 @@ std::string GetDE(std::string alias)
 }
 
 //----------------------------------------------------------------------------
+void FillDataPoints(const std::vector<DPVAL>& dps, std::map<uint64_t, double>& dps2, uint64_t tMin, uint64_t tMax)
+{
+  /// fill the map of data points
+
+  if (dps.empty()) {
+    printf("error: the file does not contain any data point\n");
+    exit(1);
+  }
+
+  auto itDP = dps.begin();
+  auto ts = itDP->get_epoch_time();
+  std::string header = "warning:";
+  std::string color = (ts < tMin - 2000 || ts > tMin + 2000) ? "\e[0;31m" : "\e[0;34m";
+
+  // check if the first data point is a copy of the last one from previous file
+  if (!dps2.empty()) {
+    auto previousTS = dps2.rbegin()->first;
+    if (ts != previousTS || GetValue(*itDP) != dps2.rbegin()->second) {
+      if (ts <= previousTS) {
+        printf("error: wrong data point order (%llu <= %llu)\n", ts, previousTS);
+        exit(1);
+      }
+      printf("%s%s missing the previous data point (dt = %s%llu ms)", color.c_str(), header.c_str(),
+             (previousTS < tMin) ? "-" : "+", (previousTS < tMin) ? tMin - previousTS : previousTS - tMin);
+      if (ts <= tMin) {
+        printf(" but get one at dt = -%llu ms\e[0m\n", tMin - ts);
+      } else {
+        printf("\e[0m\n");
+      }
+      header = "        ";
+    }
+  }
+
+  // add the first data point (should be before the start of validity of the file)
+  if (ts > tMin && ts < tMax) {
+    printf("%s%s missing data point prior file start of validity (dt = +%llu ms)\e[0m\n",
+           color.c_str(), header.c_str(), ts - tMin);
+    header = "        ";
+  } else if (ts >= tMax) {
+    printf("error: first data point exceeding file validity range (dt = +%llu ms)\n", ts - tMax);
+    exit(1);
+  }
+  dps2.emplace(ts, GetValue(*itDP));
+
+  // add other data points (should be within the validity range of the file)
+  auto previousTS = ts;
+  for (++itDP; itDP < dps.end(); ++itDP) {
+    ts = itDP->get_epoch_time();
+    if (ts <= previousTS) {
+      printf("error: wrong data point order (%llu <= %llu)\n", ts, previousTS);
+      exit(1);
+    }
+    if (ts < tMin) {
+      printf("%s%s data point outside of file validity range (dt = -%llu ms)\e[0m\n",
+             (ts < tMin - 2000) ? "\e[0;31m" : "\e[0;34m", header.c_str(), tMin - ts);
+    } else if (ts >= tMax) {
+      printf("\e[0;31m%s data point outside of file validity range (dt = +%llu ms)\e[0m\n",
+             header.c_str(), ts - tMax);
+    }
+    dps2.emplace(ts, GetValue(*itDP));
+    previousTS = ts;
+  }
+}
+
+//----------------------------------------------------------------------------
 void SelectDataPoints(DPMAP2 dpsMapsPerCh[10], uint64_t tStart, uint64_t tStop)
 {
   /// remove the data points outside of the given time range and, if needed,
@@ -778,30 +839,36 @@ void FillO2Issues(const std::vector<mch::HVStatusCreator::TimeRange>& o2issues, 
     exit(1);
   }
 
-  // only the first and last issues can extend beyond the DP file boundaries, to 0 and infinity, respectively
   for (auto itIssue = o2issues.begin(); itIssue != o2issues.end(); ++itIssue) {
-    if (itIssue->begin < tMin &&
+
+    // exclude issues fully outside of the DP file boudaries
+    if (itIssue->end <= tMin || itIssue->begin >= tMax) {
+      printf("\e[0;35mwarning: skipping O2 issue outside of file boundaries (%llu - %llu)\e[0m\n",
+             itIssue->begin, itIssue->end);
+      continue;
+    }
+
+    // only the first issue could in principle extend before the start of the DP file, to O
+    if (itIssue->begin < tMin - mch::StatusMapCreatorParam::Instance().timeMargin &&
         (itIssue != o2issues.begin() || itIssue->begin != 0)) {
-      printf("error: O2 returns an issue with invalid time range (%llu < %llu)\n", itIssue->begin, tMin);
-      exit(1);
+      printf("\e[0;35mwarning: O2 returns an issue with uncommon start time (%llu < %llu)\e[0m\n",
+             itIssue->begin, tMin - mch::StatusMapCreatorParam::Instance().timeMargin);
     }
-    if (itIssue->end >= tMax &&
+
+    // only the last issue could in principle extend beyond the end of the DP file, to infinity
+    if (itIssue->end >= tMax + mch::StatusMapCreatorParam::Instance().timeMargin &&
         (itIssue != std::prev(o2issues.end()) || itIssue->end != std::numeric_limits<uint64_t>::max())) {
-      printf("error: O2 returns an issue with invalid time range (%llu >= %llu)\n", itIssue->end, tMax);
-      exit(1);
+      printf("\e[0;35mwarning: O2 returns an issue with uncommon end time (%llu >= %llu)\e[0m\n",
+             itIssue->end, tMax + mch::StatusMapCreatorParam::Instance().timeMargin);
     }
-  }
 
-  // extend the last issue if needed
-  auto itIssue = o2issues.begin();
-  if (!issues.empty() && itIssue->begin == 0 && std::get<1>(issues.back()) == std::numeric_limits<uint64_t>::max()) {
-    std::get<1>(issues.back()) = itIssue->end;
-    ++itIssue;
-  }
-
-  // add the other ones
-  for (; itIssue != o2issues.end(); ++itIssue) {
-    issues.emplace_back(itIssue->begin, itIssue->end, 0., 0., "");
+    // extend the last issue in case of continuity accross the DP files or add a new one,
+    // restricting their time range within the DP file boundaries
+    if (itIssue->begin <= tMin && !issues.empty() && std::get<1>(issues.back()) == tMin) {
+      std::get<1>(issues.back()) = std::min(itIssue->end, tMax);
+    } else {
+      issues.emplace_back(std::max(itIssue->begin, tMin), std::min(itIssue->end, tMax), 0., 0., "");
+    }
   }
 }
 
