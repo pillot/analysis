@@ -139,6 +139,10 @@ void ScanHVLV(std::string runList, std::string what = "HV", uint64_t minDuration
     // fill the lists of data points per chamber for requested aliases
     for (const auto& [dpid, dps] : *dpMap) {
       std::string alias(dpid.get_alias());
+      if (!mch::dcs::isValid(alias)) {
+        printf("error: invalid DCS alias: %s\n", alias.c_str());
+        exit(1);
+      }
       if ((scanAll || ContainsAKey(alias, aliases)) && (!scanHV || alias.find(".iMon") == alias.npos)) {
         int chamber = mch::dcs::toInt(mch::dcs::aliasToChamber(alias));
         FillDataPoints(dps, dpsMapsPerCh[chamber][alias], boundaries.first, boundaries.second);
