@@ -420,15 +420,26 @@ DPBMAP GetDPBoundaries(ccdb::CcdbApi const& api, std::string what, uint64_t tSta
   // add extra margin (ms) of ± 1 min to the creation time, which occurs every 30 min
   static const uint64_t timeMarging[2] = {60000, 1860000};
 
-  DPBMAP dpBoundaries{};
-
   std::istringstream fileInfo(api.list(what.c_str(), false, "text/plain",
                                        tStop + timeMarging[1], tStart - timeMarging[0]));
 
+  DPBMAP dpBoundaries{};
+  std::string dummy{};
+  uint64_t begin = 0;
+  uint64_t end = 0;
+
   for (std::string line; std::getline(fileInfo, line);) {
     if (line.find("Validity:") == 0) {
-      dpBoundaries.emplace(std::stoull(line.substr(10, 13)), std::stoull(line.substr(26, 13)));
+      std::istringstream in(line);
+      in >> dummy >> begin >> dummy >> end;
+      dpBoundaries.emplace(begin, end);
     }
+  }
+
+  if (dpBoundaries.empty()) {
+    printf("\e[0;31merror: no file found in %s in time range %llu - %llu (%s - %s) --> use the default one\e[0m\n",
+           what.c_str(), tStart, tStop, GetTime(tStart).c_str(), GetTime(tStop).c_str());
+    dpBoundaries.emplace(1, 9999999999999);
   }
 
   return dpBoundaries;
@@ -438,12 +449,6 @@ DPBMAP GetDPBoundaries(ccdb::CcdbApi const& api, std::string what, uint64_t tSta
 void CheckDPBoundaries(const DPBMAP& dpBoundaries, bool scanHV, uint64_t tStart, uint64_t tStop)
 {
   /// check the consistency of HV/LV file time boundaries
-
-  if (dpBoundaries.empty()) {
-    printf("error: no %s file found in the time range %llu - %llu (%s - %s)\n",
-           scanHV ? "HV" : "LV", tStart, tStop, GetTime(tStart).c_str(), GetTime(tStop).c_str());
-    exit(1);
-  }
 
   bool error = false;
 
@@ -665,7 +670,8 @@ void SelectDataPoints(DPMAP2 dpsMapsPerCh[10], uint64_t tStart, uint64_t tStop)
     for (auto& [alias, dps] : dpsMapsPerCh[ch]) {
 
       // get the first data point in the time range, remove the previous ones
-      // and add a data point with value equal to the preceding one if needed
+      // and add a data point with value equal to the preceding one if it exits
+      // or to this one otherwise
       auto itFirst = dps.lower_bound(tStart);
       if (itFirst != dps.begin()) {
         double previousVal = std::prev(itFirst)->second;
@@ -674,22 +680,22 @@ void SelectDataPoints(DPMAP2 dpsMapsPerCh[10], uint64_t tStart, uint64_t tStop)
         }
         dps.emplace(tStart, previousVal);
       } else if (itFirst->first != tStart) {
-        printf("error (%s): first data point is posterior to the beginning of the time range\n", alias.c_str());
+        if (itFirst->first > tStop) {
+          printf("error (%s): all data points are posterior to the end of the time range\n", alias.c_str());
+        } else {
+          printf("error (%s): first data point is posterior to the beginning of the time range\n", alias.c_str());
+        }
+        dps.emplace(tStart, itFirst->second);
       }
 
       // get the first data point exceeding the time range, remove it and the next ones
       // and add a data point with value equal to the preceding one if needed
       auto itLast = dps.upper_bound(tStop);
-      if (itLast != dps.begin()) {
-        double previousVal = std::prev(itLast)->second;
-        for (auto it = itLast; it != dps.end();) {
-          it = dps.erase(it);
-        }
-        dps.emplace(tStop, previousVal);
-      } else {
-        printf("error (%s): all data points are posterior to the end of the time range\n", alias.c_str());
-        dps.clear();
+      double previousVal = std::prev(itLast)->second;
+      for (auto it = itLast; it != dps.end();) {
+        it = dps.erase(it);
       }
+      dps.emplace(tStop, previousVal);
     }
   }
 }
