@@ -13,6 +13,7 @@
 #include <TTree.h>
 #include <TTreeReader.h>
 #include <TTreeReaderValue.h>
+// #include <TRandom.h>
 
 #include "DataFormatsMCH/Cluster.h"
 #include "DataFormatsMCH/Digit.h"
@@ -48,7 +49,8 @@ struct TrackStruct {
   double rAbs = 0.;
 };
 
-bool ClustersToTrack(const gsl::span<const Cluster> trackClusters, TrackStruct& track);
+const TrackMCHMID* FindMuon(uint32_t iMCHTrack, const std::vector<TrackMCHMID>& muonTracks);
+bool ClustersToTrack(gsl::span<Cluster> trackClusters, TrackStruct& track);
 bool ExtrapToVertex(TrackStruct& track);
 bool IsSelected(const TrackStruct& track);
 
@@ -115,7 +117,7 @@ void SelectClusters(int run, const char* clusterFile, const char* trackFile, con
 
     for (const auto& muon : *allMuons) {
       const auto& mchTrack = (*allTracks)[muon.getMCHRef().getIndex()];
-      const gsl::span<const Cluster> trackClusters(&(*allTrackClusters)[mchTrack.getFirstClusterIdx()], mchTrack.getNClusters());
+      gsl::span<Cluster> trackClusters(&(*allTrackClusters)[mchTrack.getFirstClusterIdx()], mchTrack.getNClusters());
 
       // create an internal track and compute its parameters at each attached cluster
       TrackStruct track{};
@@ -176,10 +178,11 @@ void SelectClusters(int run, const char* clusterFile, const char* trackFile, con
 }
 
 //_________________________________________________________________________________________________
-void SelectClusters(int run, const char* trackFile, const char* muonFile, bool applyTrackSelection = false,
+void SelectClusters(int run, const char* trackFile, const char* muonFile,
+                    bool applyTrackSelection = false, bool selectMatched = false,
                     const char* outClFile = "clusterslite.root", const char* outTrFile = "trackslite.root")
 {
-  /// select all clusters attached to a (selected) muon track
+  /// select all clusters attached to a (selected) mch/muon track
   /// store the clusters with the associated track params in outClFile
   /// store the track parameters at vertex and dca in outTrFile
   /// require the MCH mapping to be loaded: gSystem->Load("libO2MCHMappingImpl4")
@@ -221,9 +224,16 @@ void SelectClusters(int run, const char* trackFile, const char* muonFile, bool a
   while (trackReader->Next() && muonReader->Next()) {
     std::cout << "\rprocessing TF " << ++iTF << " / " << nTF << "..." << std::flush;
 
-    for (const auto& muon : *allMuons) {
-      const auto& mchTrack = (*allTracks)[muon.getMCHRef().getIndex()];
-      const gsl::span<const Cluster> trackClusters(&(*allTrackClusters)[mchTrack.getFirstClusterIdx()], mchTrack.getNClusters());
+    for (uint32_t iMCHTrack = 0; iMCHTrack < allTracks->size(); ++iMCHTrack) {
+
+      // select muon tracks if requested
+      auto muon = FindMuon(iMCHTrack, *allMuons);
+      if (selectMatched && !muon) {
+        continue;
+      }
+
+      const auto& mchTrack = (*allTracks)[iMCHTrack];
+      gsl::span<Cluster> trackClusters(&(*allTrackClusters)[mchTrack.getFirstClusterIdx()], mchTrack.getNClusters());
 
       // create an internal track and compute its parameters at each attached cluster
       TrackStruct track{};
@@ -231,8 +241,13 @@ void SelectClusters(int run, const char* trackFile, const char* muonFile, bool a
         continue;
       }
 
-      // propagate the track to the vertex (0,0,0) and apply selections if requested
-      if (applyTrackSelection && !(ExtrapToVertex(track) && IsSelected(track))) {
+      // propagate the track to the vertex (0,0,0)
+      if (!ExtrapToVertex(track)) {
+        continue;
+      }
+
+      // apply selections if requested
+      if (applyTrackSelection && !IsSelected(track)) {
         continue;
       }
 
@@ -243,7 +258,7 @@ void SelectClusters(int run, const char* trackFile, const char* muonFile, bool a
       trackOut.pUncorr = mchTrack.getP();
       trackOut.nClusters = mchTrack.getNClusters();
       trackOut.chi2 = mchTrack.getChi2OverNDF();
-      trackOut.matchChi2 = muon.getMatchChi2OverNDF();
+      trackOut.matchChi2 = muon ? muon->getMatchChi2OverNDF() : 0.;
       dataTrTree.Fill();
 
       // fill output cluster tree
@@ -265,7 +280,19 @@ void SelectClusters(int run, const char* trackFile, const char* muonFile, bool a
 }
 
 //_________________________________________________________________________________________________
-bool ClustersToTrack(const gsl::span<const Cluster> trackClusters, TrackStruct& track)
+const TrackMCHMID* FindMuon(uint32_t iMCHTrack, const std::vector<TrackMCHMID>& muonTracks)
+{
+  /// find the MCH-MID matched track corresponding to this MCH track
+  for (const auto& muon : muonTracks) {
+    if (muon.getMCHRef().getIndex() == iMCHTrack) {
+      return &muon;
+    }
+  }
+  return nullptr;
+}
+
+//_________________________________________________________________________________________________
+bool ClustersToTrack(gsl::span<Cluster> trackClusters, TrackStruct& track)
 {
   /// fill the internal track with the associated clusters and fit it
   /// return false if the fit fails
@@ -274,7 +301,14 @@ bool ClustersToTrack(const gsl::span<const Cluster> trackClusters, TrackStruct& 
   trackFitter.smoothTracks(true);
   TrackExtrap::useExtrapV2();
 
-  for (const auto& cluster : trackClusters) {
+  for (auto& cluster : trackClusters) {
+    // if (cluster.ey < 1.) {
+    //   cluster.ey = 0.05;
+    // }
+    // if (cluster.getChamberId() == 2 || cluster.getChamberId() == 3) {
+    //   cluster.y += gRandom->Gaus(0., 0.02);
+    //   cluster.ey *= sqrt(2.);
+    // }
     track.track.createParamAtCluster(cluster);
   }
 
