@@ -23,6 +23,7 @@
 #include <TDatabasePDG.h>
 #include <Math/Vector4D.h>
 #include <TGeoGlobalMagField.h>
+// #include <TRandom.h>
 
 #include "AliCDBManager.h"
 #include "AliGRPManager.h"
@@ -702,6 +703,7 @@ void CompareTracks(int runNumber, string mchFileName1, string muonFileName1, str
           tracks1.back().matchedChi2 = muon ? muon->getMatchChi2OverNDF() : -1.;
           tracks1.back().needExtrapToVtx = true;
         }
+        // RefitTracks(tracks1);
         ExtrapToVertex(tracks1, vertices, ++event1);
         if (applyTrackSelection) {
           selectTracks(tracks1);
@@ -726,6 +728,7 @@ void CompareTracks(int runNumber, string mchFileName1, string muonFileName1, str
           tracks2.back().matchedChi2 = muon ? muon->getMatchChi2OverNDF() : -1.;
           tracks2.back().needExtrapToVtx = true;
         }
+        // RefitTracks(tracks2);
         ExtrapToVertex(tracks2, vertices, ++event2);
         if (applyTrackSelection) {
           selectTracks(tracks2);
@@ -1065,7 +1068,14 @@ void RefitTracks(std::list<TrackStruct>& tracks)
     }
 
     Track track{};
-    for (const auto& cluster : itTrack->clusters) {
+    for (auto& cluster : itTrack->clusters) {
+      // if (cluster.ey < 1.) {
+      //   cluster.ey = 0.05;
+      // }
+      // if (cluster.getChamberId() == 2 || cluster.getChamberId() == 3) {
+      //   cluster.y += gRandom->Gaus(0., 0.05);
+      //   cluster.ey *= 2.;
+      // }
       track.createParamAtCluster(cluster);
     }
 
@@ -1274,7 +1284,7 @@ bool LoadCCDB()
   /// access CCDB and prepare track extrapolation to vertex and track fitting
 
   // load magnetic field and geometry from CCDB
-  auto ccdb = o2::ccdb::BasicCCDBManager::instance();
+  auto& ccdb = o2::ccdb::BasicCCDBManager::instance();
   auto [tStart, tEnd] = ccdb.getRunDuration(run);
   ccdb.setTimestamp(tEnd);
   auto grp = ccdb.get<o2::parameters::GRPMagField>("GLO/Config/GRPMagField");
@@ -1849,7 +1859,7 @@ void FillHistosMuAtVertex(const TrackStruct& track, std::vector<TH1*>& histos)
   
   histos[0]->Fill(track.pxpypzm.Pt());
   histos[1]->Fill(track.pxpypzm.Eta());
-  histos[2]->Fill(180. + atan2(-track.pxpypzm.Px(), -track.pxpypzm.Py()) / pi() * 180.);
+  histos[2]->Fill(180. + atan2(-track.pxpypzm.Py(), -track.pxpypzm.Px()) / pi() * 180.);
   histos[3]->Fill(track.rAbs);
   histos[4]->Fill(track.pxpypzm.P());
   histos[5]->Fill(track.dca);
