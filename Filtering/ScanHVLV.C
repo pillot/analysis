@@ -66,7 +66,7 @@ std::string GetTime(uint64_t ts);
 std::string GetDuration(uint64_t tStart, uint64_t tStop);
 double GetValue(DPVAL dp);
 std::string GetDE(std::string alias);
-void FillDataPoints(const std::vector<DPVAL>& dps, std::map<uint64_t, double>& dps2, uint64_t tMin, uint64_t tMax);
+void FillDataPoints(const std::vector<DPVAL>& dps, std::map<uint64_t, double>& dps2, uint64_t tMin, uint64_t tMax, int warningLevel);
 void SelectDataPoints(DPMAP2 dpsMapsPerCh[10], uint64_t tStart, uint64_t tStop);
 void PrintDataPoints(const DPMAP2 dpsMapsPerCh[10], bool scanHV, bool all);
 TGraph* MapToGraph(std::string alias, const std::map<uint64_t, double>& dps);
@@ -80,7 +80,8 @@ bool eraseIssue(const ISSUE& issue, ISSUELIST& issues);
 void PrintIssues(const ISSUEMAP issuesPerCh[10], const ISSUEMAP o2IssuesPerCh[10], bool scanHV);
 
 //----------------------------------------------------------------------------
-void ScanHVLV(std::string runList, std::string what = "HV", uint64_t minDuration = 0, int printLevel = 1)
+void ScanHVLV(std::string runList, std::string what = "HV", uint64_t minDuration = 0,
+              int warningLevel = 1, int printLevel = 1)
 {
   /// scan every HV or LV channels to look for issues
   /// runList = an ASCII file with one run per line
@@ -91,6 +92,8 @@ void ScanHVLV(std::string runList, std::string what = "HV", uint64_t minDuration
   ///      = a comma separated list of (part of) aliases to consider, which must be all of the
   ///        same type, i.e contain either Quad/Slat (type = HV), or Group/an/di/Sol (type = LV)
   /// minDuration = minimum duration (ms) of HV/LV issues to consider
+  /// warningLevel == 1: check data points w.r.t. HV/LV file validity range with ±2s tolerance
+  /// warningLevel >= 2: check data points w.r.t. HV/LV file validity range
   /// printLevel >= 1: print time stamps of runs and HV/LV files
   /// printLevel >= 2: print the first and last data points of each selected channel
   /// printLevel >= 3: print all the data points of each selected channel
@@ -145,7 +148,7 @@ void ScanHVLV(std::string runList, std::string what = "HV", uint64_t minDuration
       }
       if ((scanAll || ContainsAKey(alias, aliases)) && (!scanHV || alias.find(".iMon") == alias.npos)) {
         int chamber = mch::dcs::toInt(mch::dcs::aliasToChamber(alias));
-        FillDataPoints(dps, dpsMapsPerCh[chamber][alias], boundaries.first, boundaries.second);
+        FillDataPoints(dps, dpsMapsPerCh[chamber][alias], boundaries.first, boundaries.second, warningLevel);
       }
     }
 
@@ -596,7 +599,8 @@ std::string GetDE(std::string alias)
 }
 
 //----------------------------------------------------------------------------
-void FillDataPoints(const std::vector<DPVAL>& dps, std::map<uint64_t, double>& dps2, uint64_t tMin, uint64_t tMax)
+void FillDataPoints(const std::vector<DPVAL>& dps, std::map<uint64_t, double>& dps2,
+                    uint64_t tMin, uint64_t tMax, int warningLevel)
 {
   /// fill the map of data points
 
@@ -609,6 +613,7 @@ void FillDataPoints(const std::vector<DPVAL>& dps, std::map<uint64_t, double>& d
   auto ts = itDP->get_epoch_time();
   std::string header = "warning:";
   std::string color = (ts < tMin - 2000 || ts > tMin + 2000) ? "\e[0;31m" : "\e[0;34m";
+  bool printWarning = warningLevel > 1 || (warningLevel == 1 && color == "\e[0;31m");
 
   // check if the first data point is a copy of the last one from previous file
   if (!dps2.empty()) {
@@ -618,25 +623,27 @@ void FillDataPoints(const std::vector<DPVAL>& dps, std::map<uint64_t, double>& d
         printf("error: wrong data point order (%llu <= %llu)\n", ts, previousTS);
         exit(1);
       }
-      printf("%s%s missing the previous data point (dt = %s%llu ms)", color.c_str(), header.c_str(),
-             (previousTS < tMin) ? "-" : "+", (previousTS < tMin) ? tMin - previousTS : previousTS - tMin);
-      if (ts <= tMin) {
-        printf(" but get one at dt = -%llu ms\e[0m\n", tMin - ts);
-      } else {
-        printf("\e[0m\n");
+      if (printWarning) {
+        printf("%s%s missing the previous data point (dt = %s%llu ms)", color.c_str(), header.c_str(),
+               (previousTS < tMin) ? "-" : "+", (previousTS < tMin) ? tMin - previousTS : previousTS - tMin);
+        if (ts <= tMin) {
+          printf(" but get one at dt = -%llu ms\e[0m\n", tMin - ts);
+        } else {
+          printf("\e[0m\n");
+        }
+        header = "        ";
       }
-      header = "        ";
     }
   }
 
   // add the first data point (should be before the start of validity of the file)
-  if (ts > tMin && ts < tMax) {
+  if (ts >= tMax) {
+    printf("error: first data point exceeding file validity range (dt = +%llu ms)\n", ts - tMax);
+    exit(1);
+  } else if (ts > tMin && printWarning) {
     printf("%s%s missing data point prior file start of validity (dt = +%llu ms)\e[0m\n",
            color.c_str(), header.c_str(), ts - tMin);
     header = "        ";
-  } else if (ts >= tMax) {
-    printf("error: first data point exceeding file validity range (dt = +%llu ms)\n", ts - tMax);
-    exit(1);
   }
   dps2.emplace(ts, GetValue(*itDP));
 
@@ -648,10 +655,10 @@ void FillDataPoints(const std::vector<DPVAL>& dps, std::map<uint64_t, double>& d
       printf("error: wrong data point order (%llu <= %llu)\n", ts, previousTS);
       exit(1);
     }
-    if (ts < tMin) {
+    if (ts < tMin && (warningLevel > 1 || (warningLevel == 1 && ts < tMin - 2000))) {
       printf("%s%s data point outside of file validity range (dt = -%llu ms)\e[0m\n",
              (ts < tMin - 2000) ? "\e[0;31m" : "\e[0;34m", header.c_str(), tMin - ts);
-    } else if (ts >= tMax) {
+    } else if (ts >= tMax && warningLevel >= 1) {
       printf("\e[0;31m%s data point outside of file validity range (dt = +%llu ms)\e[0m\n",
              header.c_str(), ts - tMax);
     }
