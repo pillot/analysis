@@ -27,7 +27,7 @@ void FillResiduals(const Cluster& cluster1, const Cluster& cluster2, std::vector
 void NormResiduals(std::vector<TH1*>& histos);
 void DrawResiduals(std::vector<TH1*>& histos);
 void DrawResiduals(std::vector<TH1*>& oldHistos, std::vector<TH1*>& newHistos);
-void DrawRatios(std::vector<TH1*>& oldHistos, std::vector<TH1*>& newHistos);
+void DrawRatios(std::vector<TH1*>& oldHistos, std::vector<TH1*>& newHistos, int rebin);
 std::pair<double, double> GetSigma(TH1* h, int color);
 double CrystalBallSymmetric(double* xx, double* par);
 
@@ -59,7 +59,7 @@ void CompareClusters(const char* inFile = "newclusters.root")
 
   DrawResiduals(clclResiduals);
   DrawResiduals(oldResiduals, newResiduals);
-  DrawRatios(oldResiduals, newResiduals);
+  DrawRatios(oldResiduals, newResiduals, 5);
 
   dataFileIn->Close();
 }
@@ -84,7 +84,7 @@ void CompareClusters(const char* inFile1, const char* inFile2, bool compareNewCl
   NormResiduals(residuals2);
 
   DrawResiduals(residuals1, residuals2);
-  DrawRatios(residuals1, residuals2);
+  DrawRatios(residuals1, residuals2, 5);
 }
 
 //_________________________________________________________________________________________________
@@ -92,20 +92,17 @@ void CreateResiduals(std::vector<TH1*>& histos, const char* extension, double ra
 {
   /// create histograms of cluster-track residuals
 
-  int nBins = 1001;
-  double binWidth = 2. * range / (nBins - 1);
-  double min = -range - 0.5 * binWidth;
-  double max = range + 0.5 * binWidth;
+  int nBins = 1000;
 
   if (histos.size() == 0) {
     for (int iSt = 1; iSt <= 5; ++iSt) {
       histos.emplace_back(new TH1F(Form("resX%sSt%d", extension, iSt),
-                                   Form("#DeltaX Station %d;#DeltaX (cm)", iSt), nBins, min, max));
+                                   Form("#DeltaX Station %d;#DeltaX (cm)", iSt), nBins, -range, range));
       histos.emplace_back(new TH1F(Form("resY%sSt%d", extension, iSt),
-                                   Form("#DeltaY Station %d;#DeltaY (cm)", iSt), nBins, min, max));
+                                   Form("#DeltaY Station %d;#DeltaY (cm)", iSt), nBins, -range, range));
     }
-    histos.emplace_back(new TH1F(Form("resX%s", extension), "#DeltaX;#DeltaX (cm)", nBins, min, max));
-    histos.emplace_back(new TH1F(Form("resY%s", extension), "#DeltaY;#DeltaY (cm)", nBins, min, max));
+    histos.emplace_back(new TH1F(Form("resX%s", extension), "#DeltaX;#DeltaX (cm)", nBins, -range, range));
+    histos.emplace_back(new TH1F(Form("resY%s", extension), "#DeltaY;#DeltaY (cm)", nBins, -range, range));
   }
 
   for (auto h : histos) {
@@ -246,7 +243,7 @@ void DrawResiduals(std::vector<TH1*>& oldHistos, std::vector<TH1*>& newHistos)
 }
 
 //_________________________________________________________________________________________________
-void DrawRatios(std::vector<TH1*>& oldHistos, std::vector<TH1*>& newHistos)
+void DrawRatios(std::vector<TH1*>& oldHistos, std::vector<TH1*>& newHistos, int rebin)
 {
   /// draw ratios of cluster-track residuals
 
@@ -258,11 +255,20 @@ void DrawRatios(std::vector<TH1*>& oldHistos, std::vector<TH1*>& newHistos)
     c->cd((i % 2) * nPadsx + i / 2 + 1);
     TH1* hRat = new TH1F(*static_cast<TH1F*>(h));
     hRat->SetDirectory(0);
-    hRat->Divide(oldHistos[i]);
+    hRat->Rebin(rebin);
+    auto* h1 = static_cast<TH1*>(oldHistos[i]->Clone());
+    h1->Rebin(rebin);
+    hRat->Divide(h1);
+    delete h1;
     hRat->SetStats(false);
     hRat->SetLineColor(2);
     hRat->Draw();
     hRat->GetXaxis()->SetRangeUser(-0.5, 0.5);
+    if (i > 9) {
+      hRat->GetYaxis()->SetRangeUser(0.95, 1.05);
+    } else {
+      hRat->GetYaxis()->SetRangeUser(0.9, 1.1);
+    }
     ++i;
   }
 }
@@ -294,8 +300,8 @@ std::pair<double, double> GetSigma(TH1* h, int color)
 
   // second fit
   fCrystalBall->ReleaseParameter(3);
-  fCrystalBall->SetParameter(3, 2.);
-  fCrystalBall->SetParameter(4, 1.5);
+  fCrystalBall->SetParameter(3, 1.);
+  fCrystalBall->SetParameter(4, 2.5);
   h->Fit(fCrystalBall, "RQ");
 
   return std::make_pair(fCrystalBall->GetParameter(2), fCrystalBall->GetParError(2));
