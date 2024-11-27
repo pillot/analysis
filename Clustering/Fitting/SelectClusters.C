@@ -15,6 +15,8 @@
 #include <TTreeReaderValue.h>
 // #include <TRandom.h>
 
+#include "CommonConstants/LHCConstants.h"
+#include "CommonDataFormat/InteractionRecord.h"
 #include "DataFormatsMCH/Cluster.h"
 #include "DataFormatsMCH/Digit.h"
 #include "DataFormatsMCH/TrackMCH.h"
@@ -53,17 +55,25 @@ const TrackMCHMID* FindMuon(uint32_t iMCHTrack, const std::vector<TrackMCHMID>& 
 bool ClustersToTrack(gsl::span<Cluster> trackClusters, TrackStruct& track);
 bool ExtrapToVertex(TrackStruct& track);
 bool IsSelected(const TrackStruct& track);
+int IRtoBCinTF(o2::InteractionRecord ir, int run, bool isMC);
 
 //_________________________________________________________________________________________________
 void SelectClusters(int run, const char* clusterFile, const char* trackFile, const char* muonFile,
-                    bool applyTrackSelection = false, const char* outFile = "clusters.root")
+                    bool applyTrackSelection = false, bool isMC = false,
+                    const char* outFile = "clusters.root")
 {
   /// select the isolated clusters attached to a (selected) muon track
   /// store them with the associated track params and digits in outFile
   /// require the MCH mapping to be loaded: gSystem->Load("libO2MCHMappingImpl4")
 
   /// load CCDB objects and prepare track fitting
-  InitFromCCDB(run, true, true, true);
+  if (run < 300000) {
+    o2::base::GeometryManager::loadGeometry("O2geometry.root");
+    TrackFitter trackFitter{};
+    trackFitter.initField(29999.998047, 5999.966797);
+  } else {
+    InitFromCCDB(run, false, true, true);
+  }
 
   // load clusters and tracks
   auto [fClusters, clusterReader] = LoadData(clusterFile, "o2sim");
@@ -93,6 +103,8 @@ void SelectClusters(int run, const char* clusterFile, const char* trackFile, con
   TTree dataTree("data", "tree with input data");
   TrackParamStruct trackParamOut;
   dataTree.Branch("trackParameters", &trackParamOut);
+  int trackTime;
+  dataTree.Branch("trackTime", &trackTime);
   Cluster clusterOut;
   dataTree.Branch("clusters", &clusterOut);
   std::vector<Digit> digitsOut{};
@@ -130,6 +142,9 @@ void SelectClusters(int run, const char* clusterFile, const char* trackFile, con
         continue;
       }
 
+      // get the track time wrt the beginning of the TF
+      trackTime = IRtoBCinTF(muon.getIR(), run, isMC);
+
       for (const auto& param : track.track) {
         const auto& cluster = *(param.getClusterPtr());
         const gsl::span<const Digit> digits(&(*allClusterDigits)[cluster.firstDigit], cluster.nDigits);
@@ -141,7 +156,7 @@ void SelectClusters(int run, const char* clusterFile, const char* trackFile, con
 
         // fill precluster characteristics (charge, size, ...)
         const auto [sizeX, sizeY] = GetSize(digits);
-        const auto [chargeNB, chargeB] = GetCharge(digits);
+        const auto [chargeNB, chargeB] = GetCharge(digits, run < 300000);
         double charge = 0.5 * (chargeNB + chargeB);
         double chargeAsymm = (chargeNB - chargeB) / (chargeNB + chargeB);
         FillPreClusterInfo(charge, chargeAsymm, sizeX, sizeY, preClusterInfo);
@@ -188,10 +203,13 @@ void SelectClusters(int run, const char* trackFile, const char* muonFile,
   /// require the MCH mapping to be loaded: gSystem->Load("libO2MCHMappingImpl4")
 
   /// load CCDB objects and prepare track fitting
-  // o2::base::GeometryManager::loadGeometry("O2geometry.root");
-  // TrackFitter trackFitter{};
-  // trackFitter.initField(29999.998047, 5999.966797);
-  InitFromCCDB(run, false, true, true);
+  if (run < 300000) {
+    o2::base::GeometryManager::loadGeometry("O2geometry.root");
+    TrackFitter trackFitter{};
+    trackFitter.initField(29999.998047, 5999.966797);
+  } else {
+    InitFromCCDB(run, false, true, true);
+  }
 
   // load clusters and tracks
   auto [fTracks, trackReader] = LoadData(trackFile, "o2sim");
@@ -399,4 +417,39 @@ bool IsSelected(const TrackStruct& track)
   }
 
   return true;
+}
+
+//_________________________________________________________________________________________________
+int IRtoBCinTF(o2::InteractionRecord ir, int run, bool isMC)
+{
+  /// convert IR to BC from TF start
+
+  static const std::unordered_map<int, uint32_t> firstTForbit0{
+    {295584, 0},
+    {529691, 74406400},
+    {544490, 26693600}};
+
+  static const std::unordered_map<int, int> nOrbitsPerTF{
+    {295584, 1},
+    {529691, 128},
+    {544490, 32}};
+
+  auto itFirstTForbit0 = firstTForbit0.find(run);
+  auto itNOrbitsPerTF = nOrbitsPerTF.find(run);
+  if (itFirstTForbit0 == firstTForbit0.end() || itNOrbitsPerTF == nOrbitsPerTF.end()) {
+    LOGP(error, "time information not provided for that run");
+    exit(1);
+  }
+
+  if (ir.orbit < itFirstTForbit0->second) {
+    LOGP(error, "IR orbit {} < first orbit of first TF {} !?", ir.orbit, itFirstTForbit0->second);
+    exit(2);
+  }
+
+  int orbitInTF = ir.orbit - itFirstTForbit0->second;
+  if (!isMC) {
+    orbitInTF = orbitInTF % itNOrbitsPerTF->second;
+  }
+
+  return orbitInTF * o2::constants::lhc::LHCMaxBunches + ir.bc;
 }
