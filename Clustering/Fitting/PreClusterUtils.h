@@ -11,6 +11,8 @@
 #include "DataFormatsMCH/Digit.h"
 #include "MCHMappingInterface/Segmentation.h"
 
+#include "DigitUtils.h"
+
 using o2::mch::Digit;
 
 /*
@@ -86,13 +88,6 @@ std::pair<int, int> GetSize(const gsl::span<const Digit> digits)
 std::pair<double, double> GetCharge(const gsl::span<const Digit> digits, bool run2 = false)
 {
   /// return the total charge of the digits on both cathodes
-
-  // function to reinterpret digit ADC as calibrated charge in run2
-  static constexpr auto adcToCharge = [](uint32_t adc) {
-    float charge(0.);
-    std::memcpy(&charge, &adc, sizeof(adc));
-    return static_cast<double>(charge);
-  };
 
   const auto& segmentation = o2::mch::mapping::segmentation(digits[0].getDetID());
 
