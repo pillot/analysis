@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cmath>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -12,6 +13,7 @@
 #include <TButton.h>
 #include <TFile.h>
 #include <TGeoManager.h>
+#include <TH1F.h>
 #include <TMarker.h>
 #include <TPad.h>
 #include <TPaletteAxis.h>
@@ -44,10 +46,11 @@ void Next(int run, const char* inFile, bool backward = false);
 bool IsSelected(int run, const TrackParamStruct& trackParam, int trackTime,
                 const Cluster& cluster, std::vector<Digit>& selectedDigits);
 void Display(int entry, int nEntries, const std::vector<Digit>& digits, const Cluster& cluster, bool run2);
-void Display(std::string text);
+void Display(double x, double y, std::string text, std::string name = "txt");
 void DigitView(const std::vector<Digit>& digits, std::vector<TBox*> pads[2],
-               double& xMin, double& yMin, double& xMax, double& yMax, bool run2 = false);
-TMarker* ClusterView(const Cluster& cluster);
+               double& xMin, double& yMin, double& xMax, double& yMax,
+               double& minCharge, double& maxCharge, bool run2 = false);
+TMarker* ClusterView(const Cluster& cluster, bool run2 = false);
 
 //_________________________________________________________________________________________________
 void VisualizePreClusters(int run, const char* inFile = "clusters.root")
@@ -65,15 +68,16 @@ void VisualizePreClusters(int run, const char* inFile = "clusters.root")
   }
 
   TDialogCanvas* dialog = new TDialogCanvas("dialog", "precluster display", 500, 500);
-  TPad* pad = new TPad("display", "", 0.05, 0.15, 0.95, 0.95);
+  TPad* pad = new TPad("display", "", 0.03, 0.1, 0.97, 0.97);
+  pad->SetRightMargin(0.15);
   pad->Draw();
   std::string command = fmt::format("Next({}, \"{}\", true)", run, inFile);
-  TButton* previous = new TButton("previous", command.c_str(), 0.05, 0.05, 0.32, 0.1);
+  TButton* previous = new TButton("previous", command.c_str(), 0.03, 0.03, 0.33, 0.08);
   previous->Draw();
   command = fmt::format("Next({}, \"{}\")", run, inFile);
-  TButton* next = new TButton("next", command.c_str(), 0.365, 0.05, 0.635, 0.1);
+  TButton* next = new TButton("next", command.c_str(), 0.35, 0.03, 0.65, 0.08);
   next->Draw();
-  TButton* quit = new TButton("quit", "exit(0)", 0.68, 0.05, 0.95, 0.1);
+  TButton* quit = new TButton("quit", "exit(0)", 0.67, 0.03, 0.97, 0.08);
   quit->Draw();
 
   pad->cd();
@@ -96,9 +100,9 @@ void Next(int run, const char* inFile, bool backward)
 
     int nextEntry = backward ? dataReader->GetCurrentEntry() - 1 : dataReader->GetCurrentEntry() + 1;
     if (nextEntry < 0) {
-      Display("this is the first selected precluster");
+      Display(0.19, 0.15, "this is the first selected precluster");
     } else if (nextEntry >= dataReader->GetEntries()) {
-      Display("this is the last selected precluster");
+      Display(0.19, 0.15, "this is the last selected precluster");
     } else if (dataReader->SetEntry(nextEntry) == TTreeReader::kEntryValid) {
       std::vector<Digit> selectedDigits(*digits);
       if (!IsSelected(run, *trackParam, *trackTime, *cluster, selectedDigits)) {
@@ -129,6 +133,11 @@ bool IsSelected(int run, const TrackParamStruct& trackParam, int trackTime,
   if (run == 529691 && (cluster.getDEId() == 202 || cluster.getDEId() == 300)) {
     return false;
   }
+
+  // selection stations 3, 4 and 5
+  // if (cluster.getChamberId() < 4) {
+  //   return false;
+  // }
 
   // cut on track angle at chamber
   if (std::abs(std::atan2(trackParam.py, -trackParam.pz)) / pi * 180. > 10.) {
@@ -173,14 +182,23 @@ void Display(int entry, int nEntries, const std::vector<Digit>& digits, const Cl
   /// display precluster
 
   std::vector<TBox*> pads[2];
-  double xMin, yMin, xMax, yMax;
-  DigitView(digits, pads, xMin, yMin, xMax, yMax, run2);
+  double xMin, yMin, xMax, yMax, minCharge, maxCharge;
+  DigitView(digits, pads, xMin, yMin, xMax, yMax, minCharge, maxCharge, run2);
 
-  std::string title = fmt::format("precluster {}/{}, DE {}", entry, nEntries, digits[0].getDetID());
-  gPad->DrawFrame(xMin - 1., yMin - 1., xMax + 1., yMax + 1., title.c_str());
+  std::string title = fmt::format("precluster {}/{}, DE {}", entry + 1, nEntries, digits[0].getDetID());
+  double xMargin = 0.2 * (xMax - xMin);
+  double yMargin = 0.2 * (yMax - yMin);
+  TH1F* hFrame = gPad->DrawFrame(xMin - xMargin, yMin - yMargin, xMax + xMargin, yMax + yMargin, title.c_str());
+  hFrame->GetXaxis()->SetLabelSize(0.04);
+  hFrame->GetYaxis()->SetLabelSize(0.04);
 
-  TPaletteAxis* palette = new TPaletteAxis(xMax + 1., yMin - 1., xMax + 1. + 0.05 * (xMax - xMin + 2), yMax + 1., 0., 1.);
+  TPaletteAxis* palette = new TPaletteAxis(
+    xMax + xMargin, yMin - yMargin, xMax + xMargin + 0.05 * (xMax - xMin + 2 * xMargin), yMax + yMargin,
+    minCharge, maxCharge);
   palette->SetBit(TObject::kCanDelete);
+  palette->SetNdivisions(10);
+  palette->SetLabelFont(40);
+  palette->SetLabelSize(0.04);
   palette->Draw();
 
   for (auto pad : pads[1]) {
@@ -191,40 +209,49 @@ void Display(int entry, int nEntries, const std::vector<Digit>& digits, const Cl
     pad->Draw();
   }
 
-  auto point = ClusterView(cluster);
+  auto point = ClusterView(cluster, run2);
   point->Draw();
+
+  const auto [chargeNB, chargeB] = GetCharge(digits, run2);
+  double chargeAsymm = (chargeNB - chargeB) / (chargeNB + chargeB);
+  std::string asymm = fmt::format("charge asymmetry = {:+.4f}", chargeAsymm);
+  Display(0.23, 0.85, asymm.c_str(), "asymm");
 }
 
 //_________________________________________________________________________________________________
-void Display(std::string text)
+void Display(double x, double y, std::string text, std::string name)
 {
   /// display text
 
-  gPad->RecursiveRemove(gPad->FindObject("txt"));
+  gPad->RecursiveRemove(gPad->FindObject(name.c_str()));
 
-  TText* txt = new TText(0.2, 0.15, text.c_str());
+  TText* txt = new TText(x, y, text.c_str());
   txt->SetBit(TObject::kCanDelete);
-  txt->SetName("txt");
+  txt->SetName(name.c_str());
   txt->SetNDC();
   txt->SetTextFont(40);
+  txt->SetTextSize(0.045);
   txt->Draw();
 }
 
 //_________________________________________________________________________________________________
 void DigitView(const std::vector<Digit>& digits, std::vector<TBox*> pads[2],
-               double& xMin, double& yMin, double& xMax, double& yMax, bool run2)
+               double& xMin, double& yMin, double& xMax, double& yMax,
+               double& minCharge, double& maxCharge, bool run2)
 {
   /// make the visual objects for digits
 
   const auto& segmentation = o2::mch::mapping::segmentation(digits[0].getDetID());
 
-  double minCharge = 1.e6;
-  double maxCharge = -1.e6;
+  minCharge = 1.e6;
+  maxCharge = -1.e6;
+
   for (const auto& digit : digits) {
     auto charge = run2 ? adcToCharge(digit.getADC()) : digit.getADC();
     minCharge = std::min(minCharge, charge);
     maxCharge = std::max(maxCharge, charge);
   }
+
   double chargeToColor = (gStyle->GetNumberOfColors() - 1.) / (maxCharge - minCharge);
 
   xMin = 1.e6;
@@ -256,15 +283,27 @@ void DigitView(const std::vector<Digit>& digits, std::vector<TBox*> pads[2],
 }
 
 //_________________________________________________________________________________________________
-TMarker* ClusterView(const Cluster& cluster)
+TMarker* ClusterView(const Cluster& cluster, bool run2)
 {
   /// make the visual object for cluster
 
-  static auto transformation = o2::mch::geo::transformationFromTGeoManager(*gGeoManager);
+  static o2::mch::geo::TransformationCreator transformation;
+  if (!transformation) {
+    if (run2) {
+      std::ifstream geoFile("AlignedGeometry.json");
+      if (!geoFile.is_open()) {
+        std::cout << "cannot open geometry file AlignedGeometry.json" << std::endl;
+        exit(-1);
+      }
+      transformation = o2::mch::geo::transformationFromJSON(geoFile);
+    } else {
+      transformation = o2::mch::geo::transformationFromTGeoManager(*gGeoManager);
+    }
+  }
 
   auto de = cluster.getDEId();
   o2::math_utils::Point3D<float> global{cluster.x, cluster.y, cluster.z};
-  auto local = transformation(de) ^ (global);
+  auto local = transformation(de) ^ global;
 
   TMarker* point = new TMarker(local.x(), local.y(), kFullDotLarge);
   point->SetBit(TObject::kCanDelete);
