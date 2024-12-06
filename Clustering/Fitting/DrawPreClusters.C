@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cmath>
 #include <utility>
 #include <vector>
@@ -66,14 +67,16 @@ void DrawPreClusters(int run, bool applyTrackSelection = false, bool applyCluste
     }
 
     // cut on digit time
-    std::vector<Digit> selectedDigits{};
-    for (const auto& digit : *digits) {
-      if (!applyTimeSelection || std::abs(digit.getTime() + 1.5 - *trackTime) < 10.) {
-        selectedDigits.emplace_back(digit);
+    std::vector<Digit> selectedDigits(*digits);
+    if (applyTimeSelection) {
+      selectedDigits.erase(
+        std::remove_if(selectedDigits.begin(), selectedDigits.end(), [&trackTime](const auto& digit) {
+          return std::abs(digit.getTime() + 1.5 - *trackTime) > 10.;
+        }),
+        selectedDigits.end());
+      if (selectedDigits.empty()) {
+        continue;
       }
-    }
-    if (selectedDigits.empty()) {
-      continue;
     }
 
     const auto [sizeX, sizeY] = GetSize(selectedDigits);
