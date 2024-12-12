@@ -105,8 +105,8 @@ void DrawPreClusters(int run, bool applyTrackSelection = false, bool applyCluste
 
     for (const auto& digit : selectedDigits) {
       FillDigitTimeInfo(digit, *trackTime, digitTimeInfo);
-      FillDigitChargeInfo(digit, digitChargeInfo, run < 300000);
-      FillDigitChargeInfo(digit, digitChargeInfoSt[iSt], run < 300000);
+      FillDigitChargeInfo(digit, digitChargeInfo, chargeAsymm, run < 300000);
+      FillDigitChargeInfo(digit, digitChargeInfoSt[iSt], chargeAsymm, run < 300000);
     }
   }
 
