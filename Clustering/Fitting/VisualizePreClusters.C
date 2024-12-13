@@ -7,6 +7,7 @@
 
 #include <fmt/format.h>
 
+#include <TCanvas.h>
 #include <TColor.h>
 #include <TDialogCanvas.h>
 #include <TBox.h>
@@ -41,13 +42,16 @@ using o2::mch::Digit;
 using o2::mch::TrackParamStruct;
 
 static constexpr double pi = 3.14159265358979323846;
+TPad* mainPad = nullptr;
+TPad* bendingPad = nullptr;
+TPad* nonBendingPad = nullptr;
 
 void Next(int run, const char* inFile, bool backward = false);
 bool IsSelected(int run, const TrackParamStruct& trackParam, int trackTime,
                 const Cluster& cluster, std::vector<Digit>& selectedDigits);
 void Display(int entry, int nEntries, const std::vector<Digit>& digits, const Cluster& cluster, bool run2);
 void Display(double x, double y, std::string text, std::string name = "txt");
-void DigitView(const std::vector<Digit>& digits, std::vector<TBox*> pads[2],
+void DigitView(const std::vector<Digit>& digits, std::vector<TBox*> pads[2], std::vector<double> charges[2],
                double& xMin, double& yMin, double& xMax, double& yMax,
                double& minCharge, double& maxCharge, bool run2 = false);
 TMarker* ClusterView(const Cluster& cluster, bool run2 = false);
@@ -68,9 +72,9 @@ void VisualizePreClusters(int run, const char* inFile = "clusters.root")
   }
 
   TDialogCanvas* dialog = new TDialogCanvas("dialog", "precluster display", 500, 500);
-  TPad* pad = new TPad("display", "", 0.03, 0.1, 0.97, 0.97);
-  pad->SetRightMargin(0.15);
-  pad->Draw();
+  mainPad = new TPad("display", "", 0.03, 0.1, 0.97, 0.97);
+  mainPad->SetRightMargin(0.15);
+  mainPad->Draw();
   std::string command = fmt::format("Next({}, \"{}\", true)", run, inFile);
   TButton* previous = new TButton("previous", command.c_str(), 0.03, 0.03, 0.33, 0.08);
   previous->Draw();
@@ -80,7 +84,12 @@ void VisualizePreClusters(int run, const char* inFile = "clusters.root")
   TButton* quit = new TButton("quit", "exit(0)", 0.67, 0.03, 0.97, 0.08);
   quit->Draw();
 
-  pad->cd();
+  bendingPad = new TCanvas("cBending", "precluster bending display", 510, 0, 470, 455);
+  bendingPad->SetRightMargin(0.15);
+
+  nonBendingPad = new TCanvas("cNonBending", "precluster non-bending display", 990, 0, 470, 455);
+  nonBendingPad->SetRightMargin(0.15);
+
   Next(run, inFile);
 }
 
@@ -100,8 +109,10 @@ void Next(int run, const char* inFile, bool backward)
 
     int nextEntry = backward ? dataReader->GetCurrentEntry() - 1 : dataReader->GetCurrentEntry() + 1;
     if (nextEntry < 0) {
+      mainPad->cd();
       Display(0.19, 0.15, "this is the first selected precluster");
     } else if (nextEntry >= dataReader->GetEntries()) {
+      mainPad->cd();
       Display(0.19, 0.15, "this is the last selected precluster");
     } else if (dataReader->SetEntry(nextEntry) == TTreeReader::kEntryValid) {
       std::vector<Digit> selectedDigits(*digits);
@@ -182,15 +193,19 @@ void Display(int entry, int nEntries, const std::vector<Digit>& digits, const Cl
   /// display precluster
 
   std::vector<TBox*> pads[2];
+  std::vector<double> charges[2];
   double xMin, yMin, xMax, yMax, minCharge, maxCharge;
-  DigitView(digits, pads, xMin, yMin, xMax, yMax, minCharge, maxCharge, run2);
+  DigitView(digits, pads, charges, xMin, yMin, xMax, yMax, minCharge, maxCharge, run2);
 
   std::string title = fmt::format("precluster {}/{}, DE {}", entry + 1, nEntries, digits[0].getDetID());
   double xMargin = 0.2 * (xMax - xMin);
   double yMargin = 0.2 * (yMax - yMin);
-  TH1F* hFrame = gPad->DrawFrame(xMin - xMargin, yMin - yMargin, xMax + xMargin, yMax + yMargin, title.c_str());
-  hFrame->GetXaxis()->SetLabelSize(0.04);
-  hFrame->GetYaxis()->SetLabelSize(0.04);
+  for (auto pad : {mainPad, bendingPad, nonBendingPad}) {
+    pad->cd();
+    TH1F* hFrame = gPad->DrawFrame(xMin - xMargin, yMin - yMargin, xMax + xMargin, yMax + yMargin, title.c_str());
+    hFrame->GetXaxis()->SetLabelSize(0.04);
+    hFrame->GetYaxis()->SetLabelSize(0.04);
+  }
 
   TPaletteAxis* palette = new TPaletteAxis(
     xMax + xMargin, yMin - yMargin, xMax + xMargin + 0.05 * (xMax - xMin + 2 * xMargin), yMax + yMargin,
@@ -199,23 +214,61 @@ void Display(int entry, int nEntries, const std::vector<Digit>& digits, const Cl
   palette->SetNdivisions(10);
   palette->SetLabelFont(40);
   palette->SetLabelSize(0.04);
+  mainPad->cd();
   palette->Draw();
+  for (auto pad : {bendingPad, nonBendingPad}) {
+    pad->cd();
+    auto* clone = palette->Clone();
+    clone->SetBit(TObject::kCanDelete);
+    clone->Draw();
+  }
 
+  mainPad->cd();
   for (auto pad : pads[1]) {
     pad->Draw();
   }
-
   for (auto pad : pads[0]) {
     pad->Draw();
   }
 
+  bendingPad->cd();
+  for (size_t i = 0; i < pads[1].size(); ++i) {
+    auto* clone = static_cast<TBox*>(pads[1][i]->Clone());
+    clone->SetBit(TObject::kCanDelete);
+    clone->SetToolTipText(fmt::format("{:g}", charges[1][i]).c_str(), 10);
+    clone->Draw();
+  }
+
+  nonBendingPad->cd();
+  for (size_t i = 0; i < pads[0].size(); ++i) {
+    auto* clone = static_cast<TBox*>(pads[0][i]->Clone());
+    clone->SetFillColorAlpha(pads[0][i]->GetFillColor(), 1.);
+    clone->SetToolTipText(fmt::format("{:g}", charges[0][i]).c_str(), 10);
+    clone->SetBit(TObject::kCanDelete);
+    clone->Draw();
+  }
+
   auto point = ClusterView(cluster, run2);
+  mainPad->cd();
   point->Draw();
+  for (auto pad : {bendingPad, nonBendingPad}) {
+    pad->cd();
+    auto* clone = point->Clone();
+    clone->SetBit(TObject::kCanDelete);
+    clone->Draw();
+  }
 
   const auto [chargeNB, chargeB] = GetCharge(digits, run2);
   double chargeAsymm = (chargeNB - chargeB) / (chargeNB + chargeB);
-  std::string asymm = fmt::format("charge asymmetry = {:+.4f}", chargeAsymm);
-  Display(0.23, 0.85, asymm.c_str(), "asymm");
+  mainPad->cd();
+  Display(0.23, 0.85, fmt::format("charge asymmetry = {:+.4f}", chargeAsymm).c_str(), "asymm");
+  bendingPad->cd();
+  Display(0.28, 0.85, fmt::format("bending charge = {:g}", chargeB).c_str(), "chargeB");
+  nonBendingPad->cd();
+  Display(0.24, 0.85, fmt::format("non-bending charge = {:g}", chargeNB).c_str(), "chargeNB");
+
+  bendingPad->Update();
+  nonBendingPad->Update();
 }
 
 //_________________________________________________________________________________________________
@@ -235,7 +288,7 @@ void Display(double x, double y, std::string text, std::string name)
 }
 
 //_________________________________________________________________________________________________
-void DigitView(const std::vector<Digit>& digits, std::vector<TBox*> pads[2],
+void DigitView(const std::vector<Digit>& digits, std::vector<TBox*> pads[2], std::vector<double> charges[2],
                double& xMin, double& yMin, double& xMax, double& yMax,
                double& minCharge, double& maxCharge, bool run2)
 {
@@ -273,8 +326,9 @@ void DigitView(const std::vector<Digit>& digits, std::vector<TBox*> pads[2],
 
     pads[i].emplace_back(new TBox(x - hx, y - hy, x + hx, y + hy));
     pads[i].back()->SetFillColorAlpha(gStyle->GetColorPalette(color), transparency);
-    pads[i].back()->SetToolTipText(fmt::format("{}", charge).c_str(), 10);
+    pads[i].back()->SetToolTipText(fmt::format("{:g}", charge).c_str(), 10);
     pads[i].back()->SetBit(TObject::kCanDelete);
+    charges[i].emplace_back(charge);
 
     xMin = std::min(xMin, x - hx);
     yMin = std::min(yMin, y - hy);
