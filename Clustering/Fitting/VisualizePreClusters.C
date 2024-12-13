@@ -273,6 +273,7 @@ void DigitView(const std::vector<Digit>& digits, std::vector<TBox*> pads[2],
 
     pads[i].emplace_back(new TBox(x - hx, y - hy, x + hx, y + hy));
     pads[i].back()->SetFillColorAlpha(gStyle->GetColorPalette(color), transparency);
+    pads[i].back()->SetToolTipText(fmt::format("{}", charge).c_str(), 10);
     pads[i].back()->SetBit(TObject::kCanDelete);
 
     xMin = std::min(xMin, x - hx);
