@@ -7,6 +7,8 @@
 #include <utility>
 #include <vector>
 
+#include <fmt/format.h>
+
 #include <gsl/span>
 
 #include <TCanvas.h>
