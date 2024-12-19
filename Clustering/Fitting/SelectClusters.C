@@ -157,11 +157,9 @@ void SelectClusters(int run, const char* clusterFile, const char* trackFile, con
         // fill precluster characteristics (charge, size, ...)
         const auto [sizeX, sizeY] = GetSize(digits);
         const auto [chargeNB, chargeB] = GetCharge(digits, run < 300000);
-        double charge = 0.5 * (chargeNB + chargeB);
-        double chargeAsymm = (chargeNB - chargeB) / (chargeNB + chargeB);
-        FillPreClusterInfo(charge, chargeAsymm, sizeX, sizeY, preClusterInfo);
+        FillPreClusterInfo(chargeNB, chargeB, sizeX, sizeY, preClusterInfo);
         int iSt = (cluster.getChamberId() < 4) ? cluster.getChamberId() / 2 : 2;
-        FillPreClusterInfo(charge, chargeAsymm, sizeX, sizeY, preClusterInfoSt[iSt]);
+        FillPreClusterInfo(chargeNB, chargeB, sizeX, sizeY, preClusterInfoSt[iSt]);
 
         // fill output tree
         trackParamOut = param.getTrackParamStruct();

@@ -165,11 +165,26 @@ void CreatePreClusterInfo(std::vector<TH1*>& histos, const char* extension = "")
 
   histos.emplace_back(new TH1F(Form("hCharge%s", extension),
                                "cluster charge;charge (ADC)", 5000, -0.25, 49999.75));
+  histos.emplace_back(new TH1F(Form("hChargeB%s", extension),
+                               "cluster charge bending;charge (ADC)", 5000, -0.25, 49999.75));
+  histos.emplace_back(new TH1F(Form("hChargeNB%s", extension),
+                               "cluster charge non bending;charge (ADC)", 5000, -0.25, 49999.75));
   histos.emplace_back(new TH1F(Form("hChargeAsymm%s", extension),
-                               "cluster charge asymmetry;asymmetry", 201, -1.005, 1.005));
+                               "cluster charge asymmetry;(NB-B)/(NB+B)", 201, -1.005, 1.005));
   histos.emplace_back(new TH2F(Form("hChargeAsymm2D%s", extension),
-                               "cluster charge asymmetry vs charge;charge (ADC);asymmetry",
+                               "cluster charge asymmetry vs charge;(NB+B)/2 (ADC);(NB-B)/(NB+B)",
                                200, -0.25, 19999.75, 201, -1.005, 1.005));
+  histos.back()->GetYaxis()->SetTitleOffset(1.5);
+  histos.emplace_back(new TH2F(Form("hChargeCorr%s", extension),
+                               "cluster charge bending vs non-bending;charge NB (ADC);charge B (ADC)",
+                               200, -0.25, 19999.75, 200, -0.25, 19999.75));
+  histos.back()->GetYaxis()->SetTitleOffset(1.5);
+  histos.emplace_back(new TH1F(Form("hChargeAsymm2%s", extension),
+                               "cluster charge asymmetry2;1/2 * ln(NB/B)", 201, -1.005, 1.005));
+  histos.emplace_back(new TH2F(Form("hChargeAsymm22D%s", extension),
+                               "cluster charge asymmetry2 vs charge2;#sqrt{NB*B} (ADC);1/2 * ln(NB/B)",
+                               200, -0.25, 19999.75, 201, -1.005, 1.005));
+  histos.back()->GetYaxis()->SetTitleOffset(1.5);
   histos.emplace_back(new TH1F(Form("hDimX%s", extension),
                                "cluster size X;size X (#pads)", 21, -0.5, 20.5));
   histos.emplace_back(new TH1F(Form("hDimY%s", extension),
@@ -184,16 +199,26 @@ void CreatePreClusterInfo(std::vector<TH1*>& histos, const char* extension = "")
 }
 
 //_________________________________________________________________________________________________
-void FillPreClusterInfo(double charge, double chargeAsymm, int sizeX, int sizeY, std::vector<TH1*>& histos)
+void FillPreClusterInfo(double chargeNB, double chargeB, int sizeX, int sizeY, std::vector<TH1*>& histos)
 {
   /// fill histograms of precluster characteristics
 
+  double charge = 0.5 * (chargeNB + chargeB);
+  double charge2 = std::sqrt(chargeB * chargeNB);
+  double chargeAsymm = (chargeNB - chargeB) / (chargeNB + chargeB);
+  double chargeRatio = 0.5 * std::log(chargeNB / chargeB);
+
   histos[0]->Fill(charge);
-  histos[1]->Fill(chargeAsymm);
-  histos[2]->Fill(charge, chargeAsymm);
-  histos[3]->Fill(sizeX);
-  histos[4]->Fill(sizeY);
-  histos[5]->Fill(sizeX, sizeY);
+  histos[1]->Fill(chargeB);
+  histos[2]->Fill(chargeNB);
+  histos[3]->Fill(chargeAsymm);
+  histos[4]->Fill(charge, chargeAsymm);
+  histos[5]->Fill(chargeNB, chargeB);
+  histos[6]->Fill(chargeRatio);
+  histos[7]->Fill(charge2, chargeRatio);
+  histos[8]->Fill(sizeX);
+  histos[9]->Fill(sizeY);
+  histos[10]->Fill(sizeX, sizeY);
 }
 
 //_________________________________________________________________________________________________
@@ -201,20 +226,39 @@ TCanvas* DrawPreClusterInfo(std::vector<TH1*>& histos, const char* extension = "
 {
   /// draw histograms of precluster characteristics
 
-  static int logy[6] = {1, 1, 0, 1, 1, 0};
-  static int logz[6] = {0, 0, 1, 0, 0, 1};
-  static const char* opt[6] = {"", "", "colz", "", "", "colz"};
+  static int logy[] = {1, 1, 0, 0, 1, 0, 1, 1, 0};
+  static int logz[] = {0, 0, 1, 1, 0, 1, 0, 0, 1};
+  static const char* opt[] = {"", "", "colz", "colz", "", "colz", "", "", "colz"};
 
   TCanvas* c = new TCanvas(Form("preClusterInfo%s", extension),
-                           Form("precluster characteristics %s", extension), 10, 10, 900, 600);
-  c->Divide(3, 2);
+                           Form("precluster characteristics %s", extension), 10, 10, 900, 900);
+  c->Divide(3, 3);
+
+  TLegend* l = new TLegend(0.45, 0.7, 0.85, 0.9);
+  l->SetFillStyle(0);
+  l->SetBorderSize(0);
+
+  c->cd(1);
+  gPad->SetLogy();
+  histos[0]->SetLineColor(1);
+  histos[0]->Draw();
+  l->AddEntry(histos[0], "(NB+B)/2", "l");
+  histos[1]->SetStats(false);
+  histos[1]->SetLineColor(2);
+  histos[1]->Draw("sames");
+  l->AddEntry(histos[1], "Bending", "l");
+  histos[2]->SetStats(false);
+  histos[2]->SetLineColor(4);
+  histos[2]->Draw("sames");
+  l->AddEntry(histos[2], "Non Bending", "l");
+  l->Draw("same");
+
   int i(0);
-  for (const auto& h : histos) {
+  for (int i = 1; i < 9; ++i) {
     c->cd(i + 1);
     gPad->SetLogy(logy[i]);
     gPad->SetLogz(logz[i]);
-    h->Draw(opt[i]);
-    ++i;
+    histos[i + 2]->Draw(opt[i]);
   }
 
   return c;

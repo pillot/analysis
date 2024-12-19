@@ -68,7 +68,6 @@ void ClusterCOG(int run, const char* inFile = "clusters.root", const char* outFi
     // check precluster characteristics (charge, size, ...)
     const auto [sizeX, sizeY] = GetSize(*digits);
     const auto [chargeNB, chargeB] = GetCharge(*digits);
-    double charge = 0.5 * (chargeNB + chargeB);
     double chargeAsymm = (chargeNB - chargeB) / (chargeNB + chargeB);
 
     // apply further precluster selections (e.g. to have enough constraints for the fit)
@@ -77,9 +76,9 @@ void ClusterCOG(int run, const char* inFile = "clusters.root", const char* outFi
     }
 
     // fill selected precluster characteristics
-    FillPreClusterInfo(charge, chargeAsymm, sizeX, sizeY, preClusterInfo);
+    FillPreClusterInfo(chargeNB, chargeB, sizeX, sizeY, preClusterInfo);
     int iSt = (cluster->getChamberId() < 4) ? cluster->getChamberId() / 2 : 2;
-    FillPreClusterInfo(charge, chargeAsymm, sizeX, sizeY, preClusterInfoSt[iSt]);
+    FillPreClusterInfo(chargeNB, chargeB, sizeX, sizeY, preClusterInfoSt[iSt]);
 
     // refit the cluster
     const auto [x, y] = (cluster->getChamberId() < 4) ? GetCOG2(*digits) : GetCOG(*digits);

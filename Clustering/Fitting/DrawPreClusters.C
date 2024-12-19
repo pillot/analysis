@@ -79,12 +79,17 @@ void DrawPreClusters(int run, bool applyTrackSelection = false, bool applyCluste
       }
     }
 
+    // reject mono-cathode clusters after digit selection
     const auto [sizeX, sizeY] = GetSize(selectedDigits);
+    if (sizeX == 0 || sizeY == 0) {
+      continue;
+    }
+
     const auto [chargeNB, chargeB] = GetCharge(selectedDigits, run < 300000);
-    double charge = 0.5 * (chargeNB + chargeB);
     double chargeAsymm = (chargeNB - chargeB) / (chargeNB + chargeB);
 
     // cut on cluster charge
+    // double charge = 0.5 * (chargeNB + chargeB);
     // if (applyClusterSelection && charge < 4000.) {
     //   continue;
     // }
@@ -93,15 +98,18 @@ void DrawPreClusters(int run, bool applyTrackSelection = false, bool applyCluste
     if (applyClusterSelection && std::abs(chargeAsymm) > 0.5) {
       continue;
     }
+    // if (applyClusterSelection && (chargeAsymm >= -0.2 || chargeAsymm < -0.3)) {
+    //   continue;
+    // }
 
     // cut on cluster size asymmetry
     // if (applyClusterSelection && (sizeY > sizeX + 3 || sizeX > sizeY + 2)) {
     //   continue;
     // }
 
-    FillPreClusterInfo(charge, chargeAsymm, sizeX, sizeY, preClusterInfo);
+    FillPreClusterInfo(chargeNB, chargeB, sizeX, sizeY, preClusterInfo);
     int iSt = (cluster->getChamberId() < 4) ? cluster->getChamberId() / 2 : 2;
-    FillPreClusterInfo(charge, chargeAsymm, sizeX, sizeY, preClusterInfoSt[iSt]);
+    FillPreClusterInfo(chargeNB, chargeB, sizeX, sizeY, preClusterInfoSt[iSt]);
 
     for (const auto& digit : selectedDigits) {
       FillDigitTimeInfo(digit, *trackTime, digitTimeInfo);

@@ -34,11 +34,15 @@ static const std::vector<int> asymmColors{2, 3, 4, 5, 1, 6, 7, 8, 9};
 double adcToCharge(uint32_t adc)
 {
   /// function to reinterpret digit ADC as calibrated charge in run2
+  /// then convert it back in ADC unit using run2 electronic gain
+
+  // 1 ADC channel = 0.61 mV; capa = 0.2 and a0 = 1.25, which is equivalent to gain = 4 mV/fC
+  static const double fc2adc = 1. / (1.25 * 0.2 * 0.61);
 
   float charge(0.);
   std::memcpy(&charge, &adc, sizeof(adc));
 
-  return static_cast<double>(charge);
+  return static_cast<double>(charge) * fc2adc;
 }
 
 //_________________________________________________________________________________________________
