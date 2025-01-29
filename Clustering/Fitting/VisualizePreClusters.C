@@ -49,12 +49,13 @@ TPad* nonBendingPad = nullptr;
 void Next(int run, const char* inFile, bool backward = false);
 bool IsSelected(int run, const TrackParamStruct& trackParam, int trackTime,
                 const Cluster& cluster, std::vector<Digit>& selectedDigits);
-void Display(int entry, int nEntries, const std::vector<Digit>& digits, const Cluster& cluster, bool run2);
+void Display(int entry, int nEntries, const std::vector<Digit>& digits,
+             const Cluster& cluster, const TrackParamStruct& trackParam, bool run2);
 void Display(double x, double y, std::string text, std::string name = "txt");
 void DigitView(const std::vector<Digit>& digits, std::vector<TBox*> pads[2], std::vector<double> charges[2],
                double& xMin, double& yMin, double& xMax, double& yMax,
                double& minCharge, double& maxCharge, bool run2 = false);
-TMarker* ClusterView(const Cluster& cluster, bool run2 = false);
+TMarker* ClusterTrackView(int de, float x, float y, float z, int color, bool run2 = false);
 
 //_________________________________________________________________________________________________
 void VisualizePreClusters(int run, const char* inFile = "clusters.root")
@@ -119,7 +120,7 @@ void Next(int run, const char* inFile, bool backward)
       if (!IsSelected(run, *trackParam, *trackTime, *cluster, selectedDigits)) {
         continue;
       }
-      Display(nextEntry, dataReader->GetEntries(), selectedDigits, *cluster, run < 300000);
+      Display(nextEntry, dataReader->GetEntries(), selectedDigits, *cluster, *trackParam, run < 300000);
       currentDisplay = nextEntry;
     } else {
       std::cout << "Error reading entry " << nextEntry << "... Exiting." << std::endl;
@@ -188,7 +189,8 @@ bool IsSelected(int run, const TrackParamStruct& trackParam, int trackTime,
 }
 
 //_________________________________________________________________________________________________
-void Display(int entry, int nEntries, const std::vector<Digit>& digits, const Cluster& cluster, bool run2)
+void Display(int entry, int nEntries, const std::vector<Digit>& digits,
+             const Cluster& cluster, const TrackParamStruct& trackParam, bool run2)
 {
   /// display precluster
 
@@ -248,14 +250,17 @@ void Display(int entry, int nEntries, const std::vector<Digit>& digits, const Cl
     clone->Draw();
   }
 
-  auto point = ClusterView(cluster, run2);
-  mainPad->cd();
-  point->Draw();
-  for (auto pad : {bendingPad, nonBendingPad}) {
-    pad->cd();
-    auto* clone = point->Clone();
-    clone->SetBit(TObject::kCanDelete);
-    clone->Draw();
+  auto point1 = ClusterTrackView(cluster.getDEId(), cluster.x, cluster.y, cluster.z, 1, run2);
+  auto point2 = ClusterTrackView(cluster.getDEId(), trackParam.x, trackParam.y, trackParam.z, 2, run2);
+  for (auto point : {point1, point2}) {
+    mainPad->cd();
+    point->Draw();
+    for (auto pad : {bendingPad, nonBendingPad}) {
+      pad->cd();
+      auto* clone = point->Clone();
+      clone->SetBit(TObject::kCanDelete);
+      clone->Draw();
+    }
   }
 
   const auto [chargeNB, chargeB] = GetCharge(digits, run2);
@@ -338,9 +343,9 @@ void DigitView(const std::vector<Digit>& digits, std::vector<TBox*> pads[2], std
 }
 
 //_________________________________________________________________________________________________
-TMarker* ClusterView(const Cluster& cluster, bool run2)
+TMarker* ClusterTrackView(int de, float x, float y, float z, int color, bool run2)
 {
-  /// make the visual object for cluster
+  /// make the visual object for cluster or track
 
   static o2::mch::geo::TransformationCreator transformation;
   if (!transformation) {
@@ -356,11 +361,11 @@ TMarker* ClusterView(const Cluster& cluster, bool run2)
     }
   }
 
-  auto de = cluster.getDEId();
-  o2::math_utils::Point3D<float> global{cluster.x, cluster.y, cluster.z};
+  o2::math_utils::Point3D<float> global{x, y, z};
   auto local = transformation(de) ^ global;
 
   TMarker* point = new TMarker(local.x(), local.y(), kFullDotLarge);
+  point->SetMarkerColor(color);
   point->SetBit(TObject::kCanDelete);
 
   return point;
