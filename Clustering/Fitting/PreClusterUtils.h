@@ -2,6 +2,8 @@
 #include <utility>
 #include <vector>
 
+#include <fmt/format.h>
+
 #include <gsl/span>
 
 #include <TCanvas.h>
@@ -259,6 +261,67 @@ TCanvas* DrawPreClusterInfo(std::vector<TH1*>& histos, const char* extension = "
     gPad->SetLogy(logy[i]);
     gPad->SetLogz(logz[i]);
     histos[i + 2]->Draw(opt[i]);
+  }
+
+  return c;
+}
+
+//_________________________________________________________________________________________________
+static const std::vector<double> chargeLimits{200., 400., 700., 1200., 2200., 4000.};
+
+//_________________________________________________________________________________________________
+void CreatePreClusterInfoVsWire(std::vector<TH1*>& histos, const char* extension = "")
+{
+  /// create histograms of precluster characteristics versus distance to closest wire
+
+  histos.emplace_back(new TH2F(Form("hChargeAsymmVsWire%s", extension),
+                               "cluster charge asymmetry vs distance to wire;#Delta_x (cm);(NB-B)/(NB+B)",
+                               25, -0.125, 0.125, 101, -1.01, 1.01));
+  histos.back()->GetYaxis()->SetTitleOffset(1.5);
+
+  for (size_t i = 0; i <= chargeLimits.size(); ++i) {
+    auto chargeRange = (i == 0)                    ? fmt::format("charge < {}", chargeLimits[i])
+                       : (i < chargeLimits.size()) ? fmt::format("{} <= charge < {}", chargeLimits[i - 1], chargeLimits[i])
+                                                   : fmt::format("charge >= {}", chargeLimits[i - 1]);
+    histos.emplace_back(new TH2F(Form("hChargeAsymmVsWire%zu%s", i, extension),
+                                 Form("cluster charge asymmetry vs distance to wire (%s);#Delta_x (cm);(NB-B)/(NB+B)", chargeRange.c_str()),
+                                 25, -0.125, 0.125, 101, -1.01, 1.01));
+    histos.back()->GetYaxis()->SetTitleOffset(1.5);
+  }
+
+  for (auto h : histos) {
+    h->SetDirectory(0);
+  }
+}
+
+//_________________________________________________________________________________________________
+void FillPreClusterInfoVsWire(double chargeNB, double chargeB, float dx, std::vector<TH1*>& histos)
+{
+  /// fill histograms of precluster characteristics versus distance to closest wire
+
+  double charge = 0.5 * (chargeNB + chargeB);
+  double chargeAsymm = (chargeNB - chargeB) / (chargeNB + chargeB);
+  auto i = std::distance(chargeLimits.begin(), std::upper_bound(chargeLimits.begin(), chargeLimits.end(), charge));
+
+  histos[0]->Fill(dx, chargeAsymm);
+  histos[i + 1]->Fill(dx, chargeAsymm);
+}
+
+//_________________________________________________________________________________________________
+TCanvas* DrawPreClusterInfoVsWire(std::vector<TH1*>& histos, const char* extension = "")
+{
+  /// draw histograms of precluster characteristics versus distance to closest wire
+
+  TCanvas* c = new TCanvas(Form("preClusterInfoVsWire%s", extension),
+                           Form("precluster characteristics versus distance to wire%s", extension),
+                           10, 10, 1200, 600);
+  c->Divide((chargeLimits.size() + 3) / 2, 2);
+
+  int i = 0;
+  for (auto h : histos) {
+    c->cd(++i);
+    gPad->SetLogz();
+    h->Draw("colz");
   }
 
   return c;
