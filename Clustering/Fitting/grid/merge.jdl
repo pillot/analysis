@@ -1,0 +1,56 @@
+Executable = "__WORKINGDIR__/merge.sh";
+
+Packages =
+{
+  "__PACKAGE__"
+};
+
+Jobtag =
+{
+  "comment:cluster selection merging stage $1"
+};
+
+# all are needed
+Requirements = member(other.GridPartitions,"multicore_8");
+CPUCores = "8";
+MemorySize = "64GB";
+
+TTL = "3600";
+Price = "1";
+
+Validationcommand = "__WORKINGDIR__/validation.sh";
+
+InputFile =
+{
+  "LF:__WORKINGDIR__/merge.C"
+};
+
+InputDataCollection = "LF:__WORKINGDIR__/stage$1.xml,nodownload";
+Split = "se";
+SplitMaxInputFileNumber = "20";
+InputDataList = "wn.xml";
+InputDataListFormat = "xml-single";
+SplitArguments = {"wn.xml"};
+
+OutputDir = "__WORKINGDIR__/stage$1/#alien_counter_03i#";
+
+Output =
+{
+  "log_archive.zip:std*@disk=1",
+  "root_archive.zip:clusters.root@disk=2"
+};
+
+FilesToCheck = "clusters.root";
+
+JDLVariables =
+{
+  "Packages",
+  "OutputDir",
+  "FilesToCheck"
+};
+
+#Store ERROR_E jobs output
+OutputErrorE=
+{
+  "log_archive.zip:std*@disk=1"
+};
