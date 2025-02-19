@@ -394,7 +394,7 @@ bool IsSelected(const TrackStruct& track)
   // double px = track.paramAtVtx.px();
   // double py = track.paramAtVtx.py();
   // double pT = TMath::Sqrt(px * px + py * py);
-  // if (pT < 1.5) {
+  // if (pT < 1.) {
   //   return false;
   // }
 
@@ -425,12 +425,14 @@ int IRtoBCinTF(o2::InteractionRecord ir, int run, bool isMC)
   static const std::unordered_map<int, uint32_t> firstTForbit0{
     {295584, 0},
     {529691, 74406400},
-    {544490, 26693600}};
+    {544490, 26693600},
+    {549586, 67400512}};
 
   static const std::unordered_map<int, int> nOrbitsPerTF{
     {295584, 1},
     {529691, 128},
-    {544490, 32}};
+    {544490, 32},
+    {549586, 32}};
 
   auto itFirstTForbit0 = firstTForbit0.find(run);
   auto itNOrbitsPerTF = nOrbitsPerTF.find(run);
