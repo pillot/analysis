@@ -426,13 +426,15 @@ int IRtoBCinTF(o2::InteractionRecord ir, int run, bool isMC)
     {295584, 0},
     {529691, 74406400},
     {544490, 26693600},
-    {549586, 67400512}};
+    {549586, 67400512},
+    {559410, 527962048}};
 
   static const std::unordered_map<int, int> nOrbitsPerTF{
     {295584, 1},
     {529691, 128},
     {544490, 32},
-    {549586, 32}};
+    {549586, 32},
+    {559410, 32}};
 
   auto itFirstTForbit0 = firstTForbit0.find(run);
   auto itNOrbitsPerTF = nOrbitsPerTF.find(run);
