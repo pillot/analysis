@@ -41,4 +41,13 @@ if [[ $1 == "alien://"* ]]; then
     $CMD $PREFIX"__"$file $1/$file
     rm -f __$file
   done
+
+  # also copy the collection if available
+  if [[ -f "data.xml" ]]; then
+    echo "copying "$PREFIX"data.xml to $1/data.xml"
+    $CMD $PREFIX"data.xml" $1/data.xml
+  else
+    echo "WARNING: data collection \"data.xml\" not found."
+    echo "         produce it and copy it by hand to the working grid directory with the name \"data.xml\""
+  fi
 fi

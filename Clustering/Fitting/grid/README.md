@@ -24,8 +24,6 @@ The path to the working directory on the grid is either absolute or relative to 
 
 ```shell
 path-to-CopyFiles-script/CopyFiles.sh alien://run3/data/2024/LHC24ac/549586/apass1_muon_matching/clusters_pT1GeV-p10GeV
-
-alien_cp file:data.xml alien://run3/data/2024/LHC24ac/549586/apass1_muon_matching/clusters_pT1GeV-p10GeV/data.xml
 ```
 
 The script `CopyFiles.sh` also produces and copies the .jdl files. The software package used on the grid (e.g. `VO_ALICE@O2PDPSuite::daily-20250214-0000-1`) can be optionally changed by giving it as a second parameter of the script.
