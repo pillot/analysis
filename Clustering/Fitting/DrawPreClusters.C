@@ -59,6 +59,12 @@ void DrawPreClusters(int run, bool applyTrackSelection = false, bool applyCluste
   CreatePreClusterInfoVsWire(preClusterInfoVsWireSt[1], "St2");
   CreatePreClusterInfoVsWire(preClusterInfoVsWireSt[2], "St345");
 
+  TH3* hPreClusterInfo3D[4] = {nullptr, nullptr, nullptr, nullptr};
+  hPreClusterInfo3D[0] = CreatePreClusterInfo3D("St1");
+  hPreClusterInfo3D[1] = CreatePreClusterInfo3D("St2");
+  hPreClusterInfo3D[2] = CreatePreClusterInfo3D("St345");
+  hPreClusterInfo3D[3] = CreatePreClusterInfo3D();
+
   std::vector<TH1*> digitTimeInfo{};
   CreateDigitTimeInfo(digitTimeInfo);
   std::vector<TH1*> digitChargeInfo{};
@@ -158,8 +164,10 @@ void DrawPreClusters(int run, bool applyTrackSelection = false, bool applyCluste
     // }
 
     FillPreClusterInfo(chargeNB, chargeB, sizeX, sizeY, preClusterInfo);
+    FillPreClusterInfo3D(chargeNB, chargeB, dx, hPreClusterInfo3D[3]);
     int iSt = (cluster->getChamberId() < 4) ? cluster->getChamberId() / 2 : 2;
     FillPreClusterInfo(chargeNB, chargeB, sizeX, sizeY, preClusterInfoSt[iSt]);
+    FillPreClusterInfo3D(chargeNB, chargeB, dx, hPreClusterInfo3D[iSt]);
     FillPreClusterInfoVsWire(chargeNB, chargeB, dx, preClusterInfoVsWireSt[iSt]);
 
     for (const auto& digit : selectedDigits) {
@@ -182,6 +190,8 @@ void DrawPreClusters(int run, bool applyTrackSelection = false, bool applyCluste
   auto cwSt1 = DrawPreClusterInfoVsWire(preClusterInfoVsWireSt[0], "St1");
   auto cwSt2 = DrawPreClusterInfoVsWire(preClusterInfoVsWireSt[1], "St2");
   auto cwSt345 = DrawPreClusterInfoVsWire(preClusterInfoVsWireSt[2], "St345");
+
+  auto [cAsymmRMS, cAsymmDelta, cAsymmSigma] = DrawPreClusterInfo3D(hPreClusterInfo3D);
 
   auto ct = DrawDigitTimeInfo(digitTimeInfo);
   auto cc = DrawDigitChargeInfo(digitChargeInfo);
