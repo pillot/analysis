@@ -11,6 +11,7 @@
 #include <TTreeReader.h>
 #include <TTreeReaderValue.h>
 
+#include "CommonUtils/ConfigurableParam.h"
 #include "DataFormatsMCH/Cluster.h"
 #include "DataFormatsMCH/Digit.h"
 #include "DetectorsBase/GeometryManager.h"
@@ -28,15 +29,19 @@ using o2::mch::TrackParamStruct;
 
 static constexpr double pi = 3.14159265358979323846;
 
+void SetupRun2Mathieson();
+
 //_________________________________________________________________________________________________
 void DrawPreClusters(int run, bool applyTrackSelection = false, bool applyClusterSelection = false,
-                     bool applyTimeSelection = false, const char* inFile = "clusters.root")
+                     bool applyTimeSelection = false, bool correctCharge = false,
+                     const char* inFile = "clusters.root")
 {
   /// draw precluster and associated digits informations
   /// require the MCH mapping to be loaded: gSystem->Load("libO2MCHMappingImpl4")
 
   if (run < 300000) {
     o2::base::GeometryManager::loadGeometry("O2geometry.root");
+    SetupRun2Mathieson();
   } else {
     InitFromCCDB(run, false, true, false);
   }
@@ -112,7 +117,13 @@ void DrawPreClusters(int run, bool applyTrackSelection = false, bool applyCluste
 
     float dx = DistanceToClosestWire(cluster->getDEId(), cluster->x, cluster->y, cluster->z, run < 300000);
     // float dx = DistanceToClosestWire(cluster->getDEId(), trackParam->x, trackParam->y, trackParam->z, run < 300000);
-    const auto [chargeNB, chargeB] = GetCharge(selectedDigits, run < 300000);
+    auto [chargeNB, chargeB] = GetCharge(selectedDigits, run < 300000);
+    if (correctCharge) {
+      auto local = GlobalToLocal(cluster->getDEId(), cluster->x, cluster->y, cluster->z, run < 300000);
+      auto [chargeFracNB, chargeFracB] = GetChargeFraction(selectedDigits, local.x(), local.y());
+      chargeNB /= chargeFracNB;
+      chargeB /= chargeFracB;
+    }
     double chargeAsymm = (chargeNB - chargeB) / (chargeNB + chargeB);
 
     // cut on distance to closest wire
@@ -200,4 +211,16 @@ void DrawPreClusters(int run, bool applyTrackSelection = false, bool applyCluste
   auto ccSt345 = DrawDigitChargeInfo(digitChargeInfoSt[2], "St345");
 
   dataFileIn->Close();
+}
+
+//_________________________________________________________________________________________________
+void SetupRun2Mathieson()
+{
+  /// use run2 Mathieson parameterizations
+
+  o2::conf::ConfigurableParam::setValue("MCHResponse.mathiesonSqrtKx3St1", "0.7000");
+  o2::conf::ConfigurableParam::setValue("MCHResponse.mathiesonSqrtKy3St1", "0.7550");
+
+  o2::conf::ConfigurableParam::setValue("MCHResponse.mathiesonSqrtKx3St2345", "0.7131");
+  o2::conf::ConfigurableParam::setValue("MCHResponse.mathiesonSqrtKy3St2345", "0.7642");
 }

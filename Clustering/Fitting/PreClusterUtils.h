@@ -20,6 +20,7 @@
 
 #include "DataFormatsMCH/Digit.h"
 #include "MCHMappingInterface/Segmentation.h"
+#include "MCHSimulation/Response.h"
 
 #include "DigitUtils.h"
 
@@ -112,6 +113,31 @@ std::pair<double, double> GetCharge(const gsl::span<const Digit> digits, bool ru
   }
 
   return charge;
+}
+
+//_________________________________________________________________________________________________
+std::pair<double, double> GetChargeFraction(const gsl::span<const Digit> digits, double localX, double localY)
+{
+  /// return the total charge fraction seen by digits on both cathodes given the cluster position
+
+  static const o2::mch::Response response[] = {{o2::mch::Station::Type1}, {o2::mch::Station::Type2345}};
+
+  const auto& segmentation = o2::mch::mapping::segmentation(digits[0].getDetID());
+  int iSt = (digits[0].getDetID() < 300) ? 0 : 1;
+
+  std::pair<double, double> qCl{0., 0.};
+
+  for (const auto& digit : digits) {
+    auto padid = digit.getPadID();
+    auto dx = segmentation.padSizeX(padid) * 0.5;
+    auto dy = segmentation.padSizeY(padid) * 0.5;
+    auto xPad = segmentation.padPositionX(padid) - localX;
+    auto yPad = segmentation.padPositionY(padid) - localY;
+    auto qPad = response[iSt].chargePadfraction(xPad - dx, xPad + dx, yPad - dy, yPad + dy);
+    segmentation.isBendingPad(padid) ? qCl.second += qPad : qCl.first += qPad;
+  }
+
+  return qCl;
 }
 
 //_________________________________________________________________________________________________
