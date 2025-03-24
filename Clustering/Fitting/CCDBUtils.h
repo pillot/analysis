@@ -24,7 +24,9 @@ void InitFromCCDB(int run, bool local, bool loadGeom, bool loadField)
 
     // in this case we cannot retrieve the timestamp of the run so we must know it
     static const std::map<int, long> timeStamps{{529691, 1669611720310},
-                                                {544490, 1697060413764}};
+                                                {544490, 1697060413764},
+                                                {549586, 1712392003826},
+                                                {559410, 1730513833932}};
     if (auto ts = timeStamps.find(run); ts != timeStamps.end()) {
       ccdb.setTimestamp(ts->second);
     } else {
