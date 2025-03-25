@@ -494,14 +494,16 @@ std::tuple<TCanvas*, TCanvas*, TCanvas*> DrawPreClusterInfo3D(TH3* hAsymm3D[4])
 
     hAsymm3D[iSt]->GetXaxis()->SetRange(12, 14);
     std::unique_ptr<TH2> hAsymm2DClose(static_cast<TH2*>(hAsymm3D[iSt]->Project3D("close_zy")));
-    auto [gRMSClose, gDeltaClose, gSigmaClose] = GetAsymmDispersionVsCharge(hAsymm2DClose.get(), sSt[iSt]);
+    auto [gRMSClose, gDeltaClose, gSigmaClose] =
+      GetAsymmDispersionVsCharge(hAsymm2DClose.get(), fmt::format("{}Close", sSt[iSt]).c_str());
 
     hAsymm3D[iSt]->GetXaxis()->SetRange(1, 4);
     std::unique_ptr<TH2> hAsymm2DFar(static_cast<TH2*>(hAsymm3D[iSt]->Project3D("far1_zy")));
     hAsymm3D[iSt]->GetXaxis()->SetRange(22, 25);
     std::unique_ptr<TH2> hAsymm2DFar2(static_cast<TH2*>(hAsymm3D[iSt]->Project3D("far2_zy")));
     hAsymm2DFar->Add(hAsymm2DFar2.get());
-    auto [gRMSFar, gDeltaFar, gSigmaFar] = GetAsymmDispersionVsCharge(hAsymm2DFar.get(), sSt[iSt]);
+    auto [gRMSFar, gDeltaFar, gSigmaFar] =
+      GetAsymmDispersionVsCharge(hAsymm2DFar.get(), fmt::format("{}Far", sSt[iSt]).c_str());
 
     TLegend* l = new TLegend(0.15, 0.75, 0.35, 0.9);
     l->SetFillStyle(0);

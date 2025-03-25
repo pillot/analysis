@@ -34,7 +34,7 @@ void SetupRun2Mathieson();
 //_________________________________________________________________________________________________
 void DrawPreClusters(int run, bool applyTrackSelection = false, bool applyClusterSelection = false,
                      bool applyTimeSelection = false, bool correctCharge = false,
-                     const char* inFile = "clusters.root")
+                     const char* inFile = "clusters.root", const char* outFile = "displays.root")
 {
   /// draw precluster and associated digits informations
   /// require the MCH mapping to be loaded: gSystem->Load("libO2MCHMappingImpl4")
@@ -43,7 +43,7 @@ void DrawPreClusters(int run, bool applyTrackSelection = false, bool applyCluste
     o2::base::GeometryManager::loadGeometry("O2geometry.root");
     SetupRun2Mathieson();
   } else {
-    InitFromCCDB(run, false, true, false);
+    InitFromCCDB(run, true, true, false);
   }
 
   auto [dataFileIn, dataReader] = LoadData(inFile, "data");
@@ -191,6 +191,9 @@ void DrawPreClusters(int run, bool applyTrackSelection = false, bool applyCluste
     }
   }
 
+  dataFileIn->Close();
+
+  // display
   gStyle->SetOptStat(1);
 
   auto c = DrawPreClusterInfo(preClusterInfo);
@@ -210,7 +213,24 @@ void DrawPreClusters(int run, bool applyTrackSelection = false, bool applyCluste
   auto ccSt2 = DrawDigitChargeInfo(digitChargeInfoSt[1], "St2");
   auto ccSt345 = DrawDigitChargeInfo(digitChargeInfoSt[2], "St345");
 
-  dataFileIn->Close();
+  // output
+  TFile fOut(outFile, "recreate");
+  c->Write();
+  cSt1->Write();
+  cSt2->Write();
+  cSt345->Write();
+  cwSt1->Write();
+  cwSt2->Write();
+  cwSt345->Write();
+  cAsymmRMS->Write();
+  cAsymmDelta->Write();
+  cAsymmSigma->Write();
+  ct->Write();
+  cc->Write();
+  ccSt1->Write();
+  ccSt2->Write();
+  ccSt345->Write();
+  fOut.Close();
 }
 
 //_________________________________________________________________________________________________
