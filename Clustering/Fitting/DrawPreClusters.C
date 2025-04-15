@@ -128,6 +128,7 @@ void DrawPreClusters(int run, bool applyTrackSelection = false, bool applyCluste
 
     // cut on distance to closest wire
     // if (applyClusterSelection && std::abs(dx) > 0.015) {
+    // if (applyClusterSelection && std::abs(dx) < 0.085) {
     //   continue;
     // }
 
@@ -147,6 +148,7 @@ void DrawPreClusters(int run, bool applyTrackSelection = false, bool applyCluste
 
     // cut on cluster size
     // if (applyClusterSelection && sizeX < 2) {
+    // if (applyClusterSelection && (sizeX < 2 || sizeY < 2)) {
     //   continue;
     // }
 
@@ -205,8 +207,6 @@ void DrawPreClusters(int run, bool applyTrackSelection = false, bool applyCluste
   auto cwSt2 = DrawPreClusterInfoVsWire(preClusterInfoVsWireSt[1], "St2");
   auto cwSt345 = DrawPreClusterInfoVsWire(preClusterInfoVsWireSt[2], "St345");
 
-  auto [cAsymmRMS, cAsymmDelta, cAsymmSigma] = DrawPreClusterInfo3D(hPreClusterInfo3D);
-
   auto ct = DrawDigitTimeInfo(digitTimeInfo);
   auto cc = DrawDigitChargeInfo(digitChargeInfo);
   auto ccSt1 = DrawDigitChargeInfo(digitChargeInfoSt[0], "St1");
@@ -215,6 +215,9 @@ void DrawPreClusters(int run, bool applyTrackSelection = false, bool applyCluste
 
   // output
   TFile fOut(outFile, "recreate");
+  for (auto h : hPreClusterInfo3D) {
+    h->Write();
+  }
   c->Write();
   cSt1->Write();
   cSt2->Write();
@@ -222,9 +225,6 @@ void DrawPreClusters(int run, bool applyTrackSelection = false, bool applyCluste
   cwSt1->Write();
   cwSt2->Write();
   cwSt345->Write();
-  cAsymmRMS->Write();
-  cAsymmDelta->Write();
-  cAsymmSigma->Write();
   ct->Write();
   cc->Write();
   ccSt1->Write();

@@ -2,7 +2,6 @@
 
 #include <TCanvas.h>
 #include <TFile.h>
-#include <TGraphAsymmErrors.h>
 #include <TH1.h>
 #include <TPaveText.h>
 #include <TStyle.h>
@@ -27,7 +26,6 @@ void DrawPreClustersComp(std::string file1 = "displays.root", std::string file2 
   TFile f[] = {{file1.c_str(), "read"}, {file2.c_str(), "read"}};
   int color[] = {2, 4};
   std::string hDrawOpt[] = {"", "sames"};
-  std::string gDrawOpt[] = {"ap", "p"};
 
   auto l = new TPaveText(0.55, 0.75, 0.75, 0.85, "NDC");
   l->SetFillStyle(0);
@@ -44,14 +42,6 @@ void DrawPreClustersComp(std::string file1 = "displays.root", std::string file2 
     h->SetStats();
     h->SetLineColor(color[i]);
     h->Draw(hDrawOpt[i].c_str());
-  };
-
-  auto gDraw = [color, gDrawOpt](auto g, int i) {
-    g->GetXaxis()->SetRangeUser(0., 20000.);
-    g->GetYaxis()->SetRangeUser(0., 0.4);
-    g->SetMarkerColor(color[i]);
-    g->SetLineColor(color[i]);
-    g->Draw(gDrawOpt[i].c_str());
   };
 
   std::string sStation[] = {"St1", "St2", "St345"};
@@ -90,31 +80,13 @@ void DrawPreClustersComp(std::string file1 = "displays.root", std::string file2 
     }
     c->cd(1);
     l->Clone()->Draw("same");
-
-    std::string cNames[] = {"cAsymmRMS", "cAsymmDelta", "cAsymmSigma"};
-    c = new TCanvas(fmt::format("cAsymm{}Comp", sSt).c_str(),
-                    fmt::format("cluster charge asymmetry vs charge {}", sSt).c_str(), 10, 10, 1200, 900);
-    c->Divide(3, 3);
-    std::string gNameBase[] = {"gChargeAsymmRMS", "gAsymmDeltavsCharge", "gAsymmSigmavsCharge"};
-    for (int i = 0; i < 3; ++i) {
-      std::string gNameExt[] = {"", "Close", "Far"};
-      for (int j = 0; j < 3; ++j) {
-        auto gName = fmt::format("{}{}{}", gNameBase[i], sSt, gNameExt[j]);
-        for (int k = 0; k < 2; ++k) {
-          auto g = GetClone<TGraphAsymmErrors>(f[k], cNames[i], gName, fmt::format("_{}", k + 1));
-          c->cd(3 * i + j + 1);
-          gDraw(g, k);
-        }
-      }
-    }
-    c->cd(1);
-    l->Clone()->Draw("same");
   }
 
   f[0].Close();
   f[1].Close();
 }
 
+//_________________________________________________________________________________________________
 template <class T>
 T* GetClone(TFile& f, std::string canvasName, std::string objectName, std::string extension)
 {

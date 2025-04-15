@@ -1,6 +1,4 @@
 #include <cmath>
-#include <memory>
-#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -9,14 +7,9 @@
 #include <gsl/span>
 
 #include <TCanvas.h>
-#include <TFitResult.h>
-#include <TFitResultPtr.h>
-#include <TGraphAsymmErrors.h>
-#include <TF1.h>
 #include <TH1F.h>
 #include <TH2F.h>
 #include <TH3F.h>
-#include <TMath.h>
 
 #include "DataFormatsMCH/Digit.h"
 #include "MCHMappingInterface/Segmentation.h"
@@ -384,146 +377,4 @@ void FillPreClusterInfo3D(double chargeNB, double chargeB, float dx, TH3* h)
   double chargeAsymm = 0.5 * std::log(chargeNB / chargeB);
 
   h->Fill(dx, charge, chargeAsymm);
-}
-
-//_________________________________________________________________________________________________
-double DoubleGaus(double* x, double* par)
-{
-  /// double gaussian with same norm and width, placed at -mean and mean
-  /// par[0] = Normalization
-  /// par[1] = mean
-  /// par[2] = sigma
-
-  return par[0] * (TMath::Gaus(x[0], -par[1], par[2], true) + TMath::Gaus(x[0], par[1], par[2], true));
-}
-
-//_________________________________________________________________________________________________
-std::tuple<TGraphAsymmErrors*, TGraphAsymmErrors*, TGraphAsymmErrors*>
-  GetAsymmDispersionVsCharge(TH2* hAsymm2D, const char* extension = "")
-{
-  /// extract the charge asymmetry dispersion versus charge from the 2D histogram
-
-  static const int minEntriesPerBin = 1000;
-  static TF1* fDoubleGaus = new TF1("DoubleGaus", DoubleGaus, -0.5, 0.5, 3);
-
-  std::unique_ptr<TH1> hCharge(hAsymm2D->ProjectionX());
-  auto gAsymmRMSvsCharge = new TGraphAsymmErrors();
-  gAsymmRMSvsCharge->SetNameTitle(fmt::format("gChargeAsymmRMS{}", extension).c_str(),
-                                  fmt::format("{} cluster charge asymmetry RMS vs charge", extension).c_str());
-  auto gAsymmDeltavsCharge = new TGraphAsymmErrors();
-  gAsymmDeltavsCharge->SetNameTitle(fmt::format("gAsymmDeltavsCharge{}", extension).c_str(),
-                                    fmt::format("{} cluster charge asymmetry delta vs charge", extension).c_str());
-  auto gAsymmSigmavsCharge = new TGraphAsymmErrors();
-  gAsymmSigmavsCharge->SetNameTitle(fmt::format("gAsymmSigmavsCharge{}", extension).c_str(),
-                                    fmt::format("{} cluster charge asymmetry sigma vs charge", extension).c_str());
-
-  auto addDispersionValues = [&](int firstBin, int lastBin) {
-    hCharge->GetXaxis()->SetRange(firstBin, lastBin);
-    auto chargeMean = hCharge->GetMean();
-    auto chargeMeanErrLow = chargeMean - hCharge->GetBinLowEdge(firstBin);
-    auto chargeMeanErrHigh = hCharge->GetBinLowEdge(lastBin + 1) - chargeMean;
-
-    std::unique_ptr<TH1> hAsymm(hAsymm2D->ProjectionY("tmp", firstBin, lastBin));
-    auto asymmStdDevError = hAsymm->GetStdDevError();
-    gAsymmRMSvsCharge->AddPoint(chargeMean, hAsymm->GetStdDev());
-    gAsymmRMSvsCharge->SetPointError(gAsymmRMSvsCharge->GetN() - 1, chargeMeanErrLow, chargeMeanErrHigh,
-                                     asymmStdDevError, asymmStdDevError);
-
-    fDoubleGaus->SetParameters(hAsymm->GetEntries() * hAsymm->GetBinWidth(1) / 2., 0., 0.1);
-    auto fitResult = hAsymm->Fit(fDoubleGaus, "LRSNQ");
-    auto asymmDeltaError = std::min(std::abs(fitResult->Parameter(1)), fitResult->ParError(1));
-    gAsymmDeltavsCharge->AddPoint(chargeMean, std::abs(fitResult->Parameter(1)));
-    gAsymmDeltavsCharge->SetPointError(gAsymmDeltavsCharge->GetN() - 1, chargeMeanErrLow, chargeMeanErrHigh,
-                                       asymmDeltaError, asymmDeltaError);
-    auto asymmSigmaError = fitResult->ParError(2);
-    gAsymmSigmavsCharge->AddPoint(chargeMean, fitResult->Parameter(2));
-    gAsymmSigmavsCharge->SetPointError(gAsymmSigmavsCharge->GetN() - 1, chargeMeanErrLow, chargeMeanErrHigh,
-                                       asymmSigmaError, asymmSigmaError);
-  };
-
-  int lastBin = 0;
-  auto remainingEntries = static_cast<int>(hCharge->Integral());
-  while (remainingEntries > 2 * minEntriesPerBin) {
-
-    int firstBin = lastBin + 1;
-    int nEntries = 0;
-    do {
-      nEntries += hCharge->GetBinContent(++lastBin);
-    } while (nEntries < minEntriesPerBin);
-    remainingEntries -= nEntries;
-
-    addDispersionValues(firstBin, lastBin);
-  }
-
-  if (lastBin < hCharge->GetNbinsX()) {
-    addDispersionValues(lastBin + 1, hCharge->GetNbinsX());
-  }
-
-  return std::make_tuple(gAsymmRMSvsCharge, gAsymmDeltavsCharge, gAsymmSigmavsCharge);
-}
-
-//_________________________________________________________________________________________________
-std::tuple<TCanvas*, TCanvas*, TCanvas*> DrawPreClusterInfo3D(TH3* hAsymm3D[4])
-{
-  /// draw the charge asymmetry dispersion versus charge for different distances to wire
-
-  TCanvas* c1 = new TCanvas("cAsymmRMS", "cluster charge asymmetry RMS vs charge", 10, 10, 1200, 600);
-  c1->Divide(2, 2);
-  TCanvas* c2 = new TCanvas("cAsymmDelta", "cluster charge asymmetry delta vs charge", 10, 10, 1200, 600);
-  c2->Divide(2, 2);
-  TCanvas* c3 = new TCanvas("cAsymmSigma", "cluster charge asymmetry sigma vs charge", 10, 10, 1200, 600);
-  c3->Divide(2, 2);
-
-  auto draw = [](auto g1, auto g2, auto g3) {
-    g1->Draw("ap");
-    g1->GetXaxis()->SetRangeUser(0., 20000.);
-    g1->GetYaxis()->SetRangeUser(0., 0.4);
-    g2->SetMarkerColor(2);
-    g2->SetLineColor(2);
-    g2->Draw("p");
-    g3->SetMarkerColor(4);
-    g3->SetLineColor(4);
-    g3->Draw("p");
-  };
-
-  static const char* sSt[] = {"St1", "St2", "St345", ""};
-  for (int iSt = 0; iSt < 4; ++iSt) {
-
-    std::unique_ptr<TH2> hAsymm2D(static_cast<TH2*>(hAsymm3D[iSt]->Project3D("zy")));
-    auto [gRMS, gDelta, gSigma] = GetAsymmDispersionVsCharge(hAsymm2D.get(), sSt[iSt]);
-
-    hAsymm3D[iSt]->GetXaxis()->SetRange(12, 14);
-    std::unique_ptr<TH2> hAsymm2DClose(static_cast<TH2*>(hAsymm3D[iSt]->Project3D("close_zy")));
-    auto [gRMSClose, gDeltaClose, gSigmaClose] =
-      GetAsymmDispersionVsCharge(hAsymm2DClose.get(), fmt::format("{}Close", sSt[iSt]).c_str());
-
-    hAsymm3D[iSt]->GetXaxis()->SetRange(1, 4);
-    std::unique_ptr<TH2> hAsymm2DFar(static_cast<TH2*>(hAsymm3D[iSt]->Project3D("far1_zy")));
-    hAsymm3D[iSt]->GetXaxis()->SetRange(22, 25);
-    std::unique_ptr<TH2> hAsymm2DFar2(static_cast<TH2*>(hAsymm3D[iSt]->Project3D("far2_zy")));
-    hAsymm2DFar->Add(hAsymm2DFar2.get());
-    auto [gRMSFar, gDeltaFar, gSigmaFar] =
-      GetAsymmDispersionVsCharge(hAsymm2DFar.get(), fmt::format("{}Far", sSt[iSt]).c_str());
-
-    TLegend* l = new TLegend(0.15, 0.75, 0.35, 0.9);
-    l->SetFillStyle(0);
-    l->SetBorderSize(0);
-    l->AddEntry(gRMS, "any distance", "l");
-    l->AddEntry(gRMSClose, "|dx| < 0.015 cm", "l");
-    l->AddEntry(gRMSFar, "|dx| > 0.085 cm", "l");
-
-    c1->cd(iSt + 1);
-    draw(gRMS, gRMSClose, gRMSFar);
-    l->Draw("same");
-
-    c2->cd(iSt + 1);
-    draw(gDelta, gDeltaClose, gDeltaFar);
-    l->Clone()->Draw("same");
-
-    c3->cd(iSt + 1);
-    draw(gSigma, gSigmaClose, gSigmaFar);
-    l->Clone()->Draw("same");
-  }
-
-  return std::make_tuple(c1, c2, c3);
 }
