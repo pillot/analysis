@@ -14,6 +14,7 @@
 #include <TH2.h>
 #include <TH3.h>
 #include <TLegend.h>
+#include <TList.h>
 #include <TMath.h>
 #include <TStyle.h>
 
@@ -22,7 +23,11 @@
 #include "Framework/Logger.h"
 
 TH3* GetAsymm3D(TFile& f, std::string hName);
-std::vector<TGraphAsymmErrors*> GetAsymmDispersionVsCharge(TH2* hAsymm2D, const char* extension, int minEntriesPerBin);
+std::vector<TGraphAsymmErrors*> GetAsymmDispersionVsCharge(TH2* hAsymm2D, TList& hAsymm1D,
+                                                           const char* extension, int minEntriesPerBin);
+
+double AsymmParamFunc(double* x, double* par);
+static TF1* fAsymmParamFunc = new TF1("AsymmParamFunc", AsymmParamFunc, 0., 20000., 3);
 
 //_________________________________________________________________________________________________
 void FitPreClustersAsymm(std::string inFileName = "displays.root", std::string outFileName = "asymm.root",
@@ -31,6 +36,7 @@ void FitPreClustersAsymm(std::string inFileName = "displays.root", std::string o
   /// fit the cluster charge asymmetry versus charge for different distances to closest wire
 
   gStyle->SetOptStat(1);
+  TH1::AddDirectory(false);
 
   TFile inFile(inFileName.c_str(), "read");
 
@@ -41,6 +47,7 @@ void FitPreClustersAsymm(std::string inFileName = "displays.root", std::string o
     hAsymm3D.push_back(GetAsymm3D(inFile, fmt::format("hChargeAsymm3D{}", st).c_str()));
   }
 
+  std::vector<TList*> hAsymm1D{};
   std::vector<TCanvas*> cAsymm{};
   std::vector<std::pair<double, double>> yRange{};
   cAsymm.emplace_back(new TCanvas("cAsymmMean", "asymmetry mean vs charge", 10, 10, 1200, 600));
@@ -83,13 +90,15 @@ void FitPreClustersAsymm(std::string inFileName = "displays.root", std::string o
 
   for (size_t iSt = 0; iSt < hAsymm3D.size(); ++iSt) {
 
+    auto hAsymm1DSt = hAsymm1D.emplace_back(new TList());
+
     std::unique_ptr<TH2> hAsymm2D(static_cast<TH2*>(hAsymm3D[iSt]->Project3D("zy")));
-    auto gAsymm = GetAsymmDispersionVsCharge(hAsymm2D.get(), sSt[iSt], minEntriesPerBin);
+    auto gAsymm = GetAsymmDispersionVsCharge(hAsymm2D.get(), *hAsymm1DSt, sSt[iSt], minEntriesPerBin);
 
     hAsymm3D[iSt]->GetXaxis()->SetRange(12, 14);
     std::unique_ptr<TH2> hAsymm2DClose(static_cast<TH2*>(hAsymm3D[iSt]->Project3D("close_zy")));
     auto extension = fmt::format("{}Close", sSt[iSt]);
-    auto gAsymmClose = GetAsymmDispersionVsCharge(hAsymm2DClose.get(), extension.c_str(), minEntriesPerBin);
+    auto gAsymmClose = GetAsymmDispersionVsCharge(hAsymm2DClose.get(), *hAsymm1DSt, extension.c_str(), minEntriesPerBin);
 
     hAsymm3D[iSt]->GetXaxis()->SetRange(1, 4);
     std::unique_ptr<TH2> hAsymm2DFar(static_cast<TH2*>(hAsymm3D[iSt]->Project3D("far1_zy")));
@@ -97,7 +106,7 @@ void FitPreClustersAsymm(std::string inFileName = "displays.root", std::string o
     std::unique_ptr<TH2> hAsymm2DFar2(static_cast<TH2*>(hAsymm3D[iSt]->Project3D("far2_zy")));
     hAsymm2DFar->Add(hAsymm2DFar2.get());
     extension = fmt::format("{}Far", sSt[iSt]);
-    auto gAsymmFar = GetAsymmDispersionVsCharge(hAsymm2DFar.get(), extension.c_str(), minEntriesPerBin);
+    auto gAsymmFar = GetAsymmDispersionVsCharge(hAsymm2DFar.get(), *hAsymm1DSt, extension.c_str(), minEntriesPerBin);
 
     TLegend* l = new TLegend(0.15, 0.75, 0.35, 0.9);
     l->SetFillStyle(0);
@@ -116,6 +125,9 @@ void FitPreClustersAsymm(std::string inFileName = "displays.root", std::string o
   inFile.Close();
 
   TFile outFile(outFileName.c_str(), "recreate");
+  for (size_t iSt = 0; iSt < hAsymm3D.size(); ++iSt) {
+    hAsymm1D[iSt]->Write(fmt::format("asymm{}", sSt[iSt]).c_str(), TObject::kSingleKey);
+  }
   for (auto c : cAsymm) {
     c->Write();
   }
@@ -168,7 +180,8 @@ double TripleGaus(double* x, double* par)
 }
 
 //_________________________________________________________________________________________________
-std::vector<TGraphAsymmErrors*> GetAsymmDispersionVsCharge(TH2* hAsymm2D, const char* extension, int minEntriesPerBin)
+std::vector<TGraphAsymmErrors*> GetAsymmDispersionVsCharge(TH2* hAsymm2D, TList& hAsymm1D,
+                                                           const char* extension, int minEntriesPerBin)
 {
   /// extract the charge asymmetry dispersion versus charge from the 2D histogram
 
@@ -210,36 +223,44 @@ std::vector<TGraphAsymmErrors*> GetAsymmDispersionVsCharge(TH2* hAsymm2D, const 
   auto addDispersionValues = [&](int firstBin, int lastBin) {
     hCharge->GetXaxis()->SetRange(firstBin, lastBin);
     auto chargeMean = hCharge->GetMean();
-    auto chargeMeanErrLow = chargeMean - hCharge->GetBinLowEdge(firstBin);
-    auto chargeMeanErrHigh = hCharge->GetBinLowEdge(lastBin + 1) - chargeMean;
+    auto chargeMin = hCharge->GetBinLowEdge(firstBin);
+    auto chargeMax = hCharge->GetBinLowEdge(lastBin + 1);
+    auto chargeMeanErrLow = chargeMean - chargeMin;
+    auto chargeMeanErrHigh = chargeMax - chargeMean;
 
     auto addPoint = [&](TGraphAsymmErrors* g, double y, double ey) {
       g->AddPoint(chargeMean, y);
       g->SetPointError(g->GetN() - 1, chargeMeanErrLow, chargeMeanErrHigh, ey, ey);
     };
 
-    std::unique_ptr<TH1> hAsymm(hAsymm2D->ProjectionY("tmp", firstBin, lastBin));
+    auto sRange = fmt::format("asymm{}_{}-{}", extension, std::lround(chargeMin), std::lround(chargeMax));
+    auto hAsymm = hAsymm2D->ProjectionY(sRange.c_str(), firstBin, lastBin);
+    hAsymm1D.Add(hAsymm);
     addPoint(gAsymmMeanvsCharge, hAsymm->GetMean(), hAsymm->GetMeanError());
     addPoint(gAsymmRMSvsCharge, hAsymm->GetStdDev(), hAsymm->GetStdDevError());
 
     static TF1* fGaus = new TF1("Gaus", "gausn", -0.5, 0.5);
     auto norm = hAsymm->GetEntries() * hAsymm->GetBinWidth(1);
-    fGaus->SetParameters(norm, 0., 0.05);
-    auto fitResultG = hAsymm->Fit(fGaus, "RSNQ");
+    fGaus->SetParameters(norm, hAsymm->GetMean(), hAsymm->GetStdDev());
+    fGaus->FixParameter(1, hAsymm->GetMean());
+    auto fitResultG = hAsymm->Fit(fGaus, "BRSNQ");
     addPoint(gAsymmMeanGvsCharge, fitResultG->Parameter(1), fitResultG->ParError(1));
     addPoint(gAsymmSigmaGvsCharge, std::abs(fitResultG->Parameter(2)), fitResultG->ParError(2));
 
-    static TF1* fDoubleGaus = new TF1("DoubleGaus", DoubleGaus, -0.5, 0.5, 4);
-    fDoubleGaus->SetParameters(norm, 0., 0., 0.1);
+    static TF1* fDoubleGaus = new TF1("DoubleGaus", DoubleGaus, -0.4, 0.4, 4);
+    fDoubleGaus->SetParameters(norm, hAsymm->GetMean(), 0., 0.1);
+    fDoubleGaus->FixParameter(1, hAsymm->GetMean());
     auto fitResultDG = hAsymm->Fit(fDoubleGaus, "RSNQ");
     addPoint(gAsymmMeanDGvsCharge, fitResultDG->Parameter(1), fitResultDG->ParError(1));
     addPoint(gAsymmDeltaDGvsCharge, std::abs(fitResultDG->Parameter(2)), fitResultDG->ParError(2));
     addPoint(gAsymmSigmaDGvsCharge, std::abs(fitResultDG->Parameter(3)), fitResultDG->ParError(3));
 
-    static TF1* fTripleGaus = new TF1("TripleGaus", TripleGaus, -0.5, 0.5, 5);
-    fTripleGaus->SetParameters(norm, 0.3, 0., 0.15, 0.05);
+    static TF1* fTripleGaus = new TF1("TripleGaus", TripleGaus, -0.4, 0.4, 5);
+    fTripleGaus->SetParameters(norm, 0.3, hAsymm->GetMean(), 0.15, 0.05);
     fTripleGaus->SetParLimits(1, -1., 1.);
-    auto fitResultTG = hAsymm->Fit(fTripleGaus, "RSNQ");
+    fTripleGaus->FixParameter(2, hAsymm->GetMean());
+    auto fitResultTG = hAsymm->Fit(fTripleGaus, "RS0Q");
+    hAsymm->GetFunction("TripleGaus")->ResetBit(TF1::kNotDraw);
     addPoint(gAsymmFracTGvsCharge, std::abs(fitResultTG->Parameter(1)), fitResultTG->ParError(1));
     addPoint(gAsymmMeanTGvsCharge, fitResultTG->Parameter(2), fitResultTG->ParError(2));
     addPoint(gAsymmDeltaTGvsCharge, std::abs(fitResultTG->Parameter(3)), fitResultTG->ParError(3));
@@ -265,4 +286,15 @@ std::vector<TGraphAsymmErrors*> GetAsymmDispersionVsCharge(TH2* hAsymm2D, const 
   }
 
   return gAsymm;
+}
+
+//_________________________________________________________________________________________________
+double AsymmParamFunc(double* x, double* par)
+{
+  /// generic asymmetry parameter evolution versus charge
+  /// par[0] = minimum value
+  /// par[1] = maximum value
+  /// par[2] = evolution coefficient
+
+  return par[1] - (par[1] - par[0]) / exp(par[2] * x[0]);
 }
