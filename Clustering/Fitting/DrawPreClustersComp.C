@@ -1,8 +1,10 @@
 #include <string>
+#include <utility>
 
 #include <TCanvas.h>
 #include <TFile.h>
 #include <TH1.h>
+#include <TH3.h>
 #include <TPaveText.h>
 #include <TStyle.h>
 #include <TText.h>
@@ -11,6 +13,8 @@
 
 #include "Framework/Logger.h"
 
+template <class T>
+T* GetObject(TFile& f, std::string objectName);
 template <class T>
 T* GetClone(TFile& f, std::string canvasName, std::string objectName, std::string extension);
 
@@ -80,6 +84,42 @@ void DrawPreClustersComp(std::string file1 = "displays.root", std::string file2 
     }
     c->cd(1);
     l->Clone()->Draw("same");
+
+    static const std::vector<std::pair<double, double>> chargeLimits{
+      {-999999., 999999.},
+      {0., 200.},
+      {200., 400.},
+      {400., 600.},
+      {600., 800.},
+      {800., 1000.},
+      {1000., 1200.},
+      {1200., 1500.},
+      {1500., 2100.},
+      {2100., 4000.},
+      {4000., 8000.},
+      {8000., 999999.}};
+    c = new TCanvas(fmt::format("ChargeAsymm{}Comp", sSt).c_str(),
+                    fmt::format("precluster charge asymmetry {}", sSt).c_str(), 10, 10, 1200, 900);
+    c->Divide((chargeLimits.size() + 2) / 3, 3);
+    for (int j = 0; j < 2; ++j) {
+      auto hAsymm3D = GetObject<TH3>(f[j], fmt::format("hChargeAsymm3D{}", sSt).c_str());
+      for (size_t i = 0; i < chargeLimits.size(); ++i) {
+        int firstBin = hAsymm3D->GetYaxis()->FindBin(chargeLimits[i].first + 1.);
+        int lastBin = hAsymm3D->GetYaxis()->FindBin(chargeLimits[i].second - 1.);
+        auto chargeMin = hAsymm3D->GetYaxis()->GetBinLowEdge(firstBin);
+        auto chargeMax = hAsymm3D->GetYaxis()->GetBinLowEdge(lastBin + 1);
+        auto hName = fmt::format("asymm{}_{}_{}", sSt, i, j);
+        auto hTitle = fmt::format("cluster charge asymmetry {} ({} <= charge < {})", sSt,
+                                  std::lround(chargeMin), std::lround(chargeMax));
+        auto hAsymm = hAsymm3D->ProjectionZ(hName.c_str(), 0, -1, firstBin, lastBin);
+        hAsymm->SetTitle(hTitle.c_str());
+        c->cd(i + 1);
+        gPad->SetLogy();
+        hDraw(hAsymm, j);
+      }
+    }
+    c->cd(1);
+    l->Clone()->Draw("same");
   }
 
   f[0].Close();
@@ -88,17 +128,26 @@ void DrawPreClustersComp(std::string file1 = "displays.root", std::string file2 
 
 //_________________________________________________________________________________________________
 template <class T>
+T* GetObject(TFile& f, std::string objectName)
+{
+  /// return the object
+
+  auto o = f.FindObjectAny(objectName.c_str());
+  if (o == nullptr) {
+    LOGP(error, "object {} not found", objectName);
+    exit(-1);
+  }
+
+  return static_cast<T*>(o);
+}
+
+//_________________________________________________________________________________________________
+template <class T>
 T* GetClone(TFile& f, std::string canvasName, std::string objectName, std::string extension)
 {
   /// return a clone of the object from the canvas
 
-  auto c = f.FindObjectAny(canvasName.c_str());
-  if (c == nullptr) {
-    LOGP(error, "canvas {} not found", canvasName);
-    exit(-1);
-  }
-
-  auto o = c->FindObject(objectName.c_str());
+  auto o = GetObject<TCanvas>(f, canvasName)->FindObject(objectName.c_str());
   if (o == nullptr) {
     LOGP(error, "object {} in canvas {} not found", objectName, canvasName);
     exit(-1);
