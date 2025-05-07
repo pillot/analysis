@@ -13,6 +13,8 @@
 
 #include "DataFormatsMCH/Digit.h"
 #include "MCHMappingInterface/Segmentation.h"
+#include "MCHPreClustering/PreClusterFinder.h"
+#include "MCHPreClustering/PreClusterFinderParam.h"
 #include "MCHSimulation/Response.h"
 
 #include "DigitUtils.h"
@@ -51,6 +53,48 @@ bool IsMonoCathode(const gsl::span<const Digit> digits)
   }
 
   return true;
+}
+
+//_________________________________________________________________________________________________
+bool IsComposite(const gsl::span<const Digit> digits, bool excludeCorners = false)
+{
+  /// return true if the precluster is made of disjoint groups of pads on either cathode
+  /// if excludeCorners, pads touching only at one corner are considered to be disjoint
+
+  static o2::mch::PreClusterFinder preClusterFinder{};
+  static bool init = false;
+  if (o2::mch::PreClusterFinderParam::Instance().excludeCorners != excludeCorners) {
+    o2::conf::ConfigurableParam::setValue("MCHPreClustering.excludeCorners", excludeCorners ? "1" : "0");
+    if (init) {
+      preClusterFinder.deinit();
+      init = false;
+    }
+  }
+  if (!init) {
+    preClusterFinder.init();
+    init = true;
+  }
+
+  const auto& segmentation = o2::mch::mapping::segmentation(digits[0].getDetID());
+  std::vector<Digit> cathodeDigits[2] = {{}, {}};
+  for (const auto& digit : digits) {
+    if (segmentation.isBendingPad(digit.getPadID())) {
+      cathodeDigits[1].emplace_back(digit);
+    } else {
+      cathodeDigits[0].emplace_back(digit);
+    }
+  }
+
+  for (int iCath = 0; iCath < 2; ++iCath) {
+    preClusterFinder.reset();
+    preClusterFinder.loadDigits(cathodeDigits[iCath]);
+    int nPreClusters = preClusterFinder.run();
+    if (nPreClusters > 1) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 //_________________________________________________________________________________________________
