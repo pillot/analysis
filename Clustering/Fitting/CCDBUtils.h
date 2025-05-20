@@ -19,9 +19,25 @@ void InitFromCCDB(int run, bool local, bool loadGeom, bool loadField)
 
   if (local) {
 
-    // setup CCDB from local snapshot
-    ccdb.setURL("file://ccdb");
+    if(run == 544490){
+      // setup CCDB from local snapshot
+      ccdb.setURL("file:///Users/lambert/alice/Work/run/run_544490/w_Asymm_w_Noise/simu_03_k3xyNew_k3xyRun2/ccdb");
 
+    }
+    else if( run == 529691){
+      // setup CCDB from local snapshot
+      ccdb.setURL("file:///Users/lambert/alice/Work/run/run_529691/ccdb");
+    }
+
+    else if( run == 559410){
+      // setup CCDB from local snapshot
+      ccdb.setURL("file:///Users/lambert/alice/Work/run/run_559410/ccdb");
+    }
+
+    else if( run == 549586){
+      // setup CCDB from local snapshot
+      ccdb.setURL("file:///Users/lambert/alice/Work/run/run_549586/ccdb");
+    }
     // in this case we cannot retrieve the timestamp of the run so we must know it
     static const std::map<int, long> timeStamps{{529691, 1669611720310},
                                                 {544490, 1697060413764},
