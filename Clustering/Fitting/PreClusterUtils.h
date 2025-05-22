@@ -12,6 +12,7 @@
 #include <TH3F.h>
 
 #include "DataFormatsMCH/Digit.h"
+#include "Framework/Logger.h"
 #include "MCHMappingInterface/Segmentation.h"
 #include "MCHPreClustering/PreClusterFinder.h"
 #include "MCHPreClustering/PreClusterFinderParam.h"
@@ -32,6 +33,11 @@ using o2::mch::Digit;
 bool IsMonoCathode(const gsl::span<const Digit> digits)
 {
   /// return true if all the digits are on the same cathode
+
+  if (digits.empty()) {
+    LOGP(warning, "IsMonoCathode: list of digits is empty");
+    return true;
+  }
 
   const auto& segmentation = o2::mch::mapping::segmentation(digits[0].getDetID());
 
@@ -60,6 +66,11 @@ bool IsComposite(const gsl::span<const Digit> digits, bool excludeCorners = fals
 {
   /// return true if the precluster is made of disjoint groups of pads on either cathode
   /// if excludeCorners, pads touching only at one corner are considered to be disjoint
+
+  if (digits.empty()) {
+    LOGP(warning, "IsComposite: list of digits is empty");
+    return false;
+  }
 
   static o2::mch::PreClusterFinder preClusterFinder{};
   static bool init = false;
@@ -105,6 +116,11 @@ std::pair<int, int> GetSize(const gsl::span<const Digit> digits)
   /// on the non-bending (bending) plane in that direction
   /// note: the pad size is constant in the x (y) direction on the non-bending (bending) plane
 
+  if (digits.empty()) {
+    LOGP(warning, "GetSize: list of digits is empty");
+    return std::make_pair(0, 0);
+  }
+
   const auto& segmentation = o2::mch::mapping::segmentation(digits[0].getDetID());
 
   double dimX[2] = {1.e6, -1.e6};
@@ -137,6 +153,11 @@ std::pair<double, double> GetCharge(const gsl::span<const Digit> digits, bool ru
 {
   /// return the total charge of the digits on both cathodes
 
+  if (digits.empty()) {
+    LOGP(warning, "GetCharge: list of digits is empty");
+    return std::make_pair(0., 0.);
+  }
+
   const auto& segmentation = o2::mch::mapping::segmentation(digits[0].getDetID());
 
   std::pair<double, double> charge{0., 0.};
@@ -156,6 +177,11 @@ std::pair<double, double> GetCharge(const gsl::span<const Digit> digits, bool ru
 std::pair<double, double> GetChargeFraction(const gsl::span<const Digit> digits, double localX, double localY)
 {
   /// return the total charge fraction seen by digits on both cathodes given the cluster position
+
+  if (digits.empty()) {
+    LOGP(warning, "GetChargeFraction: list of digits is empty");
+    return std::make_pair(0., 0.);
+  }
 
   static const o2::mch::Response response[] = {{o2::mch::Station::Type1}, {o2::mch::Station::Type2345}};
 
@@ -180,10 +206,15 @@ std::pair<double, double> GetChargeFraction(const gsl::span<const Digit> digits,
 //_________________________________________________________________________________________________
 std::pair<double, double> GetCOG(const gsl::span<const Digit> digits)
 {
-  /// return a the center of gravity of the digits
+  /// return the center of gravity of the digits
   /// the weight of each digit is given by its ADC charge
   /// for bi-cathode clusters, x (y) position is given by digits in the non-bending (bending) plane
   /// note: the pad size is constant in the x (y) direction on the non-bending (bending) plane
+
+  if (digits.empty()) {
+    LOGP(error, "GetCOG: list of digits is empty");
+    exit(-1);
+  }
 
   const auto& segmentation = o2::mch::mapping::segmentation(digits[0].getDetID());
 
@@ -211,6 +242,11 @@ std::pair<double, double> GetCOG2(const gsl::span<const Digit> digits)
   /// the weight of each digit is given by its ADC charge / (its size / sqrt(12))^2
   /// note: the pad size is constant in the x (y) direction on the non-bending (bending) plane
   /// the purpose of weighting by the pad size is to combine the digits from both planes
+
+  if (digits.empty()) {
+    LOGP(error, "GetCOG2: list of digits is empty");
+    exit(-1);
+  }
 
   const auto& segmentation = o2::mch::mapping::segmentation(digits[0].getDetID());
 
