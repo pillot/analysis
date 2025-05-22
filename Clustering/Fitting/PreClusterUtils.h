@@ -1,3 +1,6 @@
+#ifndef PRECLUSTERUTILS_H_
+#define PRECLUSTERUTILS_H_
+
 #include <cmath>
 #include <utility>
 #include <vector>
@@ -106,6 +109,32 @@ bool IsComposite(const gsl::span<const Digit> digits, bool excludeCorners = fals
   }
 
   return false;
+}
+
+//_________________________________________________________________________________________________
+std::pair<int, int> GetNPads(const gsl::span<const Digit> digits)
+{
+  /// return the number of pads on both cathodes
+
+  if (digits.empty()) {
+    LOGP(warning, "GetNPads: list of digits is empty");
+    return std::make_pair(0, 0);
+  }
+
+  const auto& segmentation = o2::mch::mapping::segmentation(digits[0].getDetID());
+
+  int nPadsNB = 0;
+  int nPadsB = 0;
+
+  for (const auto& digit : digits) {
+    if (segmentation.isBendingPad(digit.getPadID())) {
+      ++nPadsB;
+    } else {
+      ++nPadsNB;
+    }
+  }
+
+  return std::make_pair(nPadsNB, nPadsB);
 }
 
 //_________________________________________________________________________________________________
@@ -458,3 +487,5 @@ void FillPreClusterInfo3D(double chargeNB, double chargeB, float dx, TH3* h)
 
   h->Fill(dx, charge, chargeAsymm);
 }
+
+#endif // PRECLUSTERUTILS_H_
