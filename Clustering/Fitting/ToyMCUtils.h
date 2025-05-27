@@ -80,24 +80,6 @@ bool IsAboveThreshold(double charge, std::string mode)
 }
 
 //_________________________________________________________________________________________________
-bool IsSelected(const std::vector<Digit>& digits)
-{
-  if (digits.empty()) {
-    return false;
-  }
-
-  auto [sizeX, sizeY] = GetSize(digits);
-  auto [nPadsNB, nPadsB] = GetNPads(digits);
-
-  bool case1 = (sizeX > 2 && sizeY > 2);
-  bool case2 = (sizeY == 2 && sizeX > 2 && sizeX != nPadsNB);
-  bool case3 = (sizeX == 2 && sizeY > 2 && sizeY != nPadsB);
-  bool case4 = (sizeX == 2 && sizeY == 2 && sizeX != nPadsNB && sizeY != nPadsB);
-
-  return case1 || case2 || case3 || case4;
-}
-
-//_________________________________________________________________________________________________
 void TMC(std::vector<Digit>& digits, int32_t time, int deId, double* par, std::string asymm, std::string noise, std::string threshold)
 {
   static const Response response[] = {{o2::mch::Station::Type1}, {o2::mch::Station::Type2345}};

@@ -157,8 +157,8 @@ void BuildToyMC(int run, std::string inFile, std::string mode, std::string fit,
       continue;
     }
 
-    // check if precluster pass the fit selection if needed (N° pads, size, ...)
-    if (mode == "cut" && !IsSelected(selectedDigits)) {
+    // check if precluster pass the fit selection if needed
+    if (mode == "cut" && !IsFittable(selectedDigits)) {
       continue;
     }
 
@@ -210,8 +210,8 @@ void BuildToyMC(int run, std::string inFile, std::string mode, std::string fit,
         edigits.clear();
         TMC(edigits, *trackTime, cluster->getDEId(), parameters, asymm, noise, threshold);
         tries++;
-      } while (!IsSelected(edigits) && tries < try_tmc);
-      if (!IsSelected(edigits)) {
+      } while (!IsFittable(edigits) && tries < try_tmc);
+      if (!IsFittable(edigits)) {
         discarded++;
         continue;
       }

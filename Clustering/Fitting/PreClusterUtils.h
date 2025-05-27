@@ -233,6 +233,35 @@ std::pair<double, double> GetChargeFraction(const gsl::span<const Digit> digits,
 }
 
 //_________________________________________________________________________________________________
+bool IsFittable(const gsl::span<const Digit> digits)
+{
+  /// return true if the precluster has enough constraints to be fitted
+  /// with 4 free parameters (2 in both X and Y directions)
+
+  if (digits.empty()) {
+    LOGP(warning, "IsFittable: list of digits is empty");
+    return false;
+  }
+
+  auto [sizeX, sizeY] = GetSize(digits);
+  auto [nPadsNB, nPadsB] = GetNPads(digits);
+
+  // >= 3 pads along X on non-bending plane
+  bool conditionX1 = sizeX > 2;
+
+  // 2 pads along X on non-bending plane and at least 1 extra pad along X on bending plane
+  bool conditionX2 = sizeX == 2 && sizeY != nPadsB;
+
+  // >= 3 pads along Y on bending plane
+  bool conditionY1 = sizeY > 2;
+
+  // 2 pads along Y on bending plane and at least 1 extra pad along Y on non-bending plane
+  bool conditionY2 = sizeY == 2 && sizeX != nPadsNB;
+
+  return (conditionX1 || conditionX2) && (conditionY1 || conditionY2);
+}
+
+//_________________________________________________________________________________________________
 std::pair<double, double> GetCOG(const gsl::span<const Digit> digits)
 {
   /// return the center of gravity of the digits
