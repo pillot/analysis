@@ -1,6 +1,7 @@
 #include <array>
 #include <cmath>
 #include <chrono>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -10,6 +11,7 @@
 #include <TTree.h>
 #include <TTreeReader.h>
 #include <TTreeReaderValue.h>
+#include <TTreeReaderArray.h>
 
 #include "DataFormatsMCH/Cluster.h"
 #include "DataFormatsMCH/Digit.h"
@@ -19,7 +21,6 @@
 #include "CCDBUtils.h"
 #include "ClusterUtils.h"
 #include "DataUtils.h"
-#include "FitUtils.h"
 #include "PreClusterUtils.h"
 #include "ToyMCUtils.h"
 
@@ -33,7 +34,7 @@ static constexpr double pi = 3.14159265358979323846;
 // run : run number
 // inFile : root data file
 // mode : "full" = use all clusters and do toyMC ; "cut" = use clusters that passed the selection and do toyMC
-// fit : "none" = use cluster parameters from data ; "fit" = use clusters parameters from a fit
+// fit : "none" = use cluster parameters from data ; "fit" = use clusters parameters from fit
 
 // in XpX, p mean point (e.g. 2p34 == 2.34 , 0p4 == 0.4), useful for writting file name
 
@@ -89,6 +90,14 @@ void BuildToyMC(int run, std::string inFile, std::string mode, std::string fit,
   TTreeReaderValue<int> trackTime(*dataReader, "trackTime");
   TTreeReaderValue<Cluster> cluster(*dataReader, "clusters");
   TTreeReaderValue<std::vector<Digit>> digits(*dataReader, "digits");
+  std::unique_ptr<TTreeReaderArray<double>> fitParameters{};
+  if (fit == "fit") {
+    if (!dataReader->GetTree()->FindBranch("fitParameters")) {
+      LOGP(error, "unable to load branch \"fitParameters\" from {}", inFile);
+      exit(-1);
+    }
+    fitParameters = std::make_unique<TTreeReaderArray<double>>(*dataReader, "fitParameters");
+  }
 
   // setup the output
   auto outFile = fmt::format("tmc_run_{}_{}_{}_{}_{}_{}.root", run, mode, fit, asymm, noise, threshold);
@@ -102,20 +111,19 @@ void BuildToyMC(int run, std::string inFile, std::string mode, std::string fit,
   dataTreeOut->Branch("clusters", &ecluster);
   std::vector<Digit> edigits;
   dataTreeOut->Branch("digits", &edigits);
-  double parameters[6];
-  dataTreeOut->Branch("parameters", parameters, "par_nasym[6]/D");
+  std::array<double, 6> parameters;
+  dataTreeOut->Branch("parameters", &parameters);
 
   int nClusters = dataReader->GetEntries(false);
   int iCluster = 0;
+  int selected = 0;
   int discarded = 0;
-  int total = 0;
-  int totalFit = 0;
   auto tStart = std::chrono::high_resolution_clock::now();
 
   while (dataReader->Next()) {
 
     if (++iCluster % 10000 == 0) {
-      std::cout << "\rprocessing cluster " << iCluster << " / " << nClusters << "..." << std::flush << "\n";
+      std::cout << "\rprocessing cluster " << iCluster << " / " << nClusters << "..." << std::flush;
     }
 
     //___________________PRE-SELECTION__________________________
@@ -162,16 +170,22 @@ void BuildToyMC(int run, std::string inFile, std::string mode, std::string fit,
       continue;
     }
 
-    total++;
+    ++selected;
 
     //___________________INIT PARAMETERS___________________________
-    auto local = GlobalToLocal(cluster->getDEId(), cluster->x, cluster->y, cluster->z, run < 300000);
-    parameters[0] = static_cast<double>(local.x()); // X
-    parameters[1] = static_cast<double>(local.y()); // Y
-    parameters[2] = 0.3; // K3X
-    parameters[3] = 0.3; // K3Y
-    parameters[4] = chargeB; // Qb_tot
-    parameters[5] = chargeNB; // Qnb_tot
+    if (fit == "fit") {
+      for (int i = 0; i < 6; ++i) {
+        parameters[i] = (*fitParameters)[i];
+      }
+    } else {
+      auto local = GlobalToLocal(cluster->getDEId(), cluster->x, cluster->y, cluster->z, run < 300000);
+      parameters[0] = local.x(); // X
+      parameters[1] = local.y(); // Y
+      parameters[2] = 0.3;       // K3X
+      parameters[3] = 0.3;       // K3Y
+      parameters[4] = chargeB;   // Qb_tot
+      parameters[5] = chargeNB;  // Qnb_tot
+    }
 
     //___________________RUN MC___________________________
     if (mode == "full") {
@@ -179,40 +193,20 @@ void BuildToyMC(int run, std::string inFile, std::string mode, std::string fit,
       edigits.clear();
       TMC(edigits, *trackTime, cluster->getDEId(), parameters, asymm, noise, threshold);
       if (edigits.empty() || IsMonoCathode(edigits)) {
-        discarded++;
+        ++discarded;
         continue;
       }
 
     } else {
 
-      // ___________________RESET PARAMETERS FROM FIT___________________
-      if (fit == "fit") {
-        std::string errorMode = (run == 544490) ? "MC" : "MLS";
-        bool doAsym = (asymm == "none") ? false : true;
-        std::array<int, 6> fix = {0, 0, 1, 1, 0, 0};
-        auto result = Fit(selectedDigits, fix, parameters, errorMode, doAsym, 1.);
-        if (result.Status() != 0) {
-          continue;
-        }
-
-        totalFit++;
-
-        parameters[0] = result.Parameter(0);
-        parameters[1] = result.Parameter(1);
-        parameters[2] = result.Parameter(2);
-        parameters[3] = result.Parameter(3);
-        parameters[4] = result.Parameter(4);
-        parameters[5] = doAsym ? result.Parameter(5) : result.Parameter(4);
-      }
-
       int tries = 0;
       do {
         edigits.clear();
         TMC(edigits, *trackTime, cluster->getDEId(), parameters, asymm, noise, threshold);
-        tries++;
+        ++tries;
       } while (!IsFittable(edigits) && tries < try_tmc);
       if (!IsFittable(edigits)) {
-        discarded++;
+        ++discarded;
         continue;
       }
     }
@@ -228,12 +222,8 @@ void BuildToyMC(int run, std::string inFile, std::string mode, std::string fit,
   auto tEnd = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double> timer = tEnd - tStart;
   cout << "\r\033[Kprocessing completed. Duration = " << timer.count() << " s" << endl;
-  if (mode == "cut" && fit == "fit") {
-    cout << "total fitted clusters : " << totalFit << " / " << total << endl;
-    cout << "total discarded clusters : " << discarded << " / " << totalFit << endl;
-  } else {
-    cout << "total discarded clusters : " << discarded << " / " << total << endl;
-  }
+  cout << "selected clusters = " << selected << " / " << nClusters << endl;
+  cout << "discarded clusters : " << discarded << " / " << selected << endl;
   dataFileOut.Write("", TObject::kOverwrite);
   dataFileOut.Close();
   dataFileIn->Close();

@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <random>
 #include <string>
@@ -80,7 +81,8 @@ bool IsAboveThreshold(double charge, std::string mode)
 }
 
 //_________________________________________________________________________________________________
-void TMC(std::vector<Digit>& digits, int32_t time, int deId, double* par, std::string asymm, std::string noise, std::string threshold)
+void TMC(std::vector<Digit>& digits, int32_t time, int deId, std::array<double, 6> param,
+         std::string asymm, std::string noise, std::string threshold)
 {
   static const Response response[] = {{o2::mch::Station::Type1}, {o2::mch::Station::Type2345}};
   const auto& mSegmentation = o2::mch::mapping::segmentation(deId);
@@ -88,24 +90,24 @@ void TMC(std::vector<Digit>& digits, int32_t time, int deId, double* par, std::s
 
   // generate charge asymmetry if needed
   if (asymm != "copy") {
-    GenerateAsymm(par[4], par[5], asymm);
+    GenerateAsymm(param[4], param[5], asymm);
   }
 
   // borders of charge integration area
   auto dxy = response[iSt].getSigmaIntegration() * response[iSt].getChargeSpread();
-  auto xMin = par[0] - dxy;
-  auto xMax = par[0] + dxy;
-  auto yMin = par[1] - dxy;
-  auto yMax = par[1] + dxy;
+  auto xMin = param[0] - dxy;
+  auto xMax = param[0] + dxy;
+  auto yMin = param[1] - dxy;
+  auto yMax = param[1] + dxy;
 
   mSegmentation.forEachPadInArea(xMin, yMin, xMax, yMax, [&](int padid) {
     auto dx = mSegmentation.padSizeX(padid) * 0.5;
     auto dy = mSegmentation.padSizeY(padid) * 0.5;
-    auto xPad = mSegmentation.padPositionX(padid) - par[0];
-    auto yPad = mSegmentation.padPositionY(padid) - par[1];
+    auto xPad = mSegmentation.padPositionX(padid) - param[0];
+    auto yPad = mSegmentation.padPositionY(padid) - param[1];
     double q = response[iSt].chargePadfraction(xPad - dx, xPad + dx, yPad - dy, yPad + dy);
     if (response[iSt].isAboveThreshold(q)) {
-      q *= mSegmentation.isBendingPad(padid) ? par[4] : par[5];
+      q *= mSegmentation.isBendingPad(padid) ? param[4] : param[5];
       auto nSamples = response[iSt].nSamples(q);
       if (noise != "none") {
         AddNoise(q, nSamples, noise);

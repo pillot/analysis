@@ -47,31 +47,27 @@ std::function<double(double, double, double)> MathiesonIntegrate(bool fixK3, dou
 std::function<double(double, double, double)> Error(std::string mode, double alpha)
 {
   if (mode == "LS") {
-    return [](double, double, double adcFit) -> double {
-      return std::sqrt(adcFit);
+    return [alpha](double, double, double adcFit) -> double {
+      return alpha * std::sqrt(adcFit);
     };
   } else if (mode == "MLS") {
-    return [](double adc, double, double) -> double {
-      return std::sqrt(adc);
+    return [alpha](double adc, double, double) -> double {
+      return alpha * std::sqrt(adc);
     };
   } else if (mode == "MC") {
     return [alpha](double, double sample, double) -> double {
       return 0.5 * (std::sqrt(sample) + alpha);
     };
-  } else if (mode == "sADC") {
-    return [alpha](double adc, double, double) -> double {
-      return alpha * std::sqrt(adc);
-    };
   } else {
-    return [](double, double, double) -> double {
-      return 1.;
+    return [alpha](double, double, double) -> double {
+      return alpha;
     };
   }
 }
 
 //_________________________________________________________________________________________________
-ROOT::Fit::FitResult Fit(const std::vector<Digit>& digits, std::array<int, 6> fix, const double* parameters,
-                         std::string errorMode, bool doAsym, double alpha = 0.)
+ROOT::Fit::FitResult Fit(const std::vector<Digit>& digits, const std::array<double, 6> param,
+                         const std::array<int, 6> fix, bool fitAsymm, std::string errorMode, double alpha = 0.)
 {
   const auto& segmentation = o2::mch::mapping::segmentation(digits[0].getDetID());
   double pitch = (digits[0].getDetID() < 300) ? 0.21 : 0.25; // set pitch value
@@ -90,12 +86,12 @@ ROOT::Fit::FitResult Fit(const std::vector<Digit>& digits, std::array<int, 6> fi
   int nParam = 6;          // number of parameters to fit
   double param0[6];        // starting parameters
   for (int i = 0; i < 6; ++i) {
-    param0[i] = parameters[i];
+    param0[i] = param[i];
   }
-  if (!doAsym) {
+  if (!fitAsymm) {
     iCharge[1] = 4;
     nParam = 5;
-    param0[4] = std::sqrt(parameters[4] * parameters[5]);
+    param0[4] = std::sqrt(param[4] * param[5]);
   }
 
   // error function for chi2 calculation
@@ -139,9 +135,9 @@ ROOT::Fit::FitResult Fit(const std::vector<Digit>& digits, std::array<int, 6> fi
   fitter.Config().ParSettings(3).SetName("ky");
   fitter.Config().ParSettings(3).SetLimits(0., 1.);
   fitter.Config().ParSettings(3).SetStepSize(0.01);
-  fitter.Config().ParSettings(4).SetName(doAsym ? "Qt_b" : "Qt");
+  fitter.Config().ParSettings(4).SetName(fitAsymm ? "Qt_b" : "Qt");
   fitter.Config().ParSettings(4).SetStepSize(0.1);
-  if (doAsym) {
+  if (fitAsymm) {
     fitter.Config().ParSettings(5).SetName("Qt_nb");
     fitter.Config().ParSettings(5).SetStepSize(0.1);
   }
