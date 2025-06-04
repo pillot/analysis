@@ -115,36 +115,46 @@ void DrawPreClusters(int run, bool applyTrackSelection = false, bool applyCluste
       continue;
     }
 
-    float dx = DistanceToClosestWire(cluster->getDEId(), cluster->x, cluster->y, cluster->z, run < 300000);
-    // float dx = DistanceToClosestWire(cluster->getDEId(), trackParam->x, trackParam->y, trackParam->z, run < 300000);
-    auto [chargeNB, chargeB] = GetCharge(selectedDigits, run < 300000);
-    if (correctCharge) {
-      auto local = GlobalToLocal(cluster->getDEId(), cluster->x, cluster->y, cluster->z, run < 300000);
-      auto [chargeFracNB, chargeFracB] = GetChargeFraction(selectedDigits, local.x(), local.y());
-      chargeNB /= chargeFracNB;
-      chargeB /= chargeFracB;
+    // reject composite preclusters
+    if (IsComposite(selectedDigits, true)) {
+      continue;
     }
-    double chargeAsymm = (chargeNB - chargeB) / (chargeNB + chargeB);
 
     // cut on distance to closest wire
+    float dx = DistanceToClosestWire(cluster->getDEId(), cluster->x, cluster->y, cluster->z, run < 300000);
+    // float dx = DistanceToClosestWire(cluster->getDEId(), trackParam->x, trackParam->y, trackParam->z, run < 300000);
     // if (applyClusterSelection && std::abs(dx) > 0.015) {
     // if (applyClusterSelection && std::abs(dx) < 0.085) {
     //   continue;
     // }
 
     // cut on cluster charge
+    auto [chargeNB, chargeB] = GetCharge(selectedDigits, run < 300000);
     // double charge = 0.5 * (chargeNB + chargeB);
     // if (applyClusterSelection && charge < 4000.) {
     //   continue;
     // }
 
     // cut on cluster charge asymmetry
+    double chargeAsymm = (chargeNB - chargeB) / (chargeNB + chargeB);
     if (applyClusterSelection && std::abs(chargeAsymm) > 0.5) {
       continue;
     }
     // if (applyClusterSelection && (chargeAsymm >= -0.2 || chargeAsymm < -0.3)) {
     //   continue;
     // }
+
+    // correct charge and re-cut on cluster charge asymmetry
+    if (correctCharge) {
+      auto local = GlobalToLocal(cluster->getDEId(), cluster->x, cluster->y, cluster->z, run < 300000);
+      auto [chargeFracNB, chargeFracB] = GetChargeFraction(selectedDigits, local.x(), local.y());
+      chargeNB /= chargeFracNB;
+      chargeB /= chargeFracB;
+      chargeAsymm = (chargeNB - chargeB) / (chargeNB + chargeB);
+      if (applyClusterSelection && std::abs(chargeAsymm) > 0.5) {
+        continue;
+      }
+    }
 
     // cut on cluster size
     // if (applyClusterSelection && sizeX < 2) {
