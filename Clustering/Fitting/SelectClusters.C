@@ -391,12 +391,12 @@ bool IsSelected(const TrackStruct& track)
     return false;
   }
 
-  // double px = track.paramAtVtx.px();
-  // double py = track.paramAtVtx.py();
-  // double pT = TMath::Sqrt(px * px + py * py);
-  // if (pT < 1.) {
-  //   return false;
-  // }
+  double px = track.paramAtVtx.px();
+  double py = track.paramAtVtx.py();
+  double pT = TMath::Sqrt(px * px + py * py);
+  if (pT < 1.) {
+    return false;
+  }
 
   double pz = track.paramAtVtx.pz();
   double eta = 0.5 * log((p + pz) / (p - pz));
@@ -427,14 +427,33 @@ int IRtoBCinTF(o2::InteractionRecord ir, int run, bool isMC)
     {529691, 74406400},
     {544490, 26693600},
     {549586, 67400512},
-    {559410, 527962048}};
+    {559410, 527962048},
+    {562967, 47243328},
+    {562968, 62076224},
+    {562969, 74244704},
+    {562970, 86353952},
+    {562971, 97188864},
+    {562972, 109218272},
+    {562975, 146579680},
+    {562976, 160383072},
+    {562979, 193958464}
+  };
 
   static const std::unordered_map<int, int> nOrbitsPerTF{
     {295584, 1},
     {529691, 128},
     {544490, 32},
     {549586, 32},
-    {559410, 32}};
+    {559410, 32},
+    {562967, 32},
+    {562968, 32},
+    {562969, 32},
+    {562970, 32},
+    {562971, 32},
+    {562972, 32},
+    {562975, 32},
+    {562976, 32},
+    {562979, 32}};
 
   auto itFirstTForbit0 = firstTForbit0.find(run);
   auto itNOrbitsPerTF = nOrbitsPerTF.find(run);
