@@ -10,11 +10,13 @@
 #include <TStyle.h>
 #include <TTreeReader.h>
 #include <TTreeReaderValue.h>
+#include <TTreeReaderArray.h>
 
 #include "CommonUtils/ConfigurableParam.h"
 #include "DataFormatsMCH/Cluster.h"
 #include "DataFormatsMCH/Digit.h"
 #include "DetectorsBase/GeometryManager.h"
+#include "Framework/Logger.h"
 #include "MCHBase/TrackBlock.h"
 
 #include "CCDBUtils.h"
@@ -34,6 +36,7 @@ void SetupRun2Mathieson();
 //_________________________________________________________________________________________________
 void DrawPreClusters(int run, bool applyTrackSelection = false, bool applyClusterSelection = false,
                      bool applyTimeSelection = false, bool correctCharge = false,
+                     bool useFitPos = false, bool useFitCharge = false,
                      const char* inFile = "clusters.root", const char* outFile = "displays.root")
 {
   /// draw precluster and associated digits informations
@@ -51,6 +54,14 @@ void DrawPreClusters(int run, bool applyTrackSelection = false, bool applyCluste
   TTreeReaderValue<int> trackTime(*dataReader, "trackTime");
   TTreeReaderValue<Cluster> cluster(*dataReader, "clusters");
   TTreeReaderValue<std::vector<Digit>> digits(*dataReader, "digits");
+  std::unique_ptr<TTreeReaderArray<double>> fitParameters{};
+  if (useFitPos || useFitCharge) {
+    if (!dataReader->GetTree()->FindBranch("fitParameters")) {
+      LOGP(error, "unable to load branch \"fitParameters\" from {}", inFile);
+      exit(-1);
+    }
+    fitParameters = std::make_unique<TTreeReaderArray<double>>(*dataReader, "fitParameters");
+  }
 
   std::vector<TH1*> preClusterInfo{};
   CreatePreClusterInfo(preClusterInfo);
@@ -79,7 +90,12 @@ void DrawPreClusters(int run, bool applyTrackSelection = false, bool applyCluste
   CreateDigitChargeInfo(digitChargeInfoSt[1], "St2");
   CreateDigitChargeInfo(digitChargeInfoSt[2], "St345");
 
+  int nClusters = dataReader->GetEntries(false);
+  int iCluster = 0;
   while (dataReader->Next()) {
+    if (++iCluster % 100000 == 0) {
+      std::cout << "\rprocessing cluster " << iCluster << " / " << nClusters << "..." << std::flush;
+    }
 
     // those 2 DE have lower HV for the run 529691
     if (run == 529691 && (cluster->getDEId() == 202 || cluster->getDEId() == 300)) {
@@ -121,7 +137,16 @@ void DrawPreClusters(int run, bool applyTrackSelection = false, bool applyCluste
     }
 
     // cut on distance to closest wire
-    float dx = DistanceToClosestWire(cluster->getDEId(), cluster->x, cluster->y, cluster->z, run < 300000);
+    double localX, localY;
+    if (useFitPos) {
+      localX = (*fitParameters)[0];
+      localY = (*fitParameters)[1];
+    } else {
+      auto local = GlobalToLocal(cluster->getDEId(), cluster->x, cluster->y, cluster->z, run < 300000);
+      localX = local.x();
+      localY = local.y();
+    }
+    float dx = DistanceToClosestWire(cluster->getDEId(), localX);
     // float dx = DistanceToClosestWire(cluster->getDEId(), trackParam->x, trackParam->y, trackParam->z, run < 300000);
     // if (applyClusterSelection && std::abs(dx) > 0.015) {
     // if (applyClusterSelection && std::abs(dx) < 0.085) {
@@ -144,12 +169,16 @@ void DrawPreClusters(int run, bool applyTrackSelection = false, bool applyCluste
     //   continue;
     // }
 
-    // correct charge and re-cut on cluster charge asymmetry
-    if (correctCharge) {
-      auto local = GlobalToLocal(cluster->getDEId(), cluster->x, cluster->y, cluster->z, run < 300000);
-      auto [chargeFracNB, chargeFracB] = GetChargeFraction(selectedDigits, local.x(), local.y());
-      chargeNB /= chargeFracNB;
-      chargeB /= chargeFracB;
+    // use fitted charge or correct pad charge and re-cut on cluster charge asymmetry
+    if (correctCharge || useFitCharge) {
+      if (useFitCharge) {
+        chargeB = (*fitParameters)[4];
+        chargeNB = (*fitParameters)[5];
+      } else {
+        auto [chargeFracNB, chargeFracB] = GetChargeFraction(selectedDigits, localX, localY);
+        chargeNB /= chargeFracNB;
+        chargeB /= chargeFracB;
+      }
       chargeAsymm = (chargeNB - chargeB) / (chargeNB + chargeB);
       if (applyClusterSelection && std::abs(chargeAsymm) > 0.5) {
         continue;
@@ -164,6 +193,11 @@ void DrawPreClusters(int run, bool applyTrackSelection = false, bool applyCluste
 
     // cut on cluster size asymmetry
     // if (applyClusterSelection && (sizeY > sizeX + 3 || sizeX > sizeY + 2)) {
+    //   continue;
+    // }
+
+    // check if precluster pass the fit selection
+    // if (applyClusterSelection && !IsFittable(selectedDigits)) {
     //   continue;
     // }
 
@@ -202,6 +236,7 @@ void DrawPreClusters(int run, bool applyTrackSelection = false, bool applyCluste
       FillDigitChargeInfo(digit, digitChargeInfoSt[iSt], chargeAsymm, run < 300000);
     }
   }
+  cout << "\r\033[Kprocessing completed" << endl;
 
   dataFileIn->Close();
 

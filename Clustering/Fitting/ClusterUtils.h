@@ -49,17 +49,26 @@ o2::math_utils::Point3D<float> GlobalToLocal(int de, float x, float y, float z, 
 }
 
 //_________________________________________________________________________________________________
+float DistanceToClosestWire(int de, float x)
+{
+  /// return the distance (x) to the closest wire in the local coordinate system
+  /// from the cluster position in the local coordinate system
+
+  static const o2::mch::Response response[] = {{o2::mch::Station::Type1}, {o2::mch::Station::Type2345}};
+
+  int iSt = (de < 300) ? 0 : 1;
+  float wire = response[iSt].getAnod(x);
+
+  return x - wire;
+};
+
+//_________________________________________________________________________________________________
 float DistanceToClosestWire(int de, float x, float y, float z, bool run2 = false)
 {
   /// return the distance (x) to the closest wire in the local coordinate system
   /// from the cluster (or track) position in the global coordinate system
 
-  static const o2::mch::Response response[] = {{o2::mch::Station::Type1}, {o2::mch::Station::Type2345}};
-
   auto local = GlobalToLocal(de, x, y, z, run2);
 
-  int iSt = (de < 300) ? 0 : 1;
-  float wire = response[iSt].getAnod(local.x());
-
-  return local.x() - wire;
+  return DistanceToClosestWire(de, local.x());
 };
