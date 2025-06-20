@@ -1,0 +1,61 @@
+Executable = "__WORKINGDIR__/SelectClusters2.sh";
+
+Packages =
+{
+  "__PACKAGE__"
+};
+
+Jobtag =
+{
+  "comment:cluster selection"
+};
+
+# all are needed
+Requirements = member(other.GridPartitions,"multicore_8");
+CPUCores = "8";
+MemorySize = "64GB";
+
+TTL = "3600";
+Price = "1";
+
+Validationcommand = "__WORKINGDIR__/validation.sh";
+
+InputFile =
+{
+  "LF:__WORKINGDIR__/SelectClusters.C"
+  "LF:__WORKINGDIR__/CCDBUtils.h"
+  "LF:__WORKINGDIR__/DataUtils.h"
+  "LF:__WORKINGDIR__/DigitUtils.h"
+  "LF:__WORKINGDIR__/PreClusterUtils.h"
+  "LF:__WORKINGDIR__/TrackUtils.h"
+};
+
+InputDataCollection = "LF:__WORKINGDIR__/data.xml,nodownload";
+Split = "se";
+SplitMaxInputFileNumber = "1";
+InputDataList = "wn.xml";
+InputDataListFormat = "xml-single";
+SplitArguments = {"wn.xml $1"};
+
+OutputDir = "__WORKINGDIR__/results/#alien_counter_03i#";
+
+Output =
+{
+  "log_archive.zip:std*@disk=1",
+  "root_archive.zip:clusters.root@disk=2"
+};
+
+FilesToCheck = "mchclusters.root mchtracks.root muontracks.root clusters.root";
+
+JDLVariables =
+{
+  "Packages",
+  "OutputDir",
+  "FilesToCheck"
+};
+
+#Store ERROR_E jobs output
+OutputErrorE=
+{
+  "log_archive.zip:std*@disk=1"
+};
