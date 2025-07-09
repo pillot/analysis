@@ -1,4 +1,5 @@
 #include <cmath>
+#include <memory>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -40,8 +41,7 @@
 
 using namespace o2;
 
-// const uint32_t nOrbitsPerTF = 128;
-const uint32_t nOrbitsPerTF = 32;
+uint32_t nOrbitsPerTF = 128;
 
 // first orbit of the first TF of each run
 const std::unordered_map<uint32_t, uint32_t> firstTForbit0perRun{
@@ -76,7 +76,9 @@ const std::unordered_map<uint32_t, uint32_t> firstTForbit0perRun{
   {529270, 68051456},
   {529414, 860032},
   {529691, 74406400},
-  {544490, 26693600}};
+  {544490, 26693600},
+  {562967, 47243328},
+  {562968, 62076224}};
 
 struct TrackInfo {
   TrackInfo(const mch::TrackMCH& mch) : mchTrack(mch) {}
@@ -108,7 +110,7 @@ uint16_t minNSamplesSignal = 17;
 double signalParam[4] = {80., 16., 12., 1.2};
 uint16_t minNSamplesBackground = 14;
 double backgroundParam[4] = {18., 24., -20., 7.};
-int bcIntegrationRange = 6; // time window ([-range, range]) to integrate digits
+int bcIntegrationRange = 10; // time window ([-range, range]) to integrate digits
 int minNDigitsSignal = 10; // minimum number of digits passing the signal cuts to select signal events
 
 constexpr double pi() { return 3.14159265358979323846; }
@@ -143,9 +145,10 @@ double backgroundCut(double* x, double* p);
 void WriteHistos(TFile* f, const char* dirName, const std::vector<TH1*>& histos);
 
 //_________________________________________________________________________________________________
-void DisplayTracks(int runNumber, std::string mchFileName, std::string muonFileName, bool applyTrackSelection = false,
-                   bool selectSignal = false, bool rejectBackground = false, std::string outFileName = "",
-                   bool isMC = false)
+void DisplayTracks(int runNumber, std::string clusterFileName = "",
+                   std::string mchFileName = "mchtracks.root", std::string muonFileName = "muontracks.root",
+                   bool applyTrackSelection = false, bool selectSignal = false, bool rejectBackground = false,
+                   std::string outFileName = "", bool isMC = false)
 {
   /// show the characteristics of the reconstructed tracks
   /// store the ouput histograms in outFileName if any
@@ -163,9 +166,10 @@ void DisplayTracks(int runNumber, std::string mchFileName, std::string muonFileN
   // base::GeometryManager::loadGeometry();
 
   // load magnetic field and geometry from CCDB
-  auto ccdb = ccdb::BasicCCDBManager::instance();
+  auto& ccdb = ccdb::BasicCCDBManager::instance();
   auto [tStart, tEnd] = ccdb.getRunDuration(runNumber);
   ccdb.setTimestamp(tEnd);
+  // ccdb.setURL("file://ccdb");
   auto grp = ccdb.get<parameters::GRPMagField>("GLO/Config/GRPMagField");
   // ccdb.setURL("http://localhost:6060");
   auto geom = ccdb.get<TGeoManager>("GLO/Config/GeometryAligned");
@@ -185,12 +189,35 @@ void DisplayTracks(int runNumber, std::string mchFileName, std::string muonFileN
     LOG(warning) << "first orbit not found for this run";
   }
 
+  // find the number of orbits per TF for this run
+  if (runNumber >= 544490) {
+    nOrbitsPerTF = 32;
+  }
+
   // load tracks
   auto [fMCH, mchReader] = LoadData(mchFileName.c_str(), "o2sim");
   TTreeReaderValue<std::vector<mch::ROFRecord>> mchROFs = {*mchReader, "trackrofs"};
   TTreeReaderValue<std::vector<mch::TrackMCH>> mchTracks = {*mchReader, "tracks"};
   TTreeReaderValue<std::vector<mch::Cluster>> mchClusters = {*mchReader, "trackclusters"};
-  TTreeReaderValue<std::vector<mch::Digit>> mchDigits = {*mchReader, "trackdigits"};
+  TFile* fClusters = nullptr;
+  TTreeReader* clusterReader = nullptr;
+  std::unique_ptr<TTreeReaderValue<std::vector<mch::Digit>>> mchDigits{};
+  if (clusterFileName.empty()) {
+    //read digits from the mchtracks.root
+    if (mchReader->GetTree()->FindBranch("trackdigits")) {
+      mchDigits = std::make_unique<TTreeReaderValue<std::vector<mch::Digit>>>(*mchReader, "trackdigits");
+    } else {
+      LOG(error) << "track clusters point to digits in the cluster file, which is not provided";
+    }
+  } else {
+    // read digits from the mchclusters.root
+    if (mchReader->GetTree()->FindBranch("trackdigits")) {
+      LOG(error) << "track clusters point to digits in the track file";
+      exit(-1);
+    }
+    std::tie(fClusters, clusterReader) = LoadData(clusterFileName.c_str(), "o2sim");
+    mchDigits = std::make_unique<TTreeReaderValue<std::vector<mch::Digit>>>(*clusterReader, "clusterdigits");
+  }
   auto [fMUON, muonReader] = LoadData(muonFileName.c_str(), "o2sim");
   TTreeReaderValue<std::vector<dataformats::TrackMCHMID>> muonTracks = {*muonReader, "tracks"};
   int nTF = muonReader->GetEntries(false);
@@ -239,7 +266,7 @@ void DisplayTracks(int runNumber, std::string mchFileName, std::string muonFileN
   TH1F* hMass = new TH1F("mass", "#mu^{+}#mu^{-} invariant mass;mass (GeV/c^{2})", 1600, 0., 20.);
   hMass->SetDirectory(0);
 
-  while (mchReader->Next() && muonReader->Next()) {
+  while (mchReader->Next() && muonReader->Next() && (clusterReader == nullptr || clusterReader->Next())) {
 
     for (const auto& mchROF : *mchROFs) {
 
@@ -286,17 +313,19 @@ void DisplayTracks(int runNumber, std::string mchFileName, std::string muonFileN
         }
 
         // fill digit info
-        LoadDigits(trackInfo, *mchClusters, *mchDigits, selectSignal, rejectBackground);
-        computeMCHTime(trackInfo.digits, trackInfo.mchTime, trackInfo.mchTimeRMS);
-        // float dt = (*mchTracks)[iMCHTrack].getTimeMUS().getTimeStamp() - static_cast<float>(o2::constants::lhc::LHCBunchSpacingMUS * trackInfo.mchTime);
-        // if (dt != 0.f) {
-        //   LOGP(info, "dt = {}", dt);
-        // }
-        computeMCHTime(trackInfo.digitsAtClusterPos, trackInfo.mchTimeAtClusterPos, trackInfo.mchTimeRMSAtClusterPos);
-        computeMCHTime(trackInfo.digits, trackInfo.mchTimeSt12, trackInfo.mchTimeRMSSt12, 100, 403);
-        computeMCHTime(trackInfo.digitsAtClusterPos, trackInfo.mchTimeAtClusterPosSt12, trackInfo.mchTimeRMSAtClusterPosSt12, 100, 403);
-        computeMCHTime(trackInfo.digits, trackInfo.mchTimeSt345, trackInfo.mchTimeRMSSt345, 500, 1025);
-        computeMCHTime(trackInfo.digitsAtClusterPos, trackInfo.mchTimeAtClusterPosSt345, trackInfo.mchTimeRMSAtClusterPosSt345, 500, 1025);
+        if (mchDigits) {
+          LoadDigits(trackInfo, *mchClusters, **mchDigits, selectSignal, rejectBackground);
+          computeMCHTime(trackInfo.digits, trackInfo.mchTime, trackInfo.mchTimeRMS);
+          // float dt = (*mchTracks)[iMCHTrack].getTimeMUS().getTimeStamp() - static_cast<float>(o2::constants::lhc::LHCBunchSpacingMUS * trackInfo.mchTime);
+          // if (dt != 0.f) {
+          //   LOGP(info, "dt = {}", dt);
+          // }
+          computeMCHTime(trackInfo.digitsAtClusterPos, trackInfo.mchTimeAtClusterPos, trackInfo.mchTimeRMSAtClusterPos);
+          computeMCHTime(trackInfo.digits, trackInfo.mchTimeSt12, trackInfo.mchTimeRMSSt12, 100, 403);
+          computeMCHTime(trackInfo.digitsAtClusterPos, trackInfo.mchTimeAtClusterPosSt12, trackInfo.mchTimeRMSAtClusterPosSt12, 100, 403);
+          computeMCHTime(trackInfo.digits, trackInfo.mchTimeSt345, trackInfo.mchTimeRMSSt345, 500, 1025);
+          computeMCHTime(trackInfo.digitsAtClusterPos, trackInfo.mchTimeAtClusterPosSt345, trackInfo.mchTimeRMSAtClusterPosSt345, 500, 1025);
+        }
 
         // apply digit selection if requested
         if (selectSignal && !IsSignal(trackInfo)) {
@@ -370,6 +399,9 @@ void DisplayTracks(int runNumber, std::string mchFileName, std::string muonFileN
   }
 
   fMCH->Close();
+  if (fClusters != nullptr) {
+    fClusters->Close();
+  }
   fMUON->Close();
 
   // store histograms if requested
