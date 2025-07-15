@@ -1,4 +1,5 @@
 #include <cmath>
+#include <memory>
 #include <string>
 #include <tuple>
 #include <vector>
@@ -24,7 +25,8 @@
 
 using namespace o2;
 
-const uint32_t nOrbitsPerTF = 128;
+// const uint32_t nOrbitsPerTF = 128;
+const uint32_t nOrbitsPerTF = 32;
 
 // first orbit of the first TF of each run
 const std::unordered_map<uint32_t, uint32_t> firstTForbit0perRun{
@@ -56,7 +58,11 @@ const std::unordered_map<uint32_t, uint32_t> firstTForbit0perRun{
   {514053, 10919},
   {521520, 84669824},
   {521684, 49607462},
-  {529270, 68051456}};
+  {529270, 68051456},
+  {529414, 860032},
+  {529691, 74406400},
+  {562967, 47243328},
+  {562968, 62076224}};
 
 uint32_t firstTForbit0(0);
 
@@ -89,7 +95,8 @@ double backgroundParam[4] = {18., 24., -20., 7.};
 int bcIntegrationRange = 6; // time window ([-range, range]) to integrate digits
 
 //_________________________________________________________________________________________________
-void DisplayDigits(int runNumber, std::string mchDigitFileName, std::string mchTrackFileName, std::string midTrackFileName,
+void DisplayDigits(int runNumber, std::string mchDigitFileName = "mchfdigits.root", std::string mchClusterFileName = "",
+                   std::string mchTrackFileName = "mchtracks.root", std::string midTrackFileName = "mid-reco.root",
                    bool selectSignal = false, bool rejectBackground = false, bool isMC = false)
 {
   /// show the characteristics of the reconstructed digits
@@ -105,9 +112,24 @@ void DisplayDigits(int runNumber, std::string mchDigitFileName, std::string mchT
   // load data
   auto [fMCHD, mchReaderD] = LoadData(mchDigitFileName.c_str(), "o2sim");
 //  TTreeReaderValue<std::vector<mch::ROFRecord>> mchDigitROFs = {*mchReaderD, "rofs"};
-  TTreeReaderValue<std::vector<mch::Digit>> mchDigits = {*mchReaderD, isMC ? "MCHDigit" : "digits"};
-  auto [fMCHT, mchReaderT] = LoadData(mchTrackFileName.c_str(), "o2sim");
-  TTreeReaderValue<std::vector<mch::Digit>> mchTrackDigits = {*mchReaderT, "trackdigits"};
+  TTreeReaderValue<std::vector<mch::Digit>> mchDigits = {*mchReaderD, "MCHDigit"};
+  TFile* fMCHT = nullptr;
+  TTreeReader* mchReaderT = nullptr;
+  std::unique_ptr<TTreeReaderValue<std::vector<mch::Digit>>> mchTrackDigits{};
+  if (mchClusterFileName.empty()) {
+    // read digits from the mchtracks.root
+    std::tie(fMCHT, mchReaderT) = LoadData(mchTrackFileName.c_str(), "o2sim");
+    if (!mchReaderT->GetTree()->FindBranch("trackdigits")) {
+      LOG(error) << "track digits are missing";
+      exit(-1);
+    }
+    mchTrackDigits = std::make_unique<TTreeReaderValue<std::vector<mch::Digit>>>(*mchReaderT, "trackdigits");
+  } else {
+    // read digits from the mchclusters.root
+    LOG(info) << "draw cluster digits instead of track digits";
+    std::tie(fMCHT, mchReaderT) = LoadData(mchClusterFileName.c_str(), "o2sim");
+    mchTrackDigits = std::make_unique<TTreeReaderValue<std::vector<mch::Digit>>>(*mchReaderT, "clusterdigits");
+  }
   auto [fMID, midReader] = LoadData(midTrackFileName.c_str(), "midreco");
   TTreeReaderValue<std::vector<mid::ROFRecord>> midROFs = {*midReader, "MIDTrackROF"};
 //  TTreeReaderValue<std::vector<mid::ROFRecord>> midROFs = {*midReader, "MIDTrackClusterROF"};
@@ -195,31 +217,31 @@ void DisplayDigits(int runNumber, std::string mchDigitFileName, std::string mchT
   while (mchReaderD->Next() && mchReaderT->Next() && midReader->Next()) {
     ++iTF;
 
-    if (!mchTrackDigits->empty()) {
+    if (!(*mchTrackDigits)->empty() && iTF == 0) {
       CreateTimeHistos(timeHistos, BCRange, iTF, "all");
       FillTimeHistos(*mchDigits, selectSignal, rejectBackground, {&timeHistos[timeHistos.size() - 9], 4});
-      FillTimeHistos(*mchTrackDigits, selectSignal, rejectBackground, {&timeHistos[timeHistos.size() - 5], 4});
+      FillTimeHistos(**mchTrackDigits, selectSignal, rejectBackground, {&timeHistos[timeHistos.size() - 5], 4});
       FillTimeHistos(*midROFs, timeHistos[timeHistos.size() - 1], isMC);
 
       CreateTimeHistos(timeHistosSt[0], BCRange, iTF, "St1");
       FillTimeHistos(*mchDigits, selectSignal, rejectBackground, {&timeHistosSt[0][timeHistosSt[0].size() - 9], 4}, 100, 203);
-      FillTimeHistos(*mchTrackDigits, selectSignal, rejectBackground, {&timeHistosSt[0][timeHistosSt[0].size() - 5], 4}, 100, 203);
+      FillTimeHistos(**mchTrackDigits, selectSignal, rejectBackground, {&timeHistosSt[0][timeHistosSt[0].size() - 5], 4}, 100, 203);
       FillTimeHistos(*midROFs, timeHistosSt[0][timeHistosSt[0].size() - 1], isMC);
 
       CreateTimeHistos(timeHistosSt[1], BCRange, iTF, "St2");
       FillTimeHistos(*mchDigits, selectSignal, rejectBackground, {&timeHistosSt[1][timeHistosSt[1].size() - 9], 4}, 300, 403);
-      FillTimeHistos(*mchTrackDigits, selectSignal, rejectBackground, {&timeHistosSt[1][timeHistosSt[1].size() - 5], 4}, 300, 403);
+      FillTimeHistos(**mchTrackDigits, selectSignal, rejectBackground, {&timeHistosSt[1][timeHistosSt[1].size() - 5], 4}, 300, 403);
       FillTimeHistos(*midROFs, timeHistosSt[1][timeHistosSt[1].size() - 1], isMC);
 
       CreateTimeHistos(timeHistosSt[2], BCRange, iTF, "St345");
       FillTimeHistos(*mchDigits, selectSignal, rejectBackground, {&timeHistosSt[2][timeHistosSt[2].size() - 9], 4}, 500, 1025);
-      FillTimeHistos(*mchTrackDigits, selectSignal, rejectBackground, {&timeHistosSt[2][timeHistosSt[2].size() - 5], 4}, 500, 1025);
+      FillTimeHistos(**mchTrackDigits, selectSignal, rejectBackground, {&timeHistosSt[2][timeHistosSt[2].size() - 5], 4}, 500, 1025);
       FillTimeHistos(*midROFs, timeHistosSt[2][timeHistosSt[2].size() - 1], isMC);
 
-      FillCorrelationHistos(*mchTrackDigits, selectSignal, rejectBackground, corrHistos[3]);
-      FillCorrelationHistos(*mchTrackDigits, selectSignal, rejectBackground, corrHistos[7], 100, 203);
-      FillCorrelationHistos(*mchTrackDigits, selectSignal, rejectBackground, corrHistos[11], 300, 403);
-      FillCorrelationHistos(*mchTrackDigits, selectSignal, rejectBackground, corrHistos[15], 500, 1025);
+      FillCorrelationHistos(**mchTrackDigits, selectSignal, rejectBackground, corrHistos[3]);
+      FillCorrelationHistos(**mchTrackDigits, selectSignal, rejectBackground, corrHistos[7], 100, 203);
+      FillCorrelationHistos(**mchTrackDigits, selectSignal, rejectBackground, corrHistos[11], 300, 403);
+      FillCorrelationHistos(**mchTrackDigits, selectSignal, rejectBackground, corrHistos[15], 500, 1025);
     }
 
     FillChargeHistos(*mchDigits, selectSignal, rejectBackground, {&chargeHistos[0], 3});
