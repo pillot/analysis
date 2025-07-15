@@ -10,10 +10,11 @@
 #include <TLegend.h>
 #include <TParameter.h>
 
-int LoadHistos(const char* fileName, std::vector<TH1*> histosAtVertex[2], TH1*& hmatchChi2, std::vector<TH1*>& chargeHistos);
+int LoadHistos(const char* fileName, std::vector<TH1*> histosAtVertex[2], TH1*& hmatchChi2, TH1*& hNClustersPerCh, std::vector<TH1*>& chargeHistos);
 void LoadHistosAtVertex(TFile* f, std::vector<TH1*>& histos, const char* extension);
 void CompareHistosAtVertex(std::vector<TH1*> histos1, int nTF1, std::vector<TH1*> histos2, int nTF2, const char* extension);
 void CompareMatchChi2(TH1* h1, int nTF1, TH1* h2, int nTF2);
+void CompareNClustersPerCh(TH1* h1, TH1* h2);
 void LoadChargeHistos(TFile* f, std::vector<TH1*>& histos, const char* extension);
 void CompareChargeHistos(gsl::span<TH1*> histos1, int nTF1, gsl::span<TH1*> histos2, int nTF2, const char* extension);
 
@@ -24,18 +25,21 @@ void DisplayTracksComparison(std::string inFileName1, std::string inFileName2 = 
 
   std::vector<TH1*> histosAtVertex1[2] = {{}, {}};
   TH1* hmatchChi21 = nullptr;
+  TH1* hNClustersPerCh1 = nullptr;
   std::vector<TH1*> chargeHistos1{};
-  int nTF1 = LoadHistos(inFileName1.c_str(), histosAtVertex1, hmatchChi21, chargeHistos1);
+  int nTF1 = LoadHistos(inFileName1.c_str(), histosAtVertex1, hmatchChi21, hNClustersPerCh1, chargeHistos1);
 
   std::vector<TH1*> histosAtVertex2[2] = {{}, {}};
   TH1* hmatchChi22 = nullptr;
+  TH1* hNClustersPerCh2 = nullptr;
   std::vector<TH1*> chargeHistos2{};
-  int nTF2 = LoadHistos(inFileName2.c_str(), histosAtVertex2, hmatchChi22, chargeHistos2);
+  int nTF2 = LoadHistos(inFileName2.c_str(), histosAtVertex2, hmatchChi22, hNClustersPerCh2, chargeHistos2);
 
   // display histograms
   CompareHistosAtVertex(histosAtVertex1[0], nTF1, histosAtVertex2[0], nTF2, "mch");
   CompareHistosAtVertex(histosAtVertex1[1], nTF1, histosAtVertex2[1], nTF2, "muon");
   CompareMatchChi2(hmatchChi21, nTF1, hmatchChi22, nTF2);
+  CompareNClustersPerCh(hNClustersPerCh1, hNClustersPerCh2);
   CompareChargeHistos({&chargeHistos1[0], 2}, nTF1, {&chargeHistos2[0], 2}, nTF2, "AllDigits_mch");
   CompareChargeHistos({&chargeHistos1[3], 2}, nTF1, {&chargeHistos2[3], 2}, nTF2, "AllDigits_muon");
   CompareChargeHistos({&chargeHistos1[6], 2}, nTF1, {&chargeHistos2[6], 2}, nTF2, "DigitsAtClusterPos_mch");
@@ -43,7 +47,7 @@ void DisplayTracksComparison(std::string inFileName1, std::string inFileName2 = 
 }
 
 //_________________________________________________________________________________________________
-int LoadHistos(const char* fileName, std::vector<TH1*> histosAtVertex[2], TH1*& hmatchChi2, std::vector<TH1*>& chargeHistos)
+int LoadHistos(const char* fileName, std::vector<TH1*> histosAtVertex[2], TH1*& hmatchChi2, TH1*& hNClustersPerCh, std::vector<TH1*>& chargeHistos)
 {
   /// load histograms from input file
   /// return the number of TF analyzed to produce them
@@ -63,6 +67,7 @@ int LoadHistos(const char* fileName, std::vector<TH1*> histosAtVertex[2], TH1*& 
   LoadHistosAtVertex(f, histosAtVertex[0], "mch");
   LoadHistosAtVertex(f, histosAtVertex[1], "muon");
   hmatchChi2 = static_cast<TH1*>(f->FindObjectAny("matchChi2"));
+  hNClustersPerCh = static_cast<TH1*>(f->FindObjectAny("nClustersPerCh"));
   LoadChargeHistos(f, chargeHistos, "AllDig");
   LoadChargeHistos(f, chargeHistos, "AllDigMatch");
   LoadChargeHistos(f, chargeHistos, "");
@@ -120,9 +125,11 @@ void CompareHistosAtVertex(std::vector<TH1*> histos1, int nTF1, std::vector<TH1*
     gPad->SetLogy();
     histos1[i]->SetStats(false);
     histos1[i]->Scale(nTFref / nTF1);
+    // histos1[i]->Scale(1. / histos1[i]->GetEntries());
     histos1[i]->SetLineColor(4);
     histos1[i]->Draw("hist");
     histos2[i]->Scale(nTFref / nTF2);
+    // histos2[i]->Scale(1. / histos2[i]->GetEntries());
     histos2[i]->SetLineColor(2);
     histos2[i]->Draw("histsame");
   }
@@ -176,9 +183,11 @@ void CompareMatchChi2(TH1* h1, int nTF1, TH1* h2, int nTF2)
   gPad->SetLogy();
   h1->SetStats(false);
   h1->Scale(nTFref / nTF1);
+  // h1->Scale(1. / h1->GetEntries());
   h1->SetLineColor(4);
   h1->Draw("hist");
   h2->Scale(nTFref / nTF2);
+  // h2->Scale(1. / h2->GetEntries());
   h2->SetLineColor(2);
   h2->Draw("histsame");
   cHist->cd(2);
@@ -201,6 +210,40 @@ void CompareMatchChi2(TH1* h1, int nTF1, TH1* h2, int nTF2)
   lHist->SetBorderSize(0);
   lHist->AddEntry(h1, Form("file 1: %d TF", nTF1), "l");
   lHist->AddEntry(h2, Form("file 2: %d TF", nTF2), "l");
+  cHist->cd(1);
+  lHist->Draw("same");
+}
+
+//_________________________________________________________________________________________________
+void CompareNClustersPerCh(TH1* h1, TH1* h2)
+{
+  /// compare the number of clusters per muon per chamber
+
+  if (!h1 || !h2) {
+    return;
+  }
+
+  TCanvas* cHist = new TCanvas("cNClustersPerMuonPerCh", "cNClustersPerMuonPerCh", 10, 10, 600, 300);
+  cHist->Divide(2, 1);
+  cHist->cd(1);
+  h1->SetStats(false);
+  h1->SetLineColor(4);
+  h1->Draw();
+  h2->SetLineColor(2);
+  h2->Draw("same");
+  cHist->cd(2);
+  TH1F* hRat = static_cast<TH1F*>(h2->Clone());
+  hRat->SetTitle("h2 / h1");
+  hRat->Divide(h1);
+  hRat->SetStats(false);
+  hRat->SetLineColor(2);
+  hRat->Draw();
+
+  TLegend* lHist = new TLegend(0.2, 0.7, 0.4, 0.85);
+  lHist->SetFillStyle(0);
+  lHist->SetBorderSize(0);
+  lHist->AddEntry(h1, "file 1", "l");
+  lHist->AddEntry(h2, "file 2", "l");
   cHist->cd(1);
   lHist->Draw("same");
 }
@@ -236,11 +279,11 @@ void CompareChargeHistos(gsl::span<TH1*> histos1, int nTF1, gsl::span<TH1*> hist
     gPad->SetLogy();
     histos1[i]->SetStats(false);
     histos1[i]->Scale(nTFref / nTF1);
-//    histos1[i]->Scale(1. / histos1[i]->GetEntries());
+    // histos1[i]->Scale(1. / histos1[i]->GetEntries());
     histos1[i]->SetLineColor(4);
     histos1[i]->Draw("hist");
     histos2[i]->Scale(nTFref / nTF2);
-//    histos2[i]->Scale(1. / histos2[i]->GetEntries());
+    // histos2[i]->Scale(1. / histos2[i]->GetEntries());
     histos2[i]->SetLineColor(2);
     histos2[i]->Draw("histsame");
     cHist->cd(3 * i + 2);

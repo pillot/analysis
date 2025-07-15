@@ -238,6 +238,8 @@ void DisplayTracks(int runNumber, std::string clusterFileName = "",
   CreateHistosAtVertex(histosAtVertex[1], "muon");
   TH1* hmatchChi2 = new TH1F("matchChi2", "normalized matching #chi^{2};#chi^{2} / ndf", 500, 0., 50.);
   hmatchChi2->SetDirectory(0);
+  TH1* hNClustersPerCh = new TH1F("nClustersPerCh", "number of clusters per muon per chamber;chamber", 10, 0.5, 10.5);
+  hNClustersPerCh->SetDirectory(0);
   std::vector<TH1*> timeHistos{};
   CreateTimeHistos(timeHistos, "AllDig");
   CreateTimeHistos(timeHistos, "");
@@ -355,6 +357,9 @@ void DisplayTracks(int runNumber, std::string clusterFileName = "",
         if (muon) {
           FillHistosAtVertex(trackInfo, histosAtVertex[1]);
           hmatchChi2->Fill(muon->getMatchChi2OverNDF());
+          for (int iCl = trackInfo.mchTrack.getFirstClusterIdx(); iCl <= trackInfo.mchTrack.getLastClusterIdx(); ++iCl) {
+            hNClustersPerCh->Fill((*mchClusters)[iCl].getChamberId() + 1);
+          }
           FillChargeHistos(trackInfo.digits, {&chargeHistos[3], 3});
           FillChargeHistos(trackInfo.digitsAtClusterPos, {&chargeHistos[9], 3});
           FillChargeHistos(trackInfo.digits, {&chargeHistosSt1[3], 3}, 100, 203);
@@ -404,6 +409,8 @@ void DisplayTracks(int runNumber, std::string clusterFileName = "",
   }
   fMUON->Close();
 
+  hNClustersPerCh->Scale(1. / histosAtVertex[1][0]->GetEntries());
+
   // store histograms if requested
   if (fOut) {
     fOut->cd();
@@ -412,6 +419,7 @@ void DisplayTracks(int runNumber, std::string clusterFileName = "",
     WriteHistos(fOut, "general", histosAtVertex[0]);
     WriteHistos(fOut, "general", histosAtVertex[1]);
     hmatchChi2->Write();
+    hNClustersPerCh->Write();
     WriteHistos(fOut, "time", timeHistos);
     WriteHistos(fOut, "time", timeHistosSt12);
     WriteHistos(fOut, "time", timeHistosSt345);
@@ -429,6 +437,8 @@ void DisplayTracks(int runNumber, std::string clusterFileName = "",
   TCanvas* cMatch = new TCanvas();
   gPad->SetLogy();
   hmatchChi2->Draw();
+  TCanvas* cNClustersPerCh = new TCanvas();
+  hNClustersPerCh->Draw();
   DrawTimeHistos({&timeHistos[0], 6}, "AllDigits");
   DrawTimeHistos({&timeHistos[6], 6}, "DigitsAtClusterPos");
   DrawTimeHistos({&timeHistosSt12[0], 6}, "St12_AllDigits");
