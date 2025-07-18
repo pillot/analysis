@@ -27,10 +27,10 @@ std::tuple<TFile*, TTreeReader*> LoadData(const char* fileName, const char* tree
 void CreateMultPlots(std::vector<TH1*>& histos, std::string extension);
 std::pair<int, int> FillMultPlots(std::string clusterFileName, std::vector<TH1*>& histos);
 void FillMultPlots(const std::vector<Cluster>& clusters, std::vector<TH1*>& histos);
-void DrawMultPlots(std::vector<TH1*>& histos1, int nROF1, int nTF1, std::vector<TH1*>& histos2, int nROF2, int nTF2);
+void DrawMultPlots(std::vector<TH1*>& histos1, int nROF1, int nTF1, std::vector<TH1*>& histos2, int nROF2, int nTF2, bool perROF);
 
 //_________________________________________________________________________________________________
-void CompareClustersMult(std::string clusterFileName1, std::string clusterFileName2)
+void CompareClustersMult(std::string clusterFileName1, std::string clusterFileName2, bool perROF = true)
 {
   /// compare the multiplicity of all clusters
 
@@ -44,7 +44,7 @@ void CompareClustersMult(std::string clusterFileName1, std::string clusterFileNa
 
   gStyle->SetOptStat(1);
 
-  DrawMultPlots(multPlots1, nROF1, nTF1, multPlots2, nROF2, nTF2);
+  DrawMultPlots(multPlots1, nROF1, nTF1, multPlots2, nROF2, nTF2, perROF);
 }
 
 //_________________________________________________________________________________________________
@@ -127,16 +127,19 @@ void FillMultPlots(const std::vector<Cluster>& clusters, std::vector<TH1*>& hist
 }
 
 //_________________________________________________________________________________________________
-void DrawMultPlots(std::vector<TH1*>& histos1, int nROF1, int nTF1, std::vector<TH1*>& histos2, int nROF2, int nTF2)
+void DrawMultPlots(std::vector<TH1*>& histos1, int nROF1, int nTF1, std::vector<TH1*>& histos2, int nROF2, int nTF2, bool perROF)
 {
   /// draw multiplicity histograms
 
-  auto drawHistos = [&nROF1, &nROF2](TH1* h1, TH1* h2) {
+  int norm1 = perROF ? nROF1 : nTF1;
+  int norm2 = perROF ? nROF2 : nTF2;
+
+  auto drawHistos = [&norm1, &norm2](TH1* h1, TH1* h2) {
     h1->SetStats(false);
-    h1->Scale(1. / nROF1);
+    h1->Scale(1. / norm1);
     h1->SetLineColor(4);
     h1->Draw();
-    h2->Scale(1. / nROF2);
+    h2->Scale(1. / norm2);
     h2->SetLineColor(2);
     h2->Draw("same");
     double h1minmax[2] = {0., 0.};
