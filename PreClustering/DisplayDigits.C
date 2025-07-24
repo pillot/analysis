@@ -13,6 +13,7 @@
 #include <TTreeReaderValue.h>
 #include <TF1.h>
 #include <TH1F.h>
+#include <TH1D.h>
 #include <TH2F.h>
 #include <TCanvas.h>
 #include <TLegend.h>
@@ -62,7 +63,8 @@ const std::unordered_map<uint32_t, uint32_t> firstTForbit0perRun{
   {529414, 860032},
   {529691, 74406400},
   {562967, 47243328},
-  {562968, 62076224}};
+  {562968, 62076224},
+  {562976, 160383072}};
 
 uint32_t firstTForbit0(0);
 
@@ -511,8 +513,8 @@ void CreateChargeHistos(std::vector<TH1*>& histos, const char* extension)
 {
   /// create digit charge histograms
 
-  histos.emplace_back(new TH1F(Form("ADC%s", extension), Form("ADC (%s);ADC", extension), 10001, -0.5, 10000.5));
-  histos.emplace_back(new TH1F(Form("Samples%s", extension), Form("N samples (%s);N samples", extension), 1024, -0.5, 1023.5));
+  histos.emplace_back(new TH1D(Form("ADC%s", extension), Form("ADC (%s);ADC", extension), 10001, -0.5, 10000.5));
+  histos.emplace_back(new TH1D(Form("Samples%s", extension), Form("N samples (%s);N samples", extension), 1024, -0.5, 1023.5));
   histos.emplace_back(new TH2F(Form("ADCvsSample%s", extension), Form("ADC vs N samples (%s);N samples;ADC", extension), 1024, -0.5, 1023.5, 10001, -0.5, 100009.5));
 
   for (auto h : histos) {
