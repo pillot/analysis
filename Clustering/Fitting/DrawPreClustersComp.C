@@ -1,5 +1,6 @@
 #include <string>
 #include <utility>
+#include <vector>
 
 #include <TCanvas.h>
 #include <TFile.h>
@@ -48,6 +49,14 @@ void DrawPreClustersComp(std::string file1 = "displays.root", std::string file2 
     h->Draw(hDrawOpt[i].c_str());
   };
 
+  auto hDrawRat = [](auto h1, auto h2, double yMin, double yMax) {
+    TH1* hRat = static_cast<TH1*>(h2->Clone());
+    hRat->Divide(h1);
+    hRat->SetStats(false);
+    hRat->GetYaxis()->SetRangeUser(yMin, yMax);
+    hRat->Draw();
+  };
+
   std::string sStation[] = {"St1", "St2", "St345"};
   for (auto sSt : sStation) {
 
@@ -55,15 +64,21 @@ void DrawPreClustersComp(std::string file1 = "displays.root", std::string file2 
     auto c = new TCanvas(fmt::format("{}Comp", cName).c_str(),
                          fmt::format("precluster characteristics {}", sSt).c_str(), 10, 10, 1200, 600);
     c->Divide(3, 2);
+    auto cRat = new TCanvas(fmt::format("{}Rat", cName).c_str(),
+                            fmt::format("precluster characteristics ratio {}", sSt).c_str(), 10, 10, 1200, 600);
+    cRat->Divide(3, 2);
     std::string hNameBase[] = {"hCharge", "hChargeB", "hChargeNB", "hChargeAsymm2", "hDimX", "hDimY"};
     for (int i = 0; i < 6; ++i) {
       auto hName = fmt::format("{}{}", hNameBase[i], sSt);
+      TH1* h[2];
       for (int j = 0; j < 2; ++j) {
-        auto h = GetClone<TH1>(f[j], cName, hName, fmt::format("_{}", j + 1));
+        h[j] = GetClone<TH1>(f[j], cName, hName, fmt::format("_{}", j + 1));
         c->cd(i + 1);
         gPad->SetLogy();
-        hDraw(h, j);
+        hDraw(h[j], j);
       }
+      cRat->cd(i + 1);
+      hDrawRat(h[0], h[1], 0.7, 1.3);
     }
     c->cd(1);
     l->Clone()->Draw("same");
@@ -72,15 +87,21 @@ void DrawPreClustersComp(std::string file1 = "displays.root", std::string file2 
     c = new TCanvas(fmt::format("{}Comp", cName).c_str(),
                     fmt::format("digit characteristics {}", sSt).c_str(), 10, 10, 1200, 600);
     c->Divide(3, 2);
+    cRat = new TCanvas(fmt::format("{}Rat", cName).c_str(),
+                       fmt::format("digit characteristics ratio {}", sSt).c_str(), 10, 10, 1200, 600);
+    cRat->Divide(3, 2);
     std::string hNameBase2[] = {"ADC", "ADCB", "ADCNB", "Samples", "SamplesB", "SamplesNB"};
     for (int i = 0; i < 6; ++i) {
       auto hName = fmt::format("{}{}", hNameBase2[i], sSt);
+      TH1* h[2];
       for (int j = 0; j < 2; ++j) {
-        auto h = GetClone<TH1>(f[j], cName, hName, fmt::format("_{}", j + 1));
+        h[j] = GetClone<TH1>(f[j], cName, hName, fmt::format("_{}", j + 1));
         c->cd(i + 1);
         gPad->SetLogy();
-        hDraw(h, j);
+        hDraw(h[j], j);
       }
+      cRat->cd(i + 1);
+      hDrawRat(h[0], h[1], 0.7, 1.3);
     }
     c->cd(1);
     l->Clone()->Draw("same");
@@ -101,8 +122,15 @@ void DrawPreClustersComp(std::string file1 = "displays.root", std::string file2 
     c = new TCanvas(fmt::format("ChargeAsymm{}Comp", sSt).c_str(),
                     fmt::format("precluster charge asymmetry {}", sSt).c_str(), 10, 10, 1200, 900);
     c->Divide((chargeLimits.size() + 2) / 3, 3);
+    cRat = new TCanvas(fmt::format("ChargeAsymm{}Rat", sSt).c_str(),
+                       fmt::format("precluster charge asymmetry ratio {}", sSt).c_str(), 10, 10, 1200, 900);
+    cRat->Divide((chargeLimits.size() + 2) / 3, 3);
+    std::vector<TH1*> hAsymm[2];
     for (int j = 0; j < 2; ++j) {
       auto hAsymm3D = GetObject<TH3>(f[j], fmt::format("hChargeAsymm3D{}", sSt).c_str());
+      if (hAsymm3D == nullptr) {
+        continue;
+      }
       for (size_t i = 0; i < chargeLimits.size(); ++i) {
         int firstBin = hAsymm3D->GetYaxis()->FindBin(chargeLimits[i].first + 1.);
         int lastBin = hAsymm3D->GetYaxis()->FindBin(chargeLimits[i].second - 1.);
@@ -111,12 +139,16 @@ void DrawPreClustersComp(std::string file1 = "displays.root", std::string file2 
         auto hName = fmt::format("asymm{}_{}_{}", sSt, i, j);
         auto hTitle = fmt::format("cluster charge asymmetry {} ({} <= charge < {})", sSt,
                                   std::lround(chargeMin), std::lround(chargeMax));
-        auto hAsymm = hAsymm3D->ProjectionZ(hName.c_str(), 0, -1, firstBin, lastBin);
-        hAsymm->SetTitle(hTitle.c_str());
+        auto& h = hAsymm[j].emplace_back(hAsymm3D->ProjectionZ(hName.c_str(), 0, -1, firstBin, lastBin));
+        h->SetTitle(hTitle.c_str());
         c->cd(i + 1);
         gPad->SetLogy();
-        hDraw(hAsymm, j);
+        hDraw(h, j);
       }
+    }
+    for (size_t i = 0; i < chargeLimits.size(); ++i) {
+      cRat->cd(i + 1);
+      hDrawRat(hAsymm[0][i], hAsymm[1][i], 0.5, 1.5);
     }
     c->cd(1);
     l->Clone()->Draw("same");
@@ -135,7 +167,6 @@ T* GetObject(TFile& f, std::string objectName)
   auto o = f.FindObjectAny(objectName.c_str());
   if (o == nullptr) {
     LOGP(error, "object {} not found", objectName);
-    exit(-1);
   }
 
   return static_cast<T*>(o);
