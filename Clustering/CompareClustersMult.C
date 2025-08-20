@@ -26,7 +26,7 @@ using o2::mch::ROFRecord;
 std::tuple<TFile*, TTreeReader*> LoadData(const char* fileName, const char* treeName);
 void CreateMultPlots(std::vector<TH1*>& histos, std::string extension);
 std::pair<int, int> FillMultPlots(std::string clusterFileName, std::vector<TH1*>& histos);
-void FillMultPlots(const std::vector<Cluster>& clusters, std::vector<TH1*>& histos);
+void FillMultPlots(const std::vector<ROFRecord>& rofs, const std::vector<Cluster>& clusters, std::vector<TH1*>& histos);
 void DrawMultPlots(std::vector<TH1*>& histos1, int nROF1, int nTF1, std::vector<TH1*>& histos2, int nROF2, int nTF2, bool perROF);
 
 //_________________________________________________________________________________________________
@@ -76,10 +76,20 @@ void CreateMultPlots(std::vector<TH1*>& histos, std::string extension)
 
   histos.emplace_back(new TH1D(fmt::format("nClustersPerCh{}", extension).c_str(),
                                "number of clusters per chamber;chamber", 10, 0.5, 10.5));
+
   for (int i = 0; i < 10; ++i) {
     histos.emplace_back(new TH1D(fmt::format("nClustersPerDEinCh{}{}", i + 1, extension).c_str(),
                                  fmt::format("number of clusters per DE in chamber {};DE", i + 1).c_str(),
                                  nDE[i], 100 * (i + 1) - 0.5, 100 * (i + 1) + nDE[i] - 0.5));
+  }
+
+  histos.emplace_back(new TH1D(fmt::format("nClusters{}", extension).c_str(),
+                               "number of clusters;#clusters", 10001, -0.5, 10000.5));
+
+  for (int i = 0; i < 10; ++i) {
+    histos.emplace_back(new TH1D(fmt::format("nClustersinCh{}{}", i + 1, extension).c_str(),
+                                 fmt::format("number of clusters in chamber {};#clusters", i + 1).c_str(),
+                                 2001, -0.5, 2000.5));
   }
 
   for (auto h : histos) {
@@ -105,7 +115,7 @@ std::pair<int, int> FillMultPlots(std::string clusterFileName, std::vector<TH1*>
       std::cout << "\rprocessing TF " << iTF << " / " << nTF << "..." << std::flush;
     }
     nROF += rofs->size();
-    FillMultPlots(*clusters, histos);
+    FillMultPlots(*rofs, *clusters, histos);
   }
   std::cout << "\r\033[Kprocessing " << nTF << " TF completed" << std::endl;
 
@@ -115,7 +125,7 @@ std::pair<int, int> FillMultPlots(std::string clusterFileName, std::vector<TH1*>
 }
 
 //_________________________________________________________________________________________________
-void FillMultPlots(const std::vector<Cluster>& clusters, std::vector<TH1*>& histos)
+void FillMultPlots(const std::vector<ROFRecord>& rofs, const std::vector<Cluster>& clusters, std::vector<TH1*>& histos)
 {
   /// fill multiplicity histograms
 
@@ -123,6 +133,17 @@ void FillMultPlots(const std::vector<Cluster>& clusters, std::vector<TH1*>& hist
     int chId = cluster.getChamberId() + 1;
     histos[0]->Fill(chId);
     histos[chId]->Fill(cluster.getDEId());
+  }
+
+  for (const auto& rof : rofs) {
+    histos[11]->Fill(rof.getNEntries());
+    std::array<int, 10> nClusters{};
+    for (int i = rof.getFirstIdx(); i <= rof.getLastIdx(); ++i) {
+      nClusters[clusters[i].getChamberId()]++;
+    }
+    for (int i = 0; i < 10; ++i) {
+      histos[12 + i]->Fill(nClusters[i]);
+    }
   }
 }
 
@@ -187,5 +208,30 @@ void DrawMultPlots(std::vector<TH1*>& histos1, int nROF1, int nTF1, std::vector<
     drawRatio(histos1[i], histos2[i], fmt::format("h2 / h1 in chamber {}", i));
   }
   cDE->cd(1);
+  lHist->Clone()->Draw("same");
+
+  TCanvas* cN = new TCanvas("cNClusters", "cNClusters", 10, 10, 600, 300);
+  cN->Divide(2, 1);
+  cN->cd(1);
+  drawHistos(histos1[11], histos2[11]);
+  histos1[11]->SetMinimum();
+  gPad->SetLogy();
+  lHist->Clone()->Draw("same");
+  cN->cd(2);
+  drawRatio(histos1[11], histos2[11], "h2 / h1");
+
+  TCanvas* cNCh = new TCanvas("cNClustersPerChDist", "cNClustersPerChDist", 10, 10, 1500, 600);
+  cNCh->Divide(5, 2);
+  TCanvas* cNChRat = new TCanvas("cNClustersPerChRatio", "cNClustersPerChRatio", 10, 10, 1500, 600);
+  cNChRat->Divide(5, 2);
+  for (int i = 1; i <= 10; ++i) {
+    cNCh->cd(i);
+    drawHistos(histos1[11 + i], histos2[11 + i]);
+    histos1[11 + i]->SetMinimum();
+    gPad->SetLogy();
+    cNChRat->cd(i);
+    drawRatio(histos1[11 + i], histos2[11 + i], fmt::format("h2 / h1 in chamber {}", i));
+  }
+  cNCh->cd(1);
   lHist->Clone()->Draw("same");
 }
