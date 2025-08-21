@@ -30,6 +30,8 @@ static constexpr double pi = 3.14159265358979323846;
 
 //_________________________________________________________________________________________________
 void ClusterFit(int run, bool fitAsymm = true, std::string errorMode = "MLS", double errorAlpha = 1.,
+                double k3x = 0.3, double k3y = 0.3, bool correctCharge = false,
+                std::array<int, 6> fix = {0, 0, 1, 1, 0, 0},
                 std::string inFile = "clusters.root", std::string outFile = "newclusters.root")
 {
   /// fit the digits attached to the selected clusters with Mathieson functions
@@ -61,6 +63,10 @@ void ClusterFit(int run, bool fitAsymm = true, std::string errorMode = "MLS", do
   dataTreeOut->Branch("newClusters", &newCluster);
   std::array<double, 6> fitParameters;
   dataTreeOut->Branch("fitParameters", &fitParameters);
+  double pvalue;
+  dataTreeOut->Branch("pvalue", &pvalue);
+  double chi2;
+  dataTreeOut->Branch("chi2", &chi2);
 
   std::vector<TH1*> preClusterInfo{};
   CreatePreClusterInfo(preClusterInfo);
@@ -126,15 +132,21 @@ void ClusterFit(int run, bool fitAsymm = true, std::string errorMode = "MLS", do
 
     // init fit parameters (x, y, k3x, k3y, qBtot, qNBtot)
     auto local = GlobalToLocal(cluster->getDEId(), cluster->x, cluster->y, cluster->z, run < 300000);
-    std::array<double, 6> param = {local.x(), local.y(), 0.3, 0.3, chargeB, chargeNB};
-    std::array<int, 6> fix = {0, 0, 1, 1, 0, 0};
+    // correct charge total bending and charge total nonbending
+    if (correctCharge) {
+      auto [chargeFracNB, chargeFracB] = GetChargeFraction(selectedDigits, local.x(), local.y());
+      chargeNB /= chargeFracNB;
+      chargeB /= chargeFracB;
+    }
+    std::array<double, 6> param = {local.x(), local.y(), k3x, k3y, chargeB, chargeNB};
 
     // do the fit
     auto result = Fit(selectedDigits, param, fix, fitAsymm, errorMode, errorAlpha);
     if (result.Status() != 0) {
       continue;
     }
-
+    chi2 = result.Chi2();
+    pvalue = result.Prob();
     ++fitted;
 
     // fill characteristics of selected preclusters successfully fitted
