@@ -35,6 +35,11 @@ void AddNoise(double& charge, uint32_t nSamples, std::string mode)
     // sqrt of ADC noise
     static std::normal_distribution mNoise{0., 1.};
     charge += mNoise(mRandom) * std::sqrt(charge) * alpha;
+
+  } else if (mode.starts_with("RATIO_")){
+
+    static std::normal_distribution mNoise{0., 1.};
+    charge += mNoise(mRandom) * (0.0013 * charge * std::sqrt(charge) + 0.64 * std::sqrt(charge));
   }
 }
 
@@ -118,3 +123,4 @@ void TMC(std::vector<Digit>& digits, int32_t time, int deId, std::array<double, 
     }
   });
 }
+
