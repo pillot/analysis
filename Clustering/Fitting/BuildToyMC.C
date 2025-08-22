@@ -65,7 +65,7 @@ void SetupMathieson(const double sqrtk3x_1, const double sqrtk3y_1, const double
 
 void BuildToyMC(int run, std::string inFile, std::string mode, std::string fit,
                 std::string asymm, std::string noise, std::string threshold, 
-                double k3x = -1, double k3y = -1, int try_tmc = 50)
+                double k3x = -1., double k3y = -1., int try_tmc = 50)
 {
 
   if (mode != "full" && mode != "cut") {
@@ -204,15 +204,17 @@ void BuildToyMC(int run, std::string inFile, std::string mode, std::string fit,
       parameters[5] = chargeNB;  // Qnb_tot
     }
 
-    if(k3x > 0) {
+    if(k3x > 0.) {
       parameters[2] = k3x;
     }
-    if(k3y >= 0) {
+    if(k3y > 0.) {
       parameters[3] = k3y;
     }
     
     //setup the mathieson
-    SetupMathieson(sqrt(parameters[2]),sqrt(parameters[3]),sqrt(parameters[2]),sqrt(parameters[3]));
+    auto sqrtK3x = sqrt(parameters[2]);
+    auto sqrtK3y = sqrt(parameters[3]);
+    SetupMathieson(sqrtK3x, sqrtK3y, sqrtK3x, sqrtK3y);
   
     //___________________RUN MC___________________________
     if (mode == "full") {
