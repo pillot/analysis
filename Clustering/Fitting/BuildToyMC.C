@@ -28,8 +28,8 @@ using o2::mch::Cluster;
 using o2::mch::Digit;
 using o2::mch::TrackParamStruct;
 
-
 static constexpr double pi = 3.14159265358979323846;
+
 //_________________________________________________________________________________________________
 void SetupMathieson(const double sqrtk3x_1, const double sqrtk3y_1, const double sqrtk3x_2345, const double sqrtk3y_2345)
 {
@@ -44,6 +44,7 @@ void SetupMathieson(const double sqrtk3x_1, const double sqrtk3y_1, const double
   o2::conf::ConfigurableParam::setValue("MCHResponse.mathiesonSqrtKx3St2345", K3X_2345);
   o2::conf::ConfigurableParam::setValue("MCHResponse.mathiesonSqrtKy3St2345", K3Y_2345);
 }
+
 //_________________________________________________________________________________________________
 // run : run number
 // inFile : root data file
@@ -55,13 +56,12 @@ void SetupMathieson(const double sqrtk3x_1, const double sqrtk3y_1, const double
 // asymm : "none" = no asymmetry ; "copy" = copy the asymmetry from the data or from the fit; "gaus_XpX" = default asymm function in MC * XpX; "tripleGaus" = triple gaussians
 // noise : "none" = no noise ; "MC_XpX" = gaussian noise with sigma = 0.5 * (sqrt(nSamples) + XpX) ; "sADC_XpX" = gaussian noise with sigma = XpX * sqrt(ADC)
 // threshold : "none" = no threshold ; "gaus" = gaussian threshold ; "uniform" = static threshold
+// k3x and k3y : change K3 values if positive
 // try_tmc : redo ToyMC if the cluster isnt in the correct subspace (default = 50)
 //_________________________________________________________________________________________________
 
 /// store the new clusters together with the corresponding input data in outFile
 /// require the MCH mapping to be loaded: gSystem->Load("libO2MCHGeometryTransformer"),  gSystem->Load("libO2MCHMappingImpl4"), gSystem->Load("libO2MCHTracking")
-
-// add K3X and K3Y pair
 
 void BuildToyMC(int run, std::string inFile, std::string mode, std::string fit,
                 std::string asymm, std::string noise, std::string threshold, 
@@ -259,4 +259,3 @@ void BuildToyMC(int run, std::string inFile, std::string mode, std::string fit,
   cout << "input file : " << inFile << endl;
   cout << "output file : " << outFile << endl;
 }
-
