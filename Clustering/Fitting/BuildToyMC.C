@@ -12,7 +12,7 @@
 #include <TTreeReader.h>
 #include <TTreeReaderValue.h>
 #include <TTreeReaderArray.h>
-
+#include "CommonUtils/ConfigurableParam.h"
 #include "DataFormatsMCH/Cluster.h"
 #include "DataFormatsMCH/Digit.h"
 #include "Framework/Logger.h"
@@ -31,6 +31,21 @@ using o2::mch::TrackParamStruct;
 static constexpr double pi = 3.14159265358979323846;
 
 //_________________________________________________________________________________________________
+void SetupMathieson(const double sqrtk3x_1, const double sqrtk3y_1, const double sqrtk3x_2345, const double sqrtk3y_2345)
+{
+  std::string K3X_1 = std::to_string(sqrtk3x_1);
+  std::string K3Y_1 = std::to_string(sqrtk3y_1);
+  std::string K3X_2345 = std::to_string(sqrtk3x_2345);
+  std::string K3Y_2345 = std::to_string(sqrtk3y_2345);
+
+  o2::conf::ConfigurableParam::setValue("MCHResponse.mathiesonSqrtKx3St1", K3X_1);
+  o2::conf::ConfigurableParam::setValue("MCHResponse.mathiesonSqrtKy3St1", K3Y_1);
+
+  o2::conf::ConfigurableParam::setValue("MCHResponse.mathiesonSqrtKx3St2345", K3X_2345);
+  o2::conf::ConfigurableParam::setValue("MCHResponse.mathiesonSqrtKy3St2345", K3Y_2345);
+}
+
+//_________________________________________________________________________________________________
 // run : run number
 // inFile : root data file
 // mode : "full" = use all clusters and do toyMC ; "cut" = use clusters that passed the selection and do toyMC
@@ -41,14 +56,16 @@ static constexpr double pi = 3.14159265358979323846;
 // asymm : "none" = no asymmetry ; "copy" = copy the asymmetry from the data or from the fit; "gaus_XpX" = default asymm function in MC * XpX; "tripleGaus" = triple gaussians
 // noise : "none" = no noise ; "MC_XpX" = gaussian noise with sigma = 0.5 * (sqrt(nSamples) + XpX) ; "sADC_XpX" = gaussian noise with sigma = XpX * sqrt(ADC)
 // threshold : "none" = no threshold ; "gaus" = gaussian threshold ; "uniform" = static threshold
+// k3x and k3y : change K3 values if positive
 // try_tmc : redo ToyMC if the cluster isnt in the correct subspace (default = 50)
 //_________________________________________________________________________________________________
 
 /// store the new clusters together with the corresponding input data in outFile
-/// require the MCH mapping to be loaded: gSystem->Load("libO2MCHGeometryTransformer"),  gSystem->Load("libO2MCHMappingImpl4"), gSystem->Load("libO2MCHTracking"), gSystem->Load("libFairLogger.1.11")
+/// require the MCH mapping to be loaded: gSystem->Load("libO2MCHGeometryTransformer"),  gSystem->Load("libO2MCHMappingImpl4"), gSystem->Load("libO2MCHTracking")
 
 void BuildToyMC(int run, std::string inFile, std::string mode, std::string fit,
-                std::string asymm, std::string noise, std::string threshold, int try_tmc = 50)
+                std::string asymm, std::string noise, std::string threshold, 
+                double k3x = -1., double k3y = -1., int try_tmc = 50)
 {
 
   if (mode != "full" && mode != "cut") {
@@ -71,8 +88,8 @@ void BuildToyMC(int run, std::string inFile, std::string mode, std::string fit,
     exit(-1);
   }
 
-  if (noise != "none" && !noise.starts_with("MC_") && !noise.starts_with("sADC_")) {
-    LOGP(error, "unknown noise mode. Must be \"none\", \"MC_XpX\" or \"sADC_XpX\"");
+  if (noise != "none" && !noise.starts_with("MC_") && !noise.starts_with("sADC_") && !noise.starts_with("RATIO_")) {
+    LOGP(error, "unknown noise mode. Must be \"none\", \"MC_XpX\" or \"sADC_XpX\" or \"RATIO_XpX\"");
     exit(-1);
   }
 
@@ -187,6 +204,18 @@ void BuildToyMC(int run, std::string inFile, std::string mode, std::string fit,
       parameters[5] = chargeNB;  // Qnb_tot
     }
 
+    if(k3x > 0.) {
+      parameters[2] = k3x;
+    }
+    if(k3y > 0.) {
+      parameters[3] = k3y;
+    }
+    
+    //setup the mathieson
+    auto sqrtK3x = sqrt(parameters[2]);
+    auto sqrtK3y = sqrt(parameters[3]);
+    SetupMathieson(sqrtK3x, sqrtK3y, sqrtK3x, sqrtK3y);
+  
     //___________________RUN MC___________________________
     if (mode == "full") {
 
