@@ -1,0 +1,208 @@
+#include <cmath>
+#include <vector>
+#include <string>
+
+#include <fmt/format.h>
+
+#include <TCanvas.h>
+#include <TFile.h>
+#include <TTree.h>
+#include <TROOT.h>
+#include <TKey.h>
+#include <TH2D.h>
+#include <TH1D.h>
+
+#include "ClusterUtils.h"
+#include "DataUtils.h"
+#include "ResolutionUtils.h"
+#include "PreClusterUtils.h"
+#include "PlotsUtils.h"
+
+//_________________________________________________________________________________________________
+// require the MCH mapping to be loaded:
+// gSystem->Load("libO2MCHGeometryTransformer"), gSystem->Load("libO2MCHMappingImpl4"), gSystem->Load("libO2MCHTracking")
+
+void DrawResolutionRatioComp(const std::string& file1 = "data_projection_sparse.root", const std::string& file2 = "tmc_projection_sparse.root", const std::string& outFile = "resolution_ratio.root")
+{
+  auto extractGraphsAndHistos = [](TFile& f, std::vector<TGraphAsymmErrors*>& graphs, std::vector<TGraph*>& graphs1, std::vector<TGraph*>& graphs2, std::vector<TH1D*>& histograms) {
+    static const std::vector<std::pair<int, int>> chargeLimits{
+      { 20, 40 }, { 40, 60 }, { 60, 80 }, { 80, 120 }, { 120, 200 }, { 200, 400 }, { 400, 700 }, { 700, 1000 }
+    };
+
+    for (int i = 0; i < 6; ++i) {
+
+      TKey* key = dynamic_cast<TKey*>(f.GetListOfKeys()->At(i));
+      if (!key) {
+        Warning("LoadTLists", "Entry %d is not a TKey!", i);
+        continue;
+      }
+
+      TList* list = dynamic_cast<TList*>(key->ReadObj());
+      if (!list) {
+        Warning("LoadTLists", "Object '%s' is not a TList!", key->GetName());
+        continue;
+      }
+
+      std::vector<double> x, exl, exr, y, ey, mean, Rchi2;
+
+      TH1::AddDirectory(kFALSE);
+      TH1D* hCharge[8];
+      for (int j = 0; j < 8; ++j) {
+        std::string hname = Form("[%d,%d]", chargeLimits[j].first, chargeLimits[j].second);
+        hCharge[j] = new TH1D(hname.c_str(), hname.c_str(), 1122, -280.5, 280.5);
+      }
+
+      for (TObject* obj : *list) {
+        auto h = dynamic_cast<TH1*>(obj);
+        if (!h) {
+          std::cerr << "Error: Histogram not found or invalid." << std::endl;
+          continue;
+        }
+        auto fit = h->GetFunction("fit");
+        if (!fit) {
+          std::cerr << "Error: Fit function not found or invalid" << std::endl;
+          continue;
+        }
+        std::string name = h->GetName();
+        std::stringstream ss(name);
+        std::string token;
+        std::vector<std::string> tokens;
+
+        while (std::getline(ss, token, '_')) // read the name of the list which contain the charge interval, e.g. "projY_h2D_Station_Cathode_ADCmin_ADCmax"
+          tokens.push_back(token);
+        if (tokens.size() < 6)
+          continue;
+
+        double X = std::stod(tokens[4]);
+        double Y = std::stod(tokens[5]);
+
+        double avg = 0.5 * (X + Y);
+        double dx = std::abs(X - avg) + 0.5;
+        double dy = std::abs(Y - avg) + 0.5;
+
+        for (int j = 0; j < 8; j++) {
+          if ((chargeLimits[j].first <= X) && (chargeLimits[j].second >= Y)) {
+            hCharge[j]->Add(h);
+          }
+        }
+
+        x.push_back(avg);
+        exl.push_back(dx);
+        exr.push_back(dy);
+        y.push_back(fit->GetParameter(2));
+        ey.push_back(fit->GetParError(2) / 2);
+        mean.push_back(fit->GetParameter(1));
+        Rchi2.push_back((fit->GetNDF() > 0) ? (fit->GetChisquare() / fit->GetNDF()) : 0);
+      }
+
+      graphs.push_back(new TGraphAsymmErrors((int)x.size(), x.data(), y.data(), exl.data(), exr.data(), ey.data(), ey.data()));
+
+      graphs1.push_back(new TGraph((int)x.size(), x.data(), mean.data()));
+      graphs2.push_back(new TGraph((int)x.size(), x.data(), Rchi2.data()));
+      for (int j = 0; j < 8; ++j) {
+        histograms.push_back(hCharge[j]);
+      }
+    }
+  };
+
+  TFile f1(file1.c_str(), "read");
+  TFile f2(file2.c_str(), "read");
+  TFile fout(outFile.c_str(), "recreate");
+
+  std::string sStation[3] = { "St1", "St2", "St345" };
+
+  std::vector<TGraphAsymmErrors*> g1, g2;
+  std::vector<TGraph*> mean1, mean2, Rchi2_1, Rchi2_2;
+  std::vector<TH1D*> h1, h2;
+
+  extractGraphsAndHistos(f1, g1, mean1, Rchi2_1, h1);
+  extractGraphsAndHistos(f2, g2, mean2, Rchi2_2, h2);
+
+  // name, color, title, range, ...
+  for (int i = 0; i < 6; i++) {
+
+    std::string cathode = (i % 2 == 0) ? "(B)" : "(NB)";
+
+    FillInfoGraphErrAsymm(g1[i], "ADC fit", "#sigma", sStation[i / 2], cathode, true);
+    FillInfoGraph(mean1[i], "ADC fit", "#mu", sStation[i / 2], cathode, true);
+    FillInfoGraph(Rchi2_1[i], "ADC fit", "#chi^{2}/ndf", sStation[i / 2], cathode, true);
+
+    FillInfoGraphErrAsymm(g2[i], "ADC fit", "#sigma", sStation[i / 2], cathode, false);
+    FillInfoGraph(mean2[i], "ADC fit", "#mu", sStation[i / 2], cathode, false);
+    FillInfoGraph(Rchi2_2[i], "ADC fit", "#chi^{2}/ndf", sStation[i / 2], cathode, false);
+
+    for (int j = 0; j < 8; j++) {
+      FillInfoHist(h1[j + 8 * i], "ADC fit", "#sigma", sStation[i / 2], cathode, true);
+      FillInfoHist(h2[j + 8 * i], "ADC fit", "#sigma", sStation[i / 2], cathode, false);
+    }
+  }
+
+  for (int i = 0; i < 3; i++) {
+    std::cout << "Creating plots for " << sStation[i] << "..." << std::endl;
+    // plot Resolution vs ADC from fitted pad
+    auto gName = fmt::format("g_sigmaADC_{}", sStation[i]);
+    tGraphErrAsymm(g1, g2, gName, i);
+
+    // plot Ratio
+    auto rName = fmt::format("r_Ratio_{}", sStation[i]);
+    tRatio(g1, g2, rName, i, "1.0"); // last argument = alpha; (e.g. alpha*sqrt(ADC))
+
+    // scattered plot extracted mean vs ADC from fitted pad
+    auto mName = fmt::format("m_MeanADC_{}", sStation[i]);
+    tGraph(mean1, mean2, mName, i);
+
+    // scattered plot extracted reduced chi2 vs ADC from fitted pad
+    auto rcName = fmt::format("rc_Rchi2ADC_{}", sStation[i]);
+    tGraph(Rchi2_1, Rchi2_2, rcName, i);
+
+    // plot histograms of the residuals of file1 and file2 for different ADC binning.
+    for (int j = 0; j < 2; j++) {
+      std::string cathode = (j == 0) ? "(B)" : "(NB)";
+      auto hName = fmt::format("h_BinResidualADC_{}_{}", sStation[i], cathode);
+      tHist(h1, h2, hName, i, j);
+    }
+  }
+
+  std::cout << "Saving plots ..." << std::endl;
+  for (int i = 0; i < 3; i++) {
+    auto gName = fmt::format("g_sigmaADC_{}", sStation[i]);
+    if (TCanvas* c = dynamic_cast<TCanvas*>(gROOT->FindObject(gName.c_str()))) {
+      c->Write();
+    } else {
+      std::cerr << "Warning: Resolution vs ADC Canvas not found or invalid." << std::endl;
+    }
+
+    auto rName = fmt::format("r_Ratio_{}", sStation[i]);
+    if (TCanvas* c = dynamic_cast<TCanvas*>(gROOT->FindObject(rName.c_str()))) {
+      c->Write();
+    } else {
+      std::cerr << "Warning: Ratio Canvas not found or invalid." << std::endl;
+    }
+
+    auto mName = fmt::format("m_MeanADC_{}", sStation[i]);
+    if (TCanvas* c = dynamic_cast<TCanvas*>(gROOT->FindObject(mName.c_str()))) {
+      c->Write();
+    } else {
+      std::cerr << "Warning: Scattered Mean Canvas not found or invalid." << std::endl;
+    }
+
+    auto rcName = fmt::format("rc_Rchi2ADC_{}", sStation[i]);
+    if (TCanvas* c = dynamic_cast<TCanvas*>(gROOT->FindObject(rcName.c_str()))) {
+      c->Write();
+    } else {
+      std::cerr << "Warning: Scattered RChi2 Canvas not found or invalid." << std::endl;
+    }
+
+    for (int j = 0; j < 2; j++) {
+      std::string cathode = (j == 0) ? "(B)" : "(NB)";
+      auto hName = fmt::format("h_BinResidualADC_{}_{}", sStation[i], cathode);
+      if (TCanvas* c = dynamic_cast<TCanvas*>(gROOT->FindObject(hName.c_str()))) {
+        c->Write();
+      } else {
+        std::cerr << "Warning: Histogram residuals for ADC binning Canvas not found or invalid." << std::endl;
+      }
+    }
+  }
+
+  fout.Close();
+}
