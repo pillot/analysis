@@ -20,14 +20,40 @@
 #include "MCHSimulation/Response.h"
 
 using o2::mch::Digit;
-
 //_________________________________________________________________________________________________
-// the vector parameters is a 6 size vector which is defined as : parameters = {X, Y, K3x, K3y, Qb_tot, Qnb_tot}
-double ADCFit(const Digit digit, std::vector<double> parameters)
+// setup the mathieson response parameters
+void SetupMathieson(const double sqrtk3x_1, const double sqrtk3y_1, const double sqrtk3x_2345, const double sqrtk3y_2345)
 {
-  // return the charge fraction seen by digit on a cathode given the cluster position
+  std::string K3X_1 = std::to_string(sqrtk3x_1);
+  std::string K3Y_1 = std::to_string(sqrtk3y_1);
+  std::string K3X_2345 = std::to_string(sqrtk3x_2345);
+  std::string K3Y_2345 = std::to_string(sqrtk3y_2345);
 
-  static const o2::mch::Response response[] = { { o2::mch::Station::Type1 }, { o2::mch::Station::Type2345 } };
+  o2::conf::ConfigurableParam::setValue("MCHResponse.mathiesonSqrtKx3St1", K3X_1);
+  o2::conf::ConfigurableParam::setValue("MCHResponse.mathiesonSqrtKy3St1", K3Y_1);
+
+  o2::conf::ConfigurableParam::setValue("MCHResponse.mathiesonSqrtKx3St2345", K3X_2345);
+  o2::conf::ConfigurableParam::setValue("MCHResponse.mathiesonSqrtKy3St2345", K3Y_2345);
+}
+//_________________________________________________________________________________________________
+// return the charge fraction seen by digit on a cathode given the cluster position
+// the vector parameters is a 6 size vector which is defined as : parameters = {X, Y, K3x, K3y, Qb_tot, Qnb_tot}
+// uniqueResponse determine if we want the response to change (use if k3 vary) or not
+double ADCFit(const Digit digit, std::vector<double> parameters, bool uniqueResponse)
+{
+  auto sqrtK3x = sqrt(parameters[2]);
+  auto sqrtK3y = sqrt(parameters[3]);
+  SetupMathieson(sqrtK3x, sqrtK3y, sqrtK3x, sqrtK3y);
+
+  const o2::mch::Response* response;
+  o2::mch::Response Response[] = { { o2::mch::Station::Type1 }, { o2::mch::Station::Type2345 } };
+  static const o2::mch::Response staticResponse[] = { { o2::mch::Station::Type1 }, { o2::mch::Station::Type2345 } };
+
+  if (!uniqueResponse) {
+    response = Response;
+  } else {
+    response = staticResponse;
+  }
 
   const auto& segmentation = o2::mch::mapping::segmentation(digit.getDetID());
   int iSt = (digit.getDetID() < 300) ? 0 : 1;
@@ -38,9 +64,11 @@ double ADCFit(const Digit digit, std::vector<double> parameters)
   auto xPad = segmentation.padPositionX(padid) - parameters[0];
   auto yPad = segmentation.padPositionY(padid) - parameters[1];
   auto qPad = response[iSt].chargePadfraction(xPad - dx, xPad + dx, yPad - dy, yPad + dy);
+  std::cout << "charge :" << qPad * (segmentation.isBendingPad(padid) ? parameters[4] : parameters[5]) << std::endl;
   return qPad * (segmentation.isBendingPad(padid) ? parameters[4] : parameters[5]);
 }
 //_________________________________________________________________________________________________
+// create the THnSparse (9 axes) for the resolution in noise
 THnSparseD* CreatePreClusterInfoMULTI(const char* extension = "")
 {
   const Int_t nDim = 9;
@@ -98,11 +126,10 @@ THnSparseD* CreatePreClusterInfoMULTI(const char* extension = "")
   return hSparse;
 }
 //_________________________________________________________________________________________________
+// fill THnSparse (9 axes) histogram of precluster
 // the vector parameters is a 10 size vector which is defined as : parameters = {X, Y, K3x, K3y, Qb_tot, Qnb_tot, sqrt(Qb_tot * Qnb_tot), (NB - B)/(NB + B), distance closest wire, pvalue}
-void FillResolutionInfo(const Digit digit, std::vector<double> parameters, THnSparseD* h)
+void FillResolutionInfo(const Digit digit, std::vector<double> parameters, THnSparseD* h, bool uniqueResponse)
 {
-  // fill THnSparse9D histogram of precluster
-
   // pre-parameters is {X, Y, K3x, K3y, Qb_tot, Qnb_tot}
   std::vector<double> pre_parameters(parameters.begin(), parameters.begin() + 6);
 
@@ -118,7 +145,7 @@ void FillResolutionInfo(const Digit digit, std::vector<double> parameters, THnSp
     position = 1.;
   }
 
-  Double_t ADC_fit = ADCFit(digit, pre_parameters);
+  Double_t ADC_fit = ADCFit(digit, pre_parameters, uniqueResponse);
   Double_t ADC_mes = digit.getADC();
   Double_t residuals = (ADC_mes - ADC_fit);
   Double_t ADC_cluster = parameters[6];
@@ -136,6 +163,7 @@ void FillResolutionInfo(const Digit digit, std::vector<double> parameters, THnSp
   h->Fill(values);
 }
 //_________________________________________________________________________________________________
+// create the THnSparse (8 axis) for k3 studies
 THnSparseD* CreatePreClusterInfoMULTIK3(const char* extension = "")
 {
   const Int_t nDim = 8;
@@ -190,10 +218,10 @@ THnSparseD* CreatePreClusterInfoMULTIK3(const char* extension = "")
   return hSparse;
 }
 //_________________________________________________________________________________________________
+// fill THnSparse (8 axis) histogram of precluster
 // the vector parameters is a 12 size vector which is defined as : parameters = {X, Y, K3x, K3y, Qb_tot, Qnb_tot, sqrt(Qb_tot * Qnb_tot), (NB - B)/(NB + B), distance closest wire, pvalue, track angle, track momentum}
 void FillK3Info(std::vector<double> parameters, THnSparseD* h)
 {
-  // fill THnSparse10D histogram of precluster
   Double_t position = -1.;
   if ((std::abs(parameters[8]) < 0.015)) { //"top"
     position = 0.;
@@ -227,6 +255,10 @@ void FillK3Info(std::vector<double> parameters, THnSparseD* h)
 }
 
 //_________________________________________________________________________________________________
+// project the TH2D into a corresponding axis
+// use auto binning (size vary with statistics) or harcoded binning (pre defined binning)
+// loop over all bin and fit the corresponding projection
+// save results in TList
 void Resolution(TList*& list, TH2D* hist2D, int statistics, bool auto_bin)
 {
   // default digit range value : 20 - 10000 ADC

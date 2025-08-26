@@ -1,4 +1,5 @@
 #include <cmath>
+#include <numeric>
 #include <vector>
 
 #include <fmt/format.h>
@@ -30,22 +31,8 @@ using o2::mch::TrackParamStruct;
 
 static constexpr double pi = 3.14159265358979323846;
 //_________________________________________________________________________________________________
-void SetupMathieson(const double sqrtk3x_1, const double sqrtk3y_1, const double sqrtk3x_2345, const double sqrtk3y_2345)
-{
-  std::string K3X_1 = std::to_string(sqrtk3x_1);
-  std::string K3Y_1 = std::to_string(sqrtk3y_1);
-  std::string K3X_2345 = std::to_string(sqrtk3x_2345);
-  std::string K3Y_2345 = std::to_string(sqrtk3y_2345);
-
-  o2::conf::ConfigurableParam::setValue("MCHResponse.mathiesonSqrtKx3St1", K3X_1);
-  o2::conf::ConfigurableParam::setValue("MCHResponse.mathiesonSqrtKy3St1", K3Y_1);
-
-  o2::conf::ConfigurableParam::setValue("MCHResponse.mathiesonSqrtKx3St2345", K3X_2345);
-  o2::conf::ConfigurableParam::setValue("MCHResponse.mathiesonSqrtKy3St2345", K3Y_2345);
-}
-
-//_________________________________________________________________________________________________
-void ResidualsSparse(int run, const char* inFile = "clusters.root", const char* outFile = "residuals_sparse.root", int correctADCfit = 5)
+// We fill a THnSparse with the FITTED pre-cluster data, that later will be treated in ProjectionSparse.C
+void ResidualsSparse(int run, const char* inFile = "clusters.root", const char* outFile = "residuals_sparse.root", int correctADCfit = 5, bool uniqueResponse = true)
 {
   // require the MCH mapping to be loaded:
   // gSystem->Load("libO2MCHGeometryTransformer"),  gSystem->Load("libO2MCHMappingImpl4"), gSystem->Load("libO2MCHTracking")
@@ -105,6 +92,7 @@ void ResidualsSparse(int run, const char* inFile = "clusters.root", const char* 
   auto tStart = std::chrono::high_resolution_clock::now();
   std::cout << "looping over data ..." << std::endl;
 
+  std::vector<double> delta_k3x, delta_k3y;
   // loop precluster
   while (dataReader->Next()) {
 
@@ -161,12 +149,25 @@ void ResidualsSparse(int run, const char* inFile = "clusters.root", const char* 
 
     // cut on ADCfit
     bool skip = false;
-    // setup the mathieson
-    auto sqrtK3x = sqrt(parameters[2]);
-    auto sqrtK3y = sqrt(parameters[3]);
-    SetupMathieson(sqrtK3x, sqrtK3y, sqrtK3x, sqrtK3y);
+    // determine if we have a logical issue (i.e. using an unique response while requiring the response to vary)
+    delta_k3x.push_back(parameters[2]); // vector that keep growing in size
+    delta_k3y.push_back(parameters[3]);
+    double avg_k3x = std::accumulate(delta_k3x.begin(), delta_k3x.end(), 0.0) / delta_k3x.size(); // average calculation
+    double avg_k3y = std::accumulate(delta_k3y.begin(), delta_k3y.end(), 0.0) / delta_k3y.size();
+    bool err_k3x = std::all_of(delta_k3x.begin(), delta_k3x.end(), [avg_k3x](double v) { return std::abs(v - avg_k3x) < 1e-5; }); // difference between all elements of the vector and the mean value calculated before
+    bool err_k3y = std::all_of(delta_k3y.begin(), delta_k3y.end(), [avg_k3y](double v) { return std::abs(v - avg_k3y) < 1e-5; });
+
+    if (uniqueResponse && (!err_k3x || !err_k3y)) {
+      std::cerr << "Unique response is asked but k3 is not constant..." << std::endl;
+      exit(-1);
+    }
+
+    if (uniqueResponse && (!err_k3x || !err_k3y)) {
+      std::cerr << "Unique response is asked but k3 is not constant..." << std::endl;
+      exit(-1);
+    }
     for (auto digit : selectedDigits) {
-      if (ADCFit(digit, parameters) < std::abs(correctADCfit)) {
+      if (ADCFit(digit, parameters, uniqueResponse) < std::abs(correctADCfit)) {
         skip = true;
       }
     }
@@ -186,7 +187,7 @@ void ResidualsSparse(int run, const char* inFile = "clusters.root", const char* 
     parameters.push_back(**pvalue);    // parameters[9]
 
     for (auto digit : selectedDigits) {
-      FillResolutionInfo(digit, parameters, hPreClusterInfoMULTI[iSt]);
+      FillResolutionInfo(digit, parameters, hPreClusterInfoMULTI[iSt], uniqueResponse);
     }
 
     // histograms that can't be in the THnSparse
