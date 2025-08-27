@@ -37,7 +37,7 @@ void SetupMathieson(const double sqrtk3x_1, const double sqrtk3y_1, const double
 }
 //_________________________________________________________________________________________________
 // return the charge fraction seen by digit on a cathode given the cluster position
-// the vector parameters is a 6 size vector which is defined as : parameters = {X, Y, K3x, K3y, Qb_tot, Qnb_tot}
+// the vector "parameters" is a 6 size vector which is defined as : parameters = {X, Y, K3x, K3y, Qb_tot, Qnb_tot}
 // uniqueResponse determine if we want the response to change (use if k3 vary) or not
 double ADCFit(const Digit digit, std::vector<double> parameters, bool uniqueResponse)
 {
@@ -64,11 +64,10 @@ double ADCFit(const Digit digit, std::vector<double> parameters, bool uniqueResp
   auto xPad = segmentation.padPositionX(padid) - parameters[0];
   auto yPad = segmentation.padPositionY(padid) - parameters[1];
   auto qPad = response[iSt].chargePadfraction(xPad - dx, xPad + dx, yPad - dy, yPad + dy);
-  std::cout << "charge :" << qPad * (segmentation.isBendingPad(padid) ? parameters[4] : parameters[5]) << std::endl;
   return qPad * (segmentation.isBendingPad(padid) ? parameters[4] : parameters[5]);
 }
 //_________________________________________________________________________________________________
-// create the THnSparse (9 axes) for the resolution in noise
+// create the THnSparse (9 axes) to extract the resolution in the residuals later
 THnSparseD* CreatePreClusterInfoMULTI(const char* extension = "")
 {
   const Int_t nDim = 9;
@@ -126,8 +125,9 @@ THnSparseD* CreatePreClusterInfoMULTI(const char* extension = "")
   return hSparse;
 }
 //_________________________________________________________________________________________________
-// fill THnSparse (9 axes) histogram of precluster
-// the vector parameters is a 10 size vector which is defined as : parameters = {X, Y, K3x, K3y, Qb_tot, Qnb_tot, sqrt(Qb_tot * Qnb_tot), (NB - B)/(NB + B), distance closest wire, pvalue}
+// fill THnSparse (9 axes) with the preclusters characteristics
+// the vector "parameters" is a 10 size vector which is defined as :
+// parameters = {X, Y, K3x, K3y, Qb_tot, Qnb_tot, sqrt(Qb_tot * Qnb_tot), (NB - B)/(NB + B), distance closest wire, pvalue}
 void FillResolutionInfo(const Digit digit, std::vector<double> parameters, THnSparseD* h, bool uniqueResponse)
 {
   // pre-parameters is {X, Y, K3x, K3y, Qb_tot, Qnb_tot}
@@ -218,8 +218,9 @@ THnSparseD* CreatePreClusterInfoMULTIK3(const char* extension = "")
   return hSparse;
 }
 //_________________________________________________________________________________________________
-// fill THnSparse (8 axis) histogram of precluster
-// the vector parameters is a 12 size vector which is defined as : parameters = {X, Y, K3x, K3y, Qb_tot, Qnb_tot, sqrt(Qb_tot * Qnb_tot), (NB - B)/(NB + B), distance closest wire, pvalue, track angle, track momentum}
+// fill THnSparse (8 axis) for k3 studies
+// the vector parameters is a 12 size vector which is defined as :
+// parameters = {X, Y, K3x, K3y, Qb_tot, Qnb_tot, sqrt(Qb_tot * Qnb_tot), (NB - B)/(NB + B), distance closest wire, pvalue, track angle, track momentum}
 void FillK3Info(std::vector<double> parameters, THnSparseD* h)
 {
   Double_t position = -1.;
@@ -255,10 +256,13 @@ void FillK3Info(std::vector<double> parameters, THnSparseD* h)
 }
 
 //_________________________________________________________________________________________________
-// project the TH2D into a corresponding axis
-// use auto binning (size vary with statistics) or harcoded binning (pre defined binning)
-// loop over all bin and fit the corresponding projection
-// save results in TList
+// extract the resolution (std) of the residuals distribution for different ADC which are defined as : residuals = ADC - ADC_fit
+// project the TH2D into a corresponding axis ->
+// on X : to chose a bin of ADC which as enough statistic to extract a correct resolution
+// on Y : to extract the resolution (std) of the residuals distribution of the corresponding ADC binning
+// the fit for the std is done 3 times because of the shape of the residuals distribution (see current studies)
+// use auto binning (size vary with a define statistic) or harcoded binning (pre defined binning)
+// save results in TList with the fit properties (i.e. : chi2, std, mean, ...)
 void Resolution(TList*& list, TH2D* hist2D, int statistics, bool auto_bin)
 {
   // default digit range value : 20 - 10000 ADC

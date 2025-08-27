@@ -30,19 +30,19 @@ using o2::mch::TrackParamStruct;
 static constexpr double pi = 3.14159265358979323846;
 
 //_________________________________________________________________________________________________
+// require the MCH mapping to be loaded:
+// gSystem->Load("libO2MCHGeometryTransformer"), gSystem->Load("libO2MCHMappingImpl4"), gSystem->Load("libO2MCHTracking")
+
+// We fill a THnSparse (8 axis) with k3x, k3y and others information of the pre-cluster, to be treated later in ProjectionK3Sparse.C
 void K3Sparse(int run, const char* inFile = "clusters.root", const char* outFile = "residuals_sparse.root", int correctADCfit = 5, bool uniqueResponse = true)
 {
-  /// require the MCH mapping to be loaded:
-  /// gSystem->Load("libO2MCHGeometryTransformer"),
-  /// gSystem->Load("libO2MCHMappingImpl4"), gSystem->Load("libO2MCHTracking")
 
   /// load CCDB objects
   InitFromCCDB(run, true, true, false);
 
   if (correctADCfit != 0) {
     std::cout << "-- WARNING -- : Fit ADC selection is activated " << std::endl;
-    std::cout << "SELECTION : " << std::abs(correctADCfit) << "< FitADC"
-              << std::endl;
+    std::cout << "SELECTION : " << std::abs(correctADCfit) << "< FitADC" << std::endl;
   }
   // load histograms
   LoadHist();
@@ -83,8 +83,7 @@ void K3Sparse(int run, const char* inFile = "clusters.root", const char* outFile
   int nClusters = dataReader->GetEntries(false);
   int iCluster(0);
 
-  // multi dimensional histogram : contains as dim : {p-value, k3x, k3y,
-  // ADC_cluster, p , phi, Asymm, Wire, Bending}
+  // multi dimensional histogram : contains as dim : {p-value, k3x, k3y, ADC_cluster, p , phi, Asymm, Wire, Bending}
   THnSparseD* hPreClusterInfoMULTIK3[3];
   hPreClusterInfoMULTIK3[0] = CreatePreClusterInfoMULTIK3("St1");
   hPreClusterInfoMULTIK3[1] = CreatePreClusterInfoMULTIK3("St2");
@@ -93,7 +92,7 @@ void K3Sparse(int run, const char* inFile = "clusters.root", const char* outFile
   auto tStart = std::chrono::high_resolution_clock::now();
   std::cout << "looping over data ..." << std::endl;
 
-  std::vector<double> delta_k3x, delta_k3y;
+  std::vector<double> delta_k3x, delta_k3y; // vectors to see if the K3 was a free parameter or not
   // loop precluster
   while (dataReader->Next()) {
     if (++iCluster % 10000 == 0) {
@@ -108,22 +107,15 @@ void K3Sparse(int run, const char* inFile = "clusters.root", const char* outFile
     }
 
     // cut on track angle at chamber
-    double Track_angle =
-      std::abs(std::atan2(trackParam->py, -trackParam->pz)) / pi * 180.;
-    double Track_momentum =
-      sqrt(trackParam->px * trackParam->px + trackParam->py * trackParam->py +
-           trackParam->pz * trackParam->pz);
+    double Track_angle = std::abs(std::atan2(trackParam->py, -trackParam->pz)) / pi * 180.;
+    double Track_momentum = sqrt(trackParam->px * trackParam->px + trackParam->py * trackParam->py + trackParam->pz * trackParam->pz);
     if (Track_angle > 10.) {
       continue;
     }
     // cut on digit time
     std::vector<Digit> selectedDigits(*digits);
     selectedDigits.erase(
-      std::remove_if(selectedDigits.begin(), selectedDigits.end(),
-                     [&trackTime](const auto& digit) {
-                       return std::abs(digit.getTime() + 1.5 - *trackTime) >
-                              10.;
-                     }),
+      std::remove_if(selectedDigits.begin(), selectedDigits.end(), [&trackTime](const auto& digit) { return std::abs(digit.getTime() + 1.5 - *trackTime) > 10.; }),
       selectedDigits.end());
     if (selectedDigits.empty()) {
       continue;
@@ -159,8 +151,8 @@ void K3Sparse(int run, const char* inFile = "clusters.root", const char* outFile
     }
 
     bool skip = false;
-    // determine if we have a logical issue (i.e. using an unique response while requiring the response to vary)
-    delta_k3x.push_back(parameters[2]); // vector that keep growing in size
+    // determine if we have a logical issue (e.g. using an unique response while requiring the response to vary)
+    delta_k3x.push_back(parameters[2]);
     delta_k3y.push_back(parameters[3]);
     double avg_k3x = std::accumulate(delta_k3x.begin(), delta_k3x.end(), 0.0) / delta_k3x.size(); // average calculation
     double avg_k3y = std::accumulate(delta_k3y.begin(), delta_k3y.end(), 0.0) / delta_k3y.size();
@@ -171,22 +163,21 @@ void K3Sparse(int run, const char* inFile = "clusters.root", const char* outFile
       std::cerr << "Unique response is asked but k3 is not constant..." << std::endl;
       exit(-1);
     }
-    ////cut on ADCfit
+    // cut on ADCfit
     for (auto digit : selectedDigits) {
       if (ADCFit(digit, parameters, uniqueResponse) < std::abs(correctADCfit)) {
         skip = true;
       }
     }
-    if (skip) {
+    if (skip) { // skip cluster who have at least one ADCfit < correctADCfit
       continue;
-    } // skip cluster who have at least one ADCfit < cut
-    if (!skip && (correctADCfit < 0)) {
+    }
+    if (!skip && (correctADCfit < 0)) { // skip cluster who have all ADCfit > correctADCfit (correcADCfit set to a negative integer)
       continue;
-    } // skip cluster who have all ADCfit > cut
+    }
 
     int iSt = (cluster->getChamberId() < 4) ? cluster->getChamberId() / 2 : 2;
-    float dx_new = DistanceToClosestWire(cluster->getDEId(),
-                                         parameters[0]); // use local X
+    float dx_new = DistanceToClosestWire(cluster->getDEId(), parameters[0]); // use local X
 
     parameters.push_back(charge);         // parameters[6]
     parameters.push_back(chargeAsymm);    // parameters[7]
@@ -239,6 +230,5 @@ void K3Sparse(int run, const char* inFile = "clusters.root", const char* outFile
 
   auto tEnd = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double> timer = tEnd - tStart;
-  cout << "\r\033[Kprocessing completed. Duration = " << timer.count() << " s"
-       << endl;
+  cout << "\r\033[Kprocessing completed. Duration = " << timer.count() << " s" << endl;
 }

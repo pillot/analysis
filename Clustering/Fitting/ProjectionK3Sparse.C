@@ -14,10 +14,12 @@
 #include "ResolutionUtils.h"
 
 //_________________________________________________________________________________________________
-/// require the MCH mapping to be loaded (because of ResolutionUtils.h):
-/// gSystem->Load("libO2MCHGeometryTransformer"),
-/// gSystem->Load("libO2MCHMappingImpl4"), gSystem->Load("libO2MCHTracking")
+// require the MCH mapping to be loaded:
+// gSystem->Load("libO2MCHGeometryTransformer"), gSystem->Load("libO2MCHMappingImpl4"), gSystem->Load("libO2MCHTracking")
 
+// This macro give the distribution of k3x and k3y for the station 1, 2 and 345
+// cuts on asymmetry, total charge of the precluster, pvalue, total momentum, track angle and the distance to the closest wire can be made
+// cuts mean looking into a specific range (except for wire)
 void ProjectionK3Sparse(
   const std::string& inFile = "residuals_sparse.root",
   const std::string& outFile = "projection_sparse.root",
@@ -31,8 +33,7 @@ void ProjectionK3Sparse(
   auto warning = [](const std::string& label, const auto& range) {
     if (range.first && range.second) {
       std::cout << "-- WARNING -- : " << label << " selection is activated\n";
-      std::cout << "SELECTION : " << *range.first << " < " << label << " < "
-                << *range.second << "\n";
+      std::cout << "SELECTION : " << *range.first << " < " << label << " < " << *range.second << "\n";
     }
   };
 
@@ -54,7 +55,7 @@ void ProjectionK3Sparse(
     return;
   }
 
-  // 6 TList => odd : NBending, even : Bending (ordered by station number)
+  // k3x and k3y distribution histograms
   std::vector<TH1D*> k3x, k3y;
   std::string sStation[3] = { "St1", "St2", "St345" };
 
@@ -64,8 +65,7 @@ void ProjectionK3Sparse(
   for (int i = 0; i < 3; i++) {
     auto sName = fmt::format("MultiK3PreCluster{}", sStation[i]);
 
-    // multi dimensional histogram : contains as dim : {p-value, k3x, k3y,
-    // ADC_cluster, p , phi, nSamples, Asymm, Wire, Bending}
+    // multi dimensional histogram : contains as dim : {p-value, k3x, k3y, ADC_cluster, p , phi, nSamples, Asymm, Wire, Bending}
     auto hSparse = dynamic_cast<THnSparse*>(f.Get(sName.c_str()));
     if (!hSparse) {
       std::cerr << "Warning: Could not find THnSparse " << sName << std::endl;
@@ -152,6 +152,5 @@ void ProjectionK3Sparse(
 
   auto tEnd = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double> timer = tEnd - tStart;
-  cout << "\r\033[Kprocessing completed. Duration = " << timer.count() << " s"
-       << endl;
+  cout << "\r\033[Kprocessing completed. Duration = " << timer.count() << " s" << endl;
 }

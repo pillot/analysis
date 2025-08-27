@@ -31,11 +31,12 @@ using o2::mch::TrackParamStruct;
 
 static constexpr double pi = 3.14159265358979323846;
 //_________________________________________________________________________________________________
-// We fill a THnSparse with the FITTED pre-cluster data, that later will be treated in ProjectionSparse.C
+// require the MCH mapping to be loaded:
+// gSystem->Load("libO2MCHGeometryTransformer"),  gSystem->Load("libO2MCHMappingImpl4"), gSystem->Load("libO2MCHTracking")
+
+// We fill a THnSparse (9 axis) with the residuals and others information of the pre-cluster, to be treated later in ProjectionSparse.C
 void ResidualsSparse(int run, const char* inFile = "clusters.root", const char* outFile = "residuals_sparse.root", int correctADCfit = 5, bool uniqueResponse = true)
 {
-  // require the MCH mapping to be loaded:
-  // gSystem->Load("libO2MCHGeometryTransformer"),  gSystem->Load("libO2MCHMappingImpl4"), gSystem->Load("libO2MCHTracking")
 
   // load CCDB objects
   InitFromCCDB(run, true, true, false);
@@ -92,8 +93,8 @@ void ResidualsSparse(int run, const char* inFile = "clusters.root", const char* 
   auto tStart = std::chrono::high_resolution_clock::now();
   std::cout << "looping over data ..." << std::endl;
 
-  std::vector<double> delta_k3x, delta_k3y;
-  // loop precluster
+  std::vector<double> delta_k3x, delta_k3y; // vectors to see if the K3 was a free parameter or not
+  // loop precluster data
   while (dataReader->Next()) {
 
     if (++iCluster % 10000 == 0) {
@@ -147,10 +148,9 @@ void ResidualsSparse(int run, const char* inFile = "clusters.root", const char* 
       parameters.push_back((*fitParameters)[i]);
     }
 
-    // cut on ADCfit
     bool skip = false;
-    // determine if we have a logical issue (i.e. using an unique response while requiring the response to vary)
-    delta_k3x.push_back(parameters[2]); // vector that keep growing in size
+    // determine if we have a logical issue (e.g. using an unique response while requiring the response to vary)
+    delta_k3x.push_back(parameters[2]);
     delta_k3y.push_back(parameters[3]);
     double avg_k3x = std::accumulate(delta_k3x.begin(), delta_k3x.end(), 0.0) / delta_k3x.size(); // average calculation
     double avg_k3y = std::accumulate(delta_k3y.begin(), delta_k3y.end(), 0.0) / delta_k3y.size();
@@ -162,21 +162,18 @@ void ResidualsSparse(int run, const char* inFile = "clusters.root", const char* 
       exit(-1);
     }
 
-    if (uniqueResponse && (!err_k3x || !err_k3y)) {
-      std::cerr << "Unique response is asked but k3 is not constant..." << std::endl;
-      exit(-1);
-    }
+    // cut on ADCfit
     for (auto digit : selectedDigits) {
       if (ADCFit(digit, parameters, uniqueResponse) < std::abs(correctADCfit)) {
         skip = true;
       }
     }
-    if (skip) {
+    if (skip) { // skip cluster who have at least one ADCfit < correctADCfit
       continue;
-    } // skip cluster who have at least one ADCfit < cut
-    if (!skip && (correctADCfit < 0)) {
+    }
+    if (!skip && (correctADCfit < 0)) { // skip cluster who have all ADCfit > correctADCfit (correcADCfit set to a negative integer)
       continue;
-    } // skip cluster who have all ADCfit > cut
+    }
 
     int iSt = (cluster->getChamberId() < 4) ? cluster->getChamberId() / 2 : 2;
     float dx_new = DistanceToClosestWire(cluster->getDEId(), parameters[0]); // use local X

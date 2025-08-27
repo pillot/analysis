@@ -22,13 +22,20 @@
 // require the MCH mapping to be loaded:
 // gSystem->Load("libO2MCHGeometryTransformer"), gSystem->Load("libO2MCHMappingImpl4"), gSystem->Load("libO2MCHTracking")
 
+// This macro take the TList generated from ProjectionSparse.C for TMC and DATA
+// and return 5 types of canvas for the different stations (4x3 + 3x2 in total) ->
+// 1st type : plots of the std of the residuals distribution vs ADCfit
+// 2nd type : plots of the ratio between TMC and DATA
+// 3rd type : plots of the mean (the one from the fit of the std extraction) vs ADCfit for DATA and TMC
+// 4th type : plots of the reduced chi2 (the one from the fit of the std extraction) vs ADCfit for DATA and TMC
+// 5th type : 3 (station) x 2 (cathode) plots of the residuals distribution for different ADCfit binning range
 void DrawResolutionRatioComp(const std::string& file1 = "data_projection_sparse.root", const std::string& file2 = "tmc_projection_sparse.root", const std::string& outFile = "resolution_ratio.root")
 {
   auto extractGraphsAndHistos = [](TFile& f, std::vector<TGraphAsymmErrors*>& graphs, std::vector<TGraph*>& graphs1, std::vector<TGraph*>& graphs2, std::vector<TH1D*>& histograms) {
     static const std::vector<std::pair<int, int>> chargeLimits{
-      { 20, 40 }, { 40, 60 }, { 60, 80 }, { 80, 120 }, { 120, 200 }, { 200, 400 }, { 400, 700 }, { 700, 1000 }
+      { 20, 40 }, { 40, 60 }, { 60, 80 }, { 80, 120 }, { 120, 200 }, { 200, 400 }, { 400, 700 }, { 700, 1000 } // ADCfit binning range for the 5th type
     };
-
+    // loop (St.1, St.2, St.345) x (B, NB)
     for (int i = 0; i < 6; ++i) {
 
       TKey* key = dynamic_cast<TKey*>(f.GetListOfKeys()->At(i));
@@ -46,12 +53,12 @@ void DrawResolutionRatioComp(const std::string& file1 = "data_projection_sparse.
       std::vector<double> x, exl, exr, y, ey, mean, Rchi2;
 
       TH1::AddDirectory(kFALSE);
-      TH1D* hCharge[8];
+      TH1D* hCharge[8]; // TH1D vectors corresponding to the ADCfit binning range
       for (int j = 0; j < 8; ++j) {
         std::string hname = Form("[%d,%d]", chargeLimits[j].first, chargeLimits[j].second);
         hCharge[j] = new TH1D(hname.c_str(), hname.c_str(), 1122, -280.5, 280.5);
       }
-
+      // read TList elements
       for (TObject* obj : *list) {
         auto h = dynamic_cast<TH1*>(obj);
         if (!h) {
@@ -68,19 +75,19 @@ void DrawResolutionRatioComp(const std::string& file1 = "data_projection_sparse.
         std::string token;
         std::vector<std::string> tokens;
 
-        while (std::getline(ss, token, '_')) // read the name of the list which contain the charge interval, e.g. "projY_h2D_Station_Cathode_ADCmin_ADCmax"
-          tokens.push_back(token);
+        while (std::getline(ss, token, '_')) // read the name of the elements from the TList which contain
+          tokens.push_back(token);           // the charge interval in the name, e.g. "projY_h2D_Station_Cathode_ADCmin_ADCmax"
         if (tokens.size() < 6)
           continue;
 
-        double X = std::stod(tokens[4]);
-        double Y = std::stod(tokens[5]);
+        double X = std::stod(tokens[4]); // lower ADC range
+        double Y = std::stod(tokens[5]); // higher ADC range
 
-        double avg = 0.5 * (X + Y);
-        double dx = std::abs(X - avg) + 0.5;
-        double dy = std::abs(Y - avg) + 0.5;
+        double avg = 0.5 * (X + Y);          // mean of the ADC range
+        double dx = std::abs(X - avg) + 0.5; // lower bin edge length
+        double dy = std::abs(Y - avg) + 0.5; // higher bin edge length
 
-        for (int j = 0; j < 8; j++) {
+        for (int j = 0; j < 8; j++) { // add the histogram in the corresponding binning range
           if ((chargeLimits[j].first <= X) && (chargeLimits[j].second >= Y)) {
             hCharge[j]->Add(h);
           }
@@ -95,9 +102,11 @@ void DrawResolutionRatioComp(const std::string& file1 = "data_projection_sparse.
         Rchi2.push_back((fit->GetNDF() > 0) ? (fit->GetChisquare() / fit->GetNDF()) : 0);
       }
 
+      // vector that contains graphs with asymm errors of the std of the residuals distribution vs ADCfit
       graphs.push_back(new TGraphAsymmErrors((int)x.size(), x.data(), y.data(), exl.data(), exr.data(), ey.data(), ey.data()));
-
+      // vector for file1
       graphs1.push_back(new TGraph((int)x.size(), x.data(), mean.data()));
+      // vector for file2
       graphs2.push_back(new TGraph((int)x.size(), x.data(), Rchi2.data()));
       for (int j = 0; j < 8; ++j) {
         histograms.push_back(hCharge[j]);

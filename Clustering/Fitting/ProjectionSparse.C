@@ -1,23 +1,27 @@
-#include <cmath>
-#include <vector>
-#include <string>
-#include <optional>
-#include <fmt/format.h>
-
 #include <TCanvas.h>
 #include <TFile.h>
-#include <TROOT.h>
-#include <THnSparse.h>
-#include <TH2D.h>
 #include <TH1D.h>
+#include <TH2D.h>
+#include <THnSparse.h>
+#include <TROOT.h>
+#include <fmt/format.h>
 
-#include "ResolutionUtils.h"
+#include <cmath>
+#include <optional>
+#include <string>
+#include <vector>
+
 #include "PlotsUtils.h"
+#include "ResolutionUtils.h"
 
 //_________________________________________________________________________________________________
 // require the MCH mapping to be loaded:
-// gSystem->Load("libO2MCHGeometryTransformer"),  gSystem->Load("libO2MCHMappingImpl4"), gSystem->Load("libO2MCHTracking")
+// gSystem->Load("libO2MCHGeometryTransformer"), gSystem->Load("libO2MCHMappingImpl4"), gSystem->Load("libO2MCHTracking")
 
+// This macro will create a root file containing 6 TList (stations {1, 2, 345} x cathodes {B, NB})
+// + one TH2D which represent the residuals (ADC fit - ADC data) vs ADC fit
+// cuts on asymmetry, total charge of the precluster, pvalue, NofSamples and the distance to the closest wire can be made
+// cuts mean looking into a specific range (except for wire)
 void ProjectionSparse(
   const std::string& inFile = "residuals_sparse.root",
   const std::string& outFile = "projection_sparse.root",
@@ -29,7 +33,6 @@ void ProjectionSparse(
   const std::pair<std::optional<double>, std::optional<double>>& nsamples = { std::nullopt, std::nullopt },
   const std::string& wire = "")
 {
-
   auto warning = [](const std::string& label, const auto& range) {
     if (range.first && range.second) {
       std::cout << "-- WARNING -- : " << label << " selection is activated\n";
@@ -70,10 +73,10 @@ void ProjectionSparse(
   std::cout << "looping over the THnSparses ..." << std::endl;
 
   for (int i = 0; i < 6; i++) {
-
     auto sName = fmt::format("MultiResolutionPreCluster{}", sStation[i / 2]);
 
-    // multi dimensional histogram whose axes are : {pvalue, residuals, ADC_fit, ADC_mes, ADC_cluster, nSamples, Asymm, Wire, Cathode}
+    // multi dimensional histogram whose axes are : {pvalue, residuals, ADC_fit,
+    // ADC_mes, ADC_cluster, nSamples, Asymm, Wire, Cathode}
     auto hSparse = dynamic_cast<THnSparse*>(f.Get(sName.c_str()));
     if (!hSparse) {
       std::cerr << "Warning: Could not find THnSparse " << sName << std::endl;

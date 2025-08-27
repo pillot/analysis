@@ -15,7 +15,7 @@
 #include <TH2D.h>
 #include <TH1D.h>
 
-// define all used histograms
+// define all used histograms for the analysis
 std::vector<TH2D*> h2chi2_ndf;
 std::vector<TH1D*> hprob;
 std::vector<TH1D*> hk3x;
@@ -23,37 +23,38 @@ std::vector<TH1D*> hk3y;
 std::vector<TH1D*> hAsymm;
 
 //_________________________________________________________________________________________________
+// premade histograms for the analysis
 void LoadHist()
 {
-  // for naming histograms
+  // station index
   int station[3] = { 1, 2, 345 };
 
-  // common histograms
+  // chi2 vs ndf
   for (int i = 0; i < 3; ++i) {
     h2chi2_ndf.push_back(new TH2D(Form("h2chi2_ndf_%d", i), Form("#chi^{2} vs ndf (St.%d)", station[i]), 16, -0.5, 15.5, 1000, 0, 50));
     h2chi2_ndf[i]->SetDirectory(0);
     h2chi2_ndf[i]->GetXaxis()->SetTitle("ndf");
     h2chi2_ndf[i]->GetYaxis()->SetTitle("#chi^{2}");
   }
-
+  // p-value distribution
   for (int i = 0; i < 3; ++i) {
     hprob.push_back(new TH1D(Form("hprob_%d", i), Form("P-Value (St.%d)", station[i]), 1000, 0, 1));
     hprob[i]->SetDirectory(0);
     hprob[i]->GetXaxis()->SetTitle("p-value");
   }
-
+  // k3x distribution
   for (int i = 0; i < 3; ++i) {
     hk3x.push_back(new TH1D(Form("hk3x_%d", i), Form("K_{3X} (St.%d)", station[i]), 1000, 0, 1));
     hk3x[i]->SetDirectory(0);
     hk3x[i]->GetXaxis()->SetTitle("K_{3X}");
   }
-
+  // k3y distribution
   for (int i = 0; i < 3; ++i) {
     hk3y.push_back(new TH1D(Form("hk3y_%d", i), Form("K_{3Y} (St.%d)", station[i]), 1000, 0, 1));
     hk3y[i]->SetDirectory(0);
     hk3y[i]->GetXaxis()->SetTitle("K_{3Y}");
   }
-
+  // Asymmetry
   for (int i = 0; i < 6; ++i) {
     hAsymm.push_back(new TH1D(Form("hAsymm_%d", i), Form("Asymmetry bending - nbending (St.%d)", station[i / 2]), 700, -0.7, 0.7));
     hAsymm[i]->SetDirectory(0);
@@ -62,7 +63,7 @@ void LoadHist()
 }
 
 //_________________________________________________________________________________________________
-
+// delete properly previous histograms
 void DelHist()
 {
 
@@ -88,6 +89,7 @@ void DelHist()
 }
 
 //_________________________________________________________________________________________________
+// default name, size, title, ...
 void FillInfoGraphErrAsymm(TGraphAsymmErrors* graph, const TString& titleX, const TString& titleY, const TString& Station, const TString& Cathode, bool primeFile)
 {
   TString file = primeFile ? "(1)" : "(2)";
@@ -107,6 +109,7 @@ void FillInfoGraphErrAsymm(TGraphAsymmErrors* graph, const TString& titleX, cons
   graph->SetMaximum(200);
 }
 //_________________________________________________________________________________________________
+// default name, size, title, ...
 void FillInfoGraph(TGraph* graph, const TString& titleX, const TString& titleY, const TString& Station, const TString& Cathode, bool primeFile)
 {
   TString file = primeFile ? "(1)" : "(2)";
@@ -131,6 +134,7 @@ void FillInfoGraph(TGraph* graph, const TString& titleX, const TString& titleY, 
   }
 }
 //_________________________________________________________________________________________________
+// default name, size, title, ...
 void FillInfoHist(TH1D* h, const TString& titleX, const TString& titleY, const TString& Station, const TString& Cathode, bool primeFile, bool normalize = false)
 {
   TString oldName = h->GetName();
@@ -151,6 +155,7 @@ void FillInfoHist(TH1D* h, const TString& titleX, const TString& titleY, const T
   h->SetLineColor((primeFile) ? kRed : kBlue);
 }
 //_________________________________________________________________________________________________
+// plot a defined function
 TF1* plotNoise(std::string sigma, double alpha, double gamma = 0., bool Asymm = false)
 {
   TF1* Func = nullptr;
@@ -219,6 +224,8 @@ TF1* plotNoise(std::string sigma, double alpha, double gamma = 0., bool Asymm = 
 }
 
 //_________________________________________________________________________________________________
+// take a vector of TH1D, divide a canvas into 1xN or 2xN then the i-th and i+1-th element of the vector TH1D
+// are on the same plot corresponding to the index i
 void plotSAME(std::vector<TH1D*> hist, const char* name, const char* title, bool all = false)
 {
   TCanvas* c = new TCanvas(name, title, 800, 600);
@@ -241,6 +248,7 @@ void plotSAME(std::vector<TH1D*> hist, const char* name, const char* title, bool
 }
 
 //_________________________________________________________________________________________________
+// take a vector of TH1D, divide a canvas into 1xN or 2xN and plot them
 void plot1D(std::vector<TH1D*> hist, const char* name, const char* title, bool all = false)
 {
   TCanvas* c = new TCanvas(name, title, 800, 600);
@@ -261,6 +269,7 @@ void plot1D(std::vector<TH1D*> hist, const char* name, const char* title, bool a
 }
 
 //_________________________________________________________________________________________________
+// take a vector of TH2D, divide a canvas into 1xN or 2xN and plot them
 void plot2D(std::vector<TH2D*> hist, const char* name, const char* title, bool all = false)
 {
   TCanvas* c = new TCanvas(name, title, 800, 600);
@@ -282,6 +291,8 @@ void plot2D(std::vector<TH2D*> hist, const char* name, const char* title, bool a
 }
 
 //_________________________________________________________________________________________________
+// take two vectors of TGraphAsymmErrors object corresponding to a certain station, divide a canvas in two (B / NB),
+// plots the graphs along with a defined function from plotNoise
 void tGraphErrAsymm(std::vector<TGraphAsymmErrors*>& graphs1, std::vector<TGraphAsymmErrors*>& graphs2, const std::string& name, int station)
 {
 
@@ -313,6 +324,7 @@ void tGraphErrAsymm(std::vector<TGraphAsymmErrors*>& graphs1, std::vector<TGraph
 }
 
 //_________________________________________________________________________________________________
+// take two vectors of TGraph object corresponding to a certain station, divide a canvas in four (B / NB) x (DATA / TMC), plots the graphs
 void tGraph(std::vector<TGraph*>& graphs1, std::vector<TGraph*>& graphs2, const std::string& name, int station)
 {
 
@@ -340,6 +352,8 @@ void tGraph(std::vector<TGraph*>& graphs1, std::vector<TGraph*>& graphs2, const 
 }
 
 //_________________________________________________________________________________________________
+// take two vectors of TH1D object corresponding to a certain station and a certain cathode, divide a canvas in
+// eight (corresponding to a choice of ADC binning), plots the graphs
 void tHist(std::vector<TH1D*>& hists1, std::vector<TH1D*>& hists2, const std::string& name, int station, int cathode)
 {
   std::vector<TH1D*> subh1(hists1.begin() + 8 * (2 * station + cathode), hists1.begin() + 8 * (2 * station + cathode + 1));
@@ -373,6 +387,8 @@ void tHist(std::vector<TH1D*>& hists1, std::vector<TH1D*>& hists2, const std::st
 }
 
 //_________________________________________________________________________________________________
+// take two vectors of TGraphAsymmErrors object corresponding to a station with a parameter alpha (to define a function with plotFunction),
+// divide a canvas in two (B / NB), plots the ratio of the y-data points between the two TGraphAsymmErrors object along with the corresponding errors
 void tRatio(std::vector<TGraphAsymmErrors*>& graphs1, std::vector<TGraphAsymmErrors*>& graphs2, const std::string& name, int station, const std::string& theory)
 {
 
@@ -390,7 +406,7 @@ void tRatio(std::vector<TGraphAsymmErrors*>& graphs1, std::vector<TGraphAsymmErr
 
     TGraphAsymmErrors* gi = graphs1[2 * station + i];
     TGraphAsymmErrors* gj = graphs2[2 * station + i];
-    TGraphAsymmErrors* ratio = new TGraphAsymmErrors();
+    TGraphAsymmErrors* ratio = new TGraphAsymmErrors();        // draw (#sigma_{th}(#sigma_{DATA} / #sigma_{TMC})
     TGraphAsymmErrors* ratio_simple = new TGraphAsymmErrors(); // draw (#sigma_{DATA} / #sigma_{TMC})
 
     TString Cathode = (i == 0) ? "Bending" : "NonBending";
@@ -408,13 +424,20 @@ void tRatio(std::vector<TGraphAsymmErrors*>& graphs1, std::vector<TGraphAsymmErr
 
     auto func = plotNoise("sADC", 1.0);
 
+    // since it is not said that the two TGraphAsymmErrors object should have the same number of elements with the same x values
+    // we take as reference the first TGraphAsymmErrors object and loop over its elements (i index)
+    // (in the i-loop) we loop over the elements of second TGraphAsymmErrors object (j index)
+    // if the difference between | x_j - x_i | is lower than 10^-6 we do the ratio of y_i / y_j
+    // futhermore, because of how we construct the two TGraphAsymmErrors object
+    // we are sure that if a couple (x_j, x_i) respect the previous condition then
+    // x_j (resp. x_i) cannot respect the condtion with the elements other than x_i (resp. x_j)
     int Ni = gi->GetN();
     for (int k = 0; k < Ni; ++k) {
       double xi, yi;
       gi->GetPoint(k, xi, yi);
-      if (yi == 0)
+      if (yi == 0) // check if the y value is not zero
         continue;
-      double yi_err = 0.5 * (gi->GetErrorYlow(k) + gi->GetErrorYhigh(k));
+      double yi_err = 0.5 * (gi->GetErrorYlow(k) + gi->GetErrorYhigh(k)); // low and high errors are the same by construction
 
       int Nj = gj->GetN();
       for (int l = 0; l < Nj; ++l) {
@@ -423,12 +446,12 @@ void tRatio(std::vector<TGraphAsymmErrors*>& graphs1, std::vector<TGraphAsymmErr
         if (std::abs(xi - xj) < 1e-6 && yj != 0) {
           double yj_err = 0.5 * (gj->GetErrorYlow(l) + gj->GetErrorYhigh(l));
           double r = yi / yj;
-          double rel_err = std::sqrt(std::pow(yi_err / yi, 2) + std::pow(yj_err / yj, 2));
+          double rel_err = std::sqrt(std::pow(yi_err / yi, 2) + std::pow(yj_err / yj, 2)); // propagate errors
           double r_err = r * rel_err * lambda(xi);
           double r_err_simple = r * rel_err;
 
-          ratio->AddPoint(xi, (r * lambda(xi)));
-          ratio_simple->AddPoint(xi, r);
+          ratio->AddPoint(xi, (r * lambda(xi))); // ratio #sigma_{th}(#sigma_{DATA} / #sigma_{TMC})
+          ratio_simple->AddPoint(xi, r);         // second ratio (#sigma_{DATA} / #sigma_{TMC})
           ratio->SetPointError(ratio->GetN() - 1, 0, 0, r_err, r_err);
           ratio_simple->SetPointError(ratio_simple->GetN() - 1, 0, 0, r_err_simple, r_err_simple);
           break;
