@@ -63,8 +63,7 @@ void K3Sparse(int run, const char* inFile = "clusters.root", const char* outFile
     LOGP(error, "unable to load branch \"fitParameters\" from {}", inFile);
     exit(-1);
   }
-  fitParameters =
-    std::make_unique<TTreeReaderArray<double>>(*dataReader, "fitParameters");
+  fitParameters = std::make_unique<TTreeReaderArray<double>>(*dataReader, "fitParameters");
 
   std::unique_ptr<TTreeReaderValue<double>> pvalue{};
   if (!dataReader->GetTree()->FindBranch("pvalue")) {
@@ -93,6 +92,8 @@ void K3Sparse(int run, const char* inFile = "clusters.root", const char* outFile
   std::cout << "looping over data ..." << std::endl;
 
   // loop precluster
+  int discarded_cut_k3 = 0;
+  int discarded_cut_ADC = 0;
   while (dataReader->Next()) {
     if (++iCluster % 10000 == 0) {
       std::cout << "\rprocessing cluster " << iCluster << " / " << nClusters
@@ -100,8 +101,7 @@ void K3Sparse(int run, const char* inFile = "clusters.root", const char* outFile
     }
     //___________________SELECTION__________________________
     // those 2 DE have lower HV for the run 529691
-    if (run == 529691 &&
-        (cluster->getDEId() == 202 || cluster->getDEId() == 300)) {
+    if (run == 529691 && (cluster->getDEId() == 202 || cluster->getDEId() == 300)) {
       continue;
     }
 
@@ -149,11 +149,17 @@ void K3Sparse(int run, const char* inFile = "clusters.root", const char* outFile
       parameters.push_back((*fitParameters)[i]);
     }
 
+    // cut on K3
+    if ((parameters[2] < 1e-5) || (parameters[3] < 1e-5)) {
+      discarded_cut_k3++;
+      continue;
+    }
+
+    // cut on ADC
     bool skip = false;
-    // cut on ADCfit
     for (auto digit : selectedDigits) {
-      double adcFitValue = ADCFit(digit, parameters);
-      if (std::isnan(adcFitValue) || adcFitValue < std::abs(correctADCfit)) {
+      if (ADCFit(digit, parameters) < std::abs(correctADCfit)) {
+        discarded_cut_ADC++;
         skip = true;
         break; // stop checking further digits if one fails
       }
@@ -220,4 +226,6 @@ void K3Sparse(int run, const char* inFile = "clusters.root", const char* outFile
   auto tEnd = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double> timer = tEnd - tStart;
   cout << "\r\033[Kprocessing completed. Duration = " << timer.count() << " s" << endl;
+  cout << "discarded clusters (cut on K3): " << discarded_cut_k3 << " / " << nClusters << endl;
+  cout << "discarded clusters (cut on ADC): " << discarded_cut_ADC << " / " << nClusters << endl;
 }

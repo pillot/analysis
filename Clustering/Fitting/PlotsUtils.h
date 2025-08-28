@@ -44,13 +44,13 @@ void LoadHist()
   }
   // k3x distribution
   for (int i = 0; i < 3; ++i) {
-    hk3x.push_back(new TH1D(Form("hk3x_%d", i), Form("K_{3X} (St.%d)", station[i]), 1000, 0, 1));
+    hk3x.push_back(new TH1D(Form("hk3x_%d", i), Form("K_{3X} (St.%d)", station[i]), 10000, 0, 1));
     hk3x[i]->SetDirectory(0);
     hk3x[i]->GetXaxis()->SetTitle("K_{3X}");
   }
   // k3y distribution
   for (int i = 0; i < 3; ++i) {
-    hk3y.push_back(new TH1D(Form("hk3y_%d", i), Form("K_{3Y} (St.%d)", station[i]), 1000, 0, 1));
+    hk3y.push_back(new TH1D(Form("hk3y_%d", i), Form("K_{3Y} (St.%d)", station[i]), 10000, 0, 1));
     hk3y[i]->SetDirectory(0);
     hk3y[i]->GetXaxis()->SetTitle("K_{3Y}");
   }

@@ -94,6 +94,8 @@ void ResidualsSparse(int run, const char* inFile = "clusters.root", const char* 
   std::cout << "looping over data ..." << std::endl;
 
   // loop precluster data
+  int discarded_cut_k3 = 0;
+  int discarded_cut_ADC = 0;
   while (dataReader->Next()) {
 
     if (++iCluster % 10000 == 0) {
@@ -147,11 +149,17 @@ void ResidualsSparse(int run, const char* inFile = "clusters.root", const char* 
       parameters.push_back((*fitParameters)[i]);
     }
 
+    // cut on K3
+    if ((parameters[2] < 1e-5) || (parameters[3] < 1e-5)) {
+      discarded_cut_k3++;
+      continue;
+    }
+
+    // cut on ADC
     bool skip = false;
-    // cut on ADCfit
     for (auto digit : selectedDigits) {
-      double adcFitValue = ADCFit(digit, parameters);
-      if (std::isnan(adcFitValue) || adcFitValue < std::abs(correctADCfit)) {
+      if (ADCFit(digit, parameters) < std::abs(correctADCfit)) {
+        discarded_cut_ADC++;
         skip = true;
         break; // stop checking further digits if one fails
       }
@@ -216,4 +224,6 @@ void ResidualsSparse(int run, const char* inFile = "clusters.root", const char* 
   auto tEnd = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double> timer = tEnd - tStart;
   cout << "\r\033[Kprocessing completed. Duration = " << timer.count() << " s" << endl;
+  cout << "discarded clusters (cut on K3): " << discarded_cut_k3 << " / " << nClusters << endl;
+  cout << "discarded clusters (cut on ADC): " << discarded_cut_ADC << " / " << nClusters << endl;
 }
