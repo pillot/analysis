@@ -38,22 +38,13 @@ void SetupMathieson(const double sqrtk3x_1, const double sqrtk3y_1, const double
 //_________________________________________________________________________________________________
 // return the charge fraction seen by digit on a cathode given the cluster position
 // the vector "parameters" is a 6 size vector which is defined as : parameters = {X, Y, K3x, K3y, Qb_tot, Qnb_tot}
-// uniqueResponse determine if we want the response to change (use if k3 vary) or not
-double ADCFit(const Digit digit, std::vector<double> parameters, bool uniqueResponse)
+double ADCFit(const Digit digit, std::vector<double> parameters)
 {
   auto sqrtK3x = sqrt(parameters[2]);
   auto sqrtK3y = sqrt(parameters[3]);
   SetupMathieson(sqrtK3x, sqrtK3y, sqrtK3x, sqrtK3y);
 
-  const o2::mch::Response* response;
-  o2::mch::Response Response[] = { { o2::mch::Station::Type1 }, { o2::mch::Station::Type2345 } };
-  static const o2::mch::Response staticResponse[] = { { o2::mch::Station::Type1 }, { o2::mch::Station::Type2345 } };
-
-  if (!uniqueResponse) {
-    response = Response;
-  } else {
-    response = staticResponse;
-  }
+  const o2::mch::Response response[] = { { o2::mch::Station::Type1 }, { o2::mch::Station::Type2345 } };
 
   const auto& segmentation = o2::mch::mapping::segmentation(digit.getDetID());
   int iSt = (digit.getDetID() < 300) ? 0 : 1;
@@ -64,6 +55,7 @@ double ADCFit(const Digit digit, std::vector<double> parameters, bool uniqueResp
   auto xPad = segmentation.padPositionX(padid) - parameters[0];
   auto yPad = segmentation.padPositionY(padid) - parameters[1];
   auto qPad = response[iSt].chargePadfraction(xPad - dx, xPad + dx, yPad - dy, yPad + dy);
+
   return qPad * (segmentation.isBendingPad(padid) ? parameters[4] : parameters[5]);
 }
 //_________________________________________________________________________________________________
@@ -128,7 +120,7 @@ THnSparseD* CreatePreClusterInfoMULTI(const char* extension = "")
 // fill THnSparse (9 axes) with the preclusters characteristics
 // the vector "parameters" is a 10 size vector which is defined as :
 // parameters = {X, Y, K3x, K3y, Qb_tot, Qnb_tot, sqrt(Qb_tot * Qnb_tot), (NB - B)/(NB + B), distance closest wire, pvalue}
-void FillResolutionInfo(const Digit digit, std::vector<double> parameters, THnSparseD* h, bool uniqueResponse)
+void FillResolutionInfo(const Digit digit, std::vector<double> parameters, THnSparseD* h)
 {
   // pre-parameters is {X, Y, K3x, K3y, Qb_tot, Qnb_tot}
   std::vector<double> pre_parameters(parameters.begin(), parameters.begin() + 6);
@@ -145,7 +137,7 @@ void FillResolutionInfo(const Digit digit, std::vector<double> parameters, THnSp
     position = 1.;
   }
 
-  Double_t ADC_fit = ADCFit(digit, pre_parameters, uniqueResponse);
+  Double_t ADC_fit = ADCFit(digit, pre_parameters);
   Double_t ADC_mes = digit.getADC();
   Double_t residuals = (ADC_mes - ADC_fit);
   Double_t ADC_cluster = parameters[6];

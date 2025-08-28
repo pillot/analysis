@@ -35,7 +35,7 @@ static constexpr double pi = 3.14159265358979323846;
 // gSystem->Load("libO2MCHGeometryTransformer"),  gSystem->Load("libO2MCHMappingImpl4"), gSystem->Load("libO2MCHTracking")
 
 // We fill a THnSparse (9 axis) with the residuals and others information of the pre-cluster, to be treated later in ProjectionSparse.C
-void ResidualsSparse(int run, const char* inFile = "clusters.root", const char* outFile = "residuals_sparse.root", int correctADCfit = 5, bool uniqueResponse = true)
+void ResidualsSparse(int run, const char* inFile = "clusters.root", const char* outFile = "residuals_sparse.root", int correctADCfit = 5)
 {
 
   // load CCDB objects
@@ -43,7 +43,7 @@ void ResidualsSparse(int run, const char* inFile = "clusters.root", const char* 
 
   if (correctADCfit != 0) {
     std::cout << "-- WARNING -- : Fit ADC selection is activated " << std::endl;
-    std::cout << "SELECTION : " << std::abs(correctADCfit) << "< FitADC" << std::endl;
+    std::cout << "SELECTION : " << std::abs(correctADCfit) << " < FitADC" << std::endl;
   }
 
   // load histograms
@@ -93,7 +93,6 @@ void ResidualsSparse(int run, const char* inFile = "clusters.root", const char* 
   auto tStart = std::chrono::high_resolution_clock::now();
   std::cout << "looping over data ..." << std::endl;
 
-  std::vector<double> delta_k3x, delta_k3y; // vectors to see if the K3 was a free parameter or not
   // loop precluster data
   while (dataReader->Next()) {
 
@@ -149,23 +148,12 @@ void ResidualsSparse(int run, const char* inFile = "clusters.root", const char* 
     }
 
     bool skip = false;
-    // determine if we have a logical issue (e.g. using an unique response while requiring the response to vary)
-    delta_k3x.push_back(parameters[2]);
-    delta_k3y.push_back(parameters[3]);
-    double avg_k3x = std::accumulate(delta_k3x.begin(), delta_k3x.end(), 0.0) / delta_k3x.size(); // average calculation
-    double avg_k3y = std::accumulate(delta_k3y.begin(), delta_k3y.end(), 0.0) / delta_k3y.size();
-    bool err_k3x = std::all_of(delta_k3x.begin(), delta_k3x.end(), [avg_k3x](double v) { return std::abs(v - avg_k3x) < 1e-5; }); // difference between all elements of the vector and the mean value calculated before
-    bool err_k3y = std::all_of(delta_k3y.begin(), delta_k3y.end(), [avg_k3y](double v) { return std::abs(v - avg_k3y) < 1e-5; });
-
-    if (uniqueResponse && (!err_k3x || !err_k3y)) {
-      std::cerr << "Unique response is asked but k3 is not constant..." << std::endl;
-      exit(-1);
-    }
-
     // cut on ADCfit
     for (auto digit : selectedDigits) {
-      if (ADCFit(digit, parameters, uniqueResponse) < std::abs(correctADCfit)) {
+      double adcFitValue = ADCFit(digit, parameters);
+      if (std::isnan(adcFitValue) || adcFitValue < std::abs(correctADCfit)) {
         skip = true;
+        break; // stop checking further digits if one fails
       }
     }
     if (skip) { // skip cluster who have at least one ADCfit < correctADCfit
@@ -184,7 +172,7 @@ void ResidualsSparse(int run, const char* inFile = "clusters.root", const char* 
     parameters.push_back(**pvalue);    // parameters[9]
 
     for (auto digit : selectedDigits) {
-      FillResolutionInfo(digit, parameters, hPreClusterInfoMULTI[iSt], uniqueResponse);
+      FillResolutionInfo(digit, parameters, hPreClusterInfoMULTI[iSt]);
     }
 
     // histograms that can't be in the THnSparse
