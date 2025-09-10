@@ -84,7 +84,11 @@ const std::unordered_map<uint32_t, uint32_t> firstTForbit0perRun{
   {529691, 74406400},
   {544490, 26693600},
   {562967, 47243328},
-  {562968, 62076224}};
+  {562968, 62076224},
+  {562970, 86353952},
+  {562971, 97188864},
+  {562975, 146579680},
+  {562976, 160383072}};
 
 struct TrackInfo {
   TrackInfo(const mch::TrackMCH& mch) : mchTrack(mch) {}
