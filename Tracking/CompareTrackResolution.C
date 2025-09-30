@@ -144,6 +144,7 @@ void CompareTracks(std::vector<TrackStruct>& tracks1, std::vector<TrackStruct>& 
 void CreateResiduals(std::vector<TH1*>& histos, const char* extension, double range);
 void FillResiduals(std::vector<TrackStruct>& tracks, std::vector<TH1*>& histos, bool rejectMonoCathodes, bool matched = false);
 void FillResiduals(TrackStruct& track1, TrackStruct& track2, std::vector<TH1*>& histos);
+void NormResiduals(std::vector<TH1*>& histos);
 void DrawResiduals(std::vector<TH1*>& histos, const char* extension);
 void DrawResiduals(std::vector<TH1*>& histos1, std::vector<TH1*>& histos2, const char* extension);
 void DrawRatios(std::vector<TH1*>& histos1, std::vector<TH1*>& histos2, const char* extension);
@@ -279,12 +280,18 @@ void CompareTrackResolution(int run,
   TTreeReaderValue<std::vector<Cluster>> mchClusters2 = {*mchReader2, "trackclusters"};
   auto [fMUON2, muonReader2] = LoadData(muonFileName2.c_str(), "o2sim");
   TTreeReaderValue<std::vector<TrackMCHMID>> muonTracks2 = {*muonReader2, "tracks"};
-  int nTF = mchReader1->GetEntries(false);
-  if (muonReader1->GetEntries(false) != nTF ||
-      mchReader2->GetEntries(false) != nTF ||
-      muonReader2->GetEntries(false) != nTF) {
-    LOG(error) << " not all files contain the same number of TF";
+  int nTF1 = mchReader1->GetEntries(false);
+  if (muonReader1->GetEntries(false) != nTF1) {
+    LOGP(error, " {} and {} do not contain the same number of TF", mchFileName1, muonFileName1);
     exit(-1);
+  }
+  int nTF2 = mchReader2->GetEntries(false);
+  if (muonReader2->GetEntries(false) != nTF2) {
+    LOGP(error, " {} and {} do not contain the same number of TF", mchFileName2, muonFileName2);
+    exit(-1);
+  }
+  if (nTF1 != nTF2) {
+    LOGP(warning, "the two set of files do not contain the same number of TF ({} vs {})", nTF1, nTF2);
   }
 
   std::vector<TrackStruct> tracks1{};
@@ -296,15 +303,33 @@ void CompareTrackResolution(int run,
   CreateResiduals(residuals[3], "Matched2", 2.);
   CreateResiduals(residuals[4], "ClCl", 0.2);
 
-  int iTF = -1;
-  while (mchReader1->Next() && muonReader1->Next() && mchReader2->Next() && muonReader2->Next()) {
-    cout << "\rprocessing TF " << ++iTF << "..." << flush;
+  int nTF = TMath::Max(nTF1, nTF2);
+  for (int iTF = 0; iTF < nTF; ++iTF) {
+    cout << "\rprocessing TF " << iTF << "..." << flush;
 
-    auto nROFs = TMath::Max(mchROFs1->size(), mchROFs2->size());
+    size_t nROFs1 = 0;
+    if (iTF < nTF1) {
+      if (!mchReader1->Next() || !muonReader1->Next()) {
+        LOGP(error, "cannot read the next TF in the first set of files");
+        exit(-1);
+      }
+      nROFs1 = mchROFs1->size();
+    }
+
+    size_t nROFs2 = 0;
+    if (iTF < nTF2) {
+      if (!mchReader2->Next() || !muonReader2->Next()) {
+        LOGP(error, "cannot read the next TF in the second set of files");
+        exit(-1);
+      }
+      nROFs2 = mchROFs2->size();
+    }
+
+    auto nROFs = TMath::Max(nROFs1, nROFs2);
     int iROF1(-1), iROF2(-1);
     for (size_t iROF = 0; iROF < nROFs; ++iROF) {
 
-      if (iROF < mchROFs1->size()) {
+      if (iROF < nROFs1) {
         ++iROF1;
         const auto& mchROF1 = (*mchROFs1)[iROF];
         tracks1.clear();
@@ -323,7 +348,7 @@ void CompareTrackResolution(int run,
         FillResiduals(tracks1, residuals[0], rejectMonoCathodes);
       }
 
-      if (iROF < mchROFs2->size()) {
+      if (iROF < nROFs2) {
         ++iROF2;
         const auto& mchROF2 = (*mchROFs2)[iROF];
         tracks2.clear();
@@ -352,6 +377,11 @@ void CompareTrackResolution(int run,
   }
 
   cout << "\r\033[Kprocessing completed" << endl;
+
+  if (nTF1 != nTF2) {
+    NormResiduals(residuals[0]);
+    NormResiduals(residuals[1]);
+  }
 
   gStyle->SetOptStat(1);
   DrawResiduals(residuals[4], "ClCl");
@@ -777,6 +807,16 @@ void FillResiduals(std::vector<TrackStruct>& tracks, std::vector<TH1*>& histos, 
         }
       }
     }
+  }
+}
+
+//_________________________________________________________________________________________________
+void NormResiduals(std::vector<TH1*>& histos)
+{
+  /// normalize histograms
+
+  for (auto& h : histos) {
+    h->Scale(1. / h->GetEntries());
   }
 }
 
