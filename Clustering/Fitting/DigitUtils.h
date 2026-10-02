@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <iterator>
 #include <utility>
 #include <vector>
@@ -17,12 +18,17 @@
 #include <TLegend.h>
 
 #include "DataFormatsMCH/Digit.h"
+#include "Framework/Logger.h"
 #include "MCHBase/MathiesonOriginal.h"
 #include "MCHBase/ResponseParam.h"
 #include "MCHMappingInterface/Segmentation.h"
+#include "MCHSimulation/Response.h"
 
 using o2::mch::Digit;
 using o2::mch::MathiesonOriginal;
+
+// function parameters are (xMin, yMin, xMax, yMax) relative to the center of the Mathieson
+typedef std::function<float(float, float, float, float)> MathiesonIntegrator;
 
 /*
  * This file contains utility functions to produce digit control plots.
@@ -82,26 +88,70 @@ const MathiesonOriginal& GetMathieson(int station, float sqrtK3x, float sqrtK3y)
 }
 
 //_________________________________________________________________________________________________
-double GetChargeIntegral(const Digit& digit, const gsl::span<double> parameters)
+const MathiesonIntegrator GetMathiesonIntegrator(int station, double k3x = -1., double k3y = -1.)
 {
-  /// return the charge seen by the digit given the cluster parameters
-  /// parameters = {X, Y, K3x, K3y, Qb_tot, Qnb_tot}
+  /// return a function to integrate the Mathieson distribution over the pad area
+  /// using a custom Mathieson function if both k3x and k3y are provided (i.e. > 0.)
+  /// or the default chamber response function othewise
+  /// !!! the integration uses static Mathieson, which may change in case of concurrent use
 
-  int station = (digit.getDetID() / 100 - 1) / 2;
-  float sqrtK3x = sqrt(parameters[2]);
-  float sqrtK3y = sqrt(parameters[3]);
-  const auto& mathieson = GetMathieson(station, sqrtK3x, sqrtK3y);
+  if (k3x > 0. && k3y > 0.) {
+
+    float sqrtK3x = sqrt(k3x);
+    float sqrtK3y = sqrt(k3y);
+    const auto& mathieson = GetMathieson(station, sqrtK3x, sqrtK3y);
+
+    return [&mathieson](float xMin, float yMin, float xMax, float yMax) -> float {
+      return mathieson.integrate(xMin, yMin, xMax, yMax);
+    };
+
+  } else {
+
+    if (k3x > 0.) {
+      LOGP(warning, "MathiesonIntegrate: k3x is provided but not k3y --> use default chamber response function");
+    }
+
+    if (k3y > 0.) {
+      LOGP(warning, "MathiesonIntegrate: k3y is provided but not k3x --> use default chamber response function");
+    }
+
+    static const o2::mch::Response response[] = {{o2::mch::Station::Type1}, {o2::mch::Station::Type2345}};
+
+    return [&response = response[(station == 0) ? 0 : 1]](float xMin, float yMin, float xMax, float yMax) -> float {
+      return response.chargePadfraction(xMin, xMax, yMin, yMax);
+    };
+  }
+}
+
+//_________________________________________________________________________________________________
+double GetChargeFraction(const Digit& digit, double clusterX, double clusterY, const MathiesonIntegrator& integrate)
+{
+  /// return the charge fraction seen by the digit given the cluster position and the Mathieson parameterization
 
   const auto& segmentation = o2::mch::mapping::segmentation(digit.getDetID());
 
   auto padid = digit.getPadID();
   auto dx = segmentation.padSizeX(padid) * 0.5;
   auto dy = segmentation.padSizeY(padid) * 0.5;
-  auto xPad = segmentation.padPositionX(padid) - parameters[0];
-  auto yPad = segmentation.padPositionY(padid) - parameters[1];
-  auto qPad = mathieson.integrate(xPad - dx, yPad - dy, xPad + dx, yPad + dy);
+  auto xPad = segmentation.padPositionX(padid) - clusterX;
+  auto yPad = segmentation.padPositionY(padid) - clusterY;
 
-  return qPad * (segmentation.isBendingPad(padid) ? parameters[4] : parameters[5]);
+  return integrate(xPad - dx, yPad - dy, xPad + dx, yPad + dy);
+}
+
+//_________________________________________________________________________________________________
+double GetChargeIntegral(const Digit& digit, const gsl::span<double> parameters)
+{
+  /// return the charge seen by the digit given the cluster parameters
+  /// parameters = {X, Y, K3x, K3y, Qb_tot, Qnb_tot}
+
+  int station = (digit.getDetID() / 100 - 1) / 2;
+  const MathiesonIntegrator integrate = GetMathiesonIntegrator(station, parameters[2], parameters[3]);
+  const auto& segmentation = o2::mch::mapping::segmentation(digit.getDetID());
+
+  auto qPad = GetChargeFraction(digit, parameters[0], parameters[1], integrate);
+
+  return qPad * (segmentation.isBendingPad(digit.getPadID()) ? parameters[4] : parameters[5]);
 }
 
 //_________________________________________________________________________________________________

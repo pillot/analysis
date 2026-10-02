@@ -137,10 +137,12 @@ void DrawPreClusters(int run, bool applyTrackSelection = false, bool applyCluste
     }
 
     // cut on distance to closest wire
-    double localX, localY;
+    double localX, localY, k3x = -1., k3y = -1.;
     if (useFitPos) {
       localX = (*fitParameters)[0];
       localY = (*fitParameters)[1];
+      k3x = (*fitParameters)[2];
+      k3y = (*fitParameters)[3];
     } else {
       auto local = GlobalToLocal(cluster->getDEId(), cluster->x, cluster->y, cluster->z, run < 300000);
       localX = local.x();
@@ -175,7 +177,7 @@ void DrawPreClusters(int run, bool applyTrackSelection = false, bool applyCluste
         chargeB = (*fitParameters)[4];
         chargeNB = (*fitParameters)[5];
       } else {
-        auto [chargeFracNB, chargeFracB] = GetChargeFraction(selectedDigits, localX, localY);
+        auto [chargeFracNB, chargeFracB] = GetChargeFraction(selectedDigits, localX, localY, k3x, k3y);
         chargeNB /= chargeFracNB;
         chargeB /= chargeFracB;
       }

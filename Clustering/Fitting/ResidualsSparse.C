@@ -132,6 +132,7 @@ void ResidualsSparse(int run, const char* inFile = "clusters.root", const char* 
   std::cout << "looping over data ..." << std::endl;
 
   // loop precluster data
+  int nClustersSelected = 0;
   int discarded_cut_k3 = 0;
   int discarded_cut_ADC = 0;
   int discarded_cut_ADC_fit = 0;
@@ -185,7 +186,7 @@ void ResidualsSparse(int run, const char* inFile = "clusters.root", const char* 
 
     // correct pad charge and re-cut on cluster charge asymmetry
     if (correctCharge) {
-      auto [chargeFracNB, chargeFracB] = GetChargeFraction(selectedDigits, fitParameters[0], fitParameters[1]);
+      auto [chargeFracNB, chargeFracB] = GetChargeFraction(selectedDigits, fitParameters[0], fitParameters[1], fitParameters[2], fitParameters[3]);
       chargeNB /= chargeFracNB;
       chargeB /= chargeFracB;
       chargeAsymm = (chargeNB - chargeB) / (chargeNB + chargeB);
@@ -193,6 +194,8 @@ void ResidualsSparse(int run, const char* inFile = "clusters.root", const char* 
         continue;
       }
     }
+
+    ++nClustersSelected;
 
     // cut on K3
     if ((fitParameters[2] < 1e-5) || (fitParameters[3] < 1e-5)) {
@@ -347,8 +350,9 @@ void ResidualsSparse(int run, const char* inFile = "clusters.root", const char* 
   auto tEnd = std::chrono::high_resolution_clock::now();
   std::chrono::duration<double> timer = tEnd - tStart;
   cout << "processing completed. Duration = " << timer.count() << " s" << endl;
-  cout << "discarded clusters (cut on K3): " << discarded_cut_k3 << " / " << nClusters << endl;
-  cout << "discarded clusters (cut on ADC): " << discarded_cut_ADC << " / " << nClusters << endl;
-  cout << "discarded clusters (cut on ADCfit): " << discarded_cut_ADC_fit << " / " << nClusters << endl;
-  cout << "TOTAL discarded clusters : " << (discarded_cut_ADC_fit + discarded_cut_ADC + discarded_cut_k3) << " / " << nClusters << endl;
+  cout << "selected clusters: " << nClustersSelected << " / " << nClusters << endl;
+  cout << "discarded clusters (cut on K3): " << discarded_cut_k3 << " / " << nClustersSelected << endl;
+  cout << "discarded clusters (cut on ADC): " << discarded_cut_ADC << " / " << nClustersSelected - discarded_cut_k3 << endl;
+  cout << "discarded clusters (cut on ADCfit): " << discarded_cut_ADC_fit << " / " << nClustersSelected - discarded_cut_k3 - discarded_cut_ADC << endl;
+  cout << "TOTAL discarded clusters : " << discarded_cut_ADC_fit + discarded_cut_ADC + discarded_cut_k3 << " / " << nClustersSelected << endl;
 }

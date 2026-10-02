@@ -203,30 +203,26 @@ std::pair<double, double> GetCharge(const gsl::span<const Digit> digits, bool ru
 }
 
 //_________________________________________________________________________________________________
-std::pair<double, double> GetChargeFraction(const gsl::span<const Digit> digits, double localX, double localY)
+std::pair<double, double> GetChargeFraction(const gsl::span<const Digit> digits, double localX, double localY,
+                                            double k3x = -1., double k3y = -1.)
 {
   /// return the total charge fraction seen by digits on both cathodes given the cluster position
+  /// using custom Mathieson functions if both k3x & k3y are provided or the default response otherwise
 
   if (digits.empty()) {
     LOGP(warning, "GetChargeFraction: list of digits is empty");
     return std::make_pair(0., 0.);
   }
 
-  static const o2::mch::Response response[] = {{o2::mch::Station::Type1}, {o2::mch::Station::Type2345}};
-
+  int station = (digits[0].getDetID() / 100 - 1) / 2;
+  const MathiesonIntegrator integrate = GetMathiesonIntegrator(station, k3x, k3y);
   const auto& segmentation = o2::mch::mapping::segmentation(digits[0].getDetID());
-  int iSt = (digits[0].getDetID() < 300) ? 0 : 1;
 
   std::pair<double, double> qCl{0., 0.};
 
   for (const auto& digit : digits) {
-    auto padid = digit.getPadID();
-    auto dx = segmentation.padSizeX(padid) * 0.5;
-    auto dy = segmentation.padSizeY(padid) * 0.5;
-    auto xPad = segmentation.padPositionX(padid) - localX;
-    auto yPad = segmentation.padPositionY(padid) - localY;
-    auto qPad = response[iSt].chargePadfraction(xPad - dx, xPad + dx, yPad - dy, yPad + dy);
-    segmentation.isBendingPad(padid) ? qCl.second += qPad : qCl.first += qPad;
+    auto qPad = GetChargeFraction(digit, localX, localY, integrate);
+    segmentation.isBendingPad(digit.getPadID()) ? qCl.second += qPad : qCl.first += qPad;
   }
 
   return qCl;
